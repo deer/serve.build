@@ -1,0 +1,138 @@
+@import build.serve.example.domain.Task
+@import java.util.List
+
+@param List<Task> tasks
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tasks — serve.build example</title>
+    <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        body {
+            font-family: system-ui, sans-serif;
+            max-width: 640px;
+            margin: 3rem auto;
+            padding: 0 1rem;
+            background: #f8f9fa;
+            color: #212529;
+        }
+        h1 { font-size: 1.75rem; margin-bottom: 1.5rem; }
+        h1 small { font-size: 0.9rem; color: #6c757d; font-weight: normal; }
+        .add-form {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .add-form input {
+            flex: 1;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+        .add-form button {
+            padding: 0.5rem 1rem;
+            background: #0d6efd;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        #task-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+        .task-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.6rem 0.75rem;
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+        }
+        .task-item .title { flex: 1; }
+        .task-item.done .title { text-decoration: line-through; color: #adb5bd; }
+        .btn-toggle {
+            width: 1.5rem;
+            height: 1.5rem;
+            border-radius: 50%;
+            border: 2px solid #0d6efd;
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            color: #0d6efd;
+        }
+        .task-item.done .btn-toggle { background: #0d6efd; color: #fff; }
+        .btn-delete {
+            background: transparent;
+            border: none;
+            color: #adb5bd;
+            font-size: 1rem;
+            cursor: pointer;
+            line-height: 1;
+        }
+        .btn-delete:hover { color: #dc3545; }
+        #status { font-size: 0.8rem; color: #6c757d; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <h1>Tasks <small id="count">(${tasks.size()})</small></h1>
+
+    <form class="add-form"
+          hx-post="/tasks"
+          hx-target="#task-list"
+          hx-swap="beforeend"
+          hx-on::after-request="this.reset()">
+        <input type="text" name="title" placeholder="What needs doing?" required autofocus>
+        <button type="submit">Add</button>
+    </form>
+
+    <ul id="task-list">
+        @for(Task task : tasks)
+            @template.taskItem(task = task)
+        @endfor
+    </ul>
+
+    <p id="status">Connecting…</p>
+
+    <script>
+        // Update the task count badge
+        function updateCount() {
+            document.getElementById('count').textContent =
+                '(' + document.querySelectorAll('#task-list .task-item').length + ')';
+        }
+        // Keep count in sync after every HTMX swap
+        document.addEventListener('htmx:afterSwap', updateCount);
+
+        // WebSocket — receives task events from the server and patches the DOM
+        const ws = new WebSocket('ws://' + location.host + '/ws/tasks');
+        ws.onopen = () => document.getElementById('status').textContent = '● Live';
+        ws.onclose = () => document.getElementById('status').textContent = '○ Disconnected';
+        ws.onmessage = e => {
+            const { event, task } = JSON.parse(e.data);
+            if (event === 'deleted') {
+                const el = document.getElementById('task-' + task.id);
+                if (el) { el.remove(); updateCount(); }
+            } else if (event === 'updated') {
+                // HTMX swap already handles the requesting tab; other tabs need a patch
+                const el = document.getElementById('task-' + task.id);
+                if (el) {
+                    el.classList.toggle('done', task.done);
+                }
+            }
+            // 'created' events from other tabs are not inserted automatically here —
+            // a full page refresh picks them up; this is intentional for demo clarity
+        };
+    </script>
+</body>
+</html>

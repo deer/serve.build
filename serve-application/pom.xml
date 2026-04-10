@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>build.serve</groupId>
+        <artifactId>serve-project</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>serve-application</artifactId>
+
+    <name>Serve Application</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-foundation</artifactId>
+            <version>${revision}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-transport-http</artifactId>
+            <version>${revision}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>build.spawn</groupId>
+            <artifactId>spawn-application</artifactId>
+            <version>${spawn.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>build.codemodel</groupId>
+            <artifactId>dependency-injection</artifactId>
+            <version>${codemodel.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>build.base</groupId>
+            <artifactId>base-configuration</artifactId>
+            <version>${base.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>build.base</groupId>
+            <artifactId>base-logging</artifactId>
+            <version>${base.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>build.base</groupId>
+            <artifactId>base-network</artifactId>
+            <version>${base.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>build.base</groupId>
+            <artifactId>base-telemetry</artifactId>
+            <version>${base.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>build.base</groupId>
+            <artifactId>base-telemetry-foundation</artifactId>
+            <version>${base.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>jakarta.inject</groupId>
+            <artifactId>jakarta.inject-api</artifactId>
+            <version>${jakarta-inject.version}</version>
+        </dependency>
+
+        <!-- Test Dependencies -->
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-testing</artifactId>
+            <version>${revision}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-transport-json</artifactId>
+            <version>${revision}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>${assertj.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <configuration>
+                    <!-- JPMS requires compile scope for test-only module requires; maven-dependency-plugin can't model this -->
+                    <ignoredNonTestScopedDependencies>
+                        <ignoredNonTestScopedDependency>jakarta.inject:jakarta.inject-api</ignoredNonTestScopedDependency>
+                    </ignoredNonTestScopedDependencies>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

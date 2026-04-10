@@ -1,0 +1,19 @@
+package build.serve.foundation.option;
+
+import build.base.network.option.Port;
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class OptionTest {
+
+    @Test
+    void portOfStoresValue() {
+        assertThat(Port.of(8080).get()).isEqualTo(8080);
+    }
+
+    @Test
+    void listenAddressDefaultIs0000() {
+        assertThat(ListenAddress.DEFAULT.value()).isEqualTo("0.0.0.0");
+    }
+}

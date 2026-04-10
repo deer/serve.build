@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>build.serve</groupId>
+        <artifactId>serve-project</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>serve-example</artifactId>
+
+    <name>Serve Example</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-application</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-transport-json</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-websocket</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-jte</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-htmx</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-cors</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-security</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-compression</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-logging</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-health</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-graphql</artifactId>
+            <version>${revision}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-foundation</artifactId>
+            <version>${revision}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-template</artifactId>
+            <version>${revision}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>build.base</groupId>
+            <artifactId>base-network</artifactId>
+            <version>${base.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>gg.jte</groupId>
+            <artifactId>jte-runtime</artifactId>
+            <version>${jte.version}</version>
+        </dependency>
+
+        <!-- Test -->
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-testing</artifactId>
+            <version>${revision}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>${assertj.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>gg.jte</groupId>
+                <artifactId>jte-maven-plugin</artifactId>
+                <version>${jte.version}</version>
+                <configuration>
+                    <sourceDirectory>${project.basedir}/src/main/jte</sourceDirectory>
+                    <contentType>Html</contentType>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>${exec-maven-plugin.version}</version>
+                <configuration>
+                    <executable>java</executable>
+                    <arguments>
+                        <argument>--enable-preview</argument>
+                        <argument>--add-opens=jdk.httpserver/sun.net.httpserver=ALL-UNNAMED</argument>
+                        <argument>-classpath</argument>
+                        <classpath/>
+                        <argument>build.serve.example.ExampleApp</argument>
+                    </arguments>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>--enable-preview --add-opens jdk.httpserver/sun.net.httpserver=build.serve.websocket
+                    </argLine>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <configuration>
+                    <!-- Dependencies required by module-info.java but not detected via bytecode analysis -->
+                    <usedDependencies>
+                        <usedDependency>build.serve:serve-htmx</usedDependency>
+                    </usedDependencies>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

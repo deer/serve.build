@@ -1,0 +1,45 @@
+/*-
+ * #%L
+ * Serve LSP
+ * %%
+ * Copyright (C) 2026 Reed von Redwitz
+ * %%
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ * #L%
+ */
+package build.serve.lsp.types;
+
+/**
+ * Parameters for showing a message.
+ *
+ * @author reed.vonredwitz
+ * @since Mar-2026
+ */
+public record ShowMessageParams(int type, String message) {
+
+    public static ShowMessageParams error(final String message) {
+        return new ShowMessageParams(1, message);
+    }
+
+    public static ShowMessageParams warning(final String message) {
+        return new ShowMessageParams(2, message);
+    }
+
+    public static ShowMessageParams info(final String message) {
+        return new ShowMessageParams(3, message);
+    }
+
+    public static ShowMessageParams log(final String message) {
+        return new ShowMessageParams(4, message);
+    }
+}

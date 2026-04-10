@@ -1,0 +1,186 @@
+/*-
+ * #%L
+ * Serve Transport (HTTP)
+ * %%
+ * Copyright (C) 2026 Reed von Redwitz
+ * %%
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ * #L%
+ */
+package build.serve.transport.http;
+
+import build.serve.foundation.Exchange;
+import build.serve.foundation.Request;
+import build.serve.foundation.http.Cookie;
+import com.sun.net.httpserver.HttpExchange;
+
+import java.io.InputStream;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+
+/**
+ * An implementation of {@link Request} that bridges the JDK {@link HttpExchange}.
+ * <p>
+ * Path parameters are resolved from the owning {@link Exchange} attribute, where they are set by the router
+ * before the handler is invoked.
+ *
+ * @author reed.vonredwitz
+ * @since Mar-2026
+ */
+public class HttpRequest
+    implements Request {
+
+    /**
+     * The underlying JDK {@link HttpExchange}.
+     */
+    private final HttpExchange httpExchange;
+
+    /**
+     * The owning {@link Exchange}, used to resolve path parameters from exchange attributes.
+     */
+    private Exchange exchange;
+
+    /**
+     * Constructs an {@link HttpRequest}.
+     *
+     * @param httpExchange the JDK {@link HttpExchange}
+     */
+    public HttpRequest(final HttpExchange httpExchange) {
+        this.httpExchange = Objects.requireNonNull(httpExchange, "httpExchange must not be null");
+    }
+
+    /**
+     * Sets the owning {@link Exchange} for this request, enabling path parameter resolution.
+     *
+     * @param exchange the owning {@link Exchange}
+     */
+    void setExchange(final Exchange exchange) {
+        this.exchange = Objects.requireNonNull(exchange, "exchange must not be null");
+    }
+
+    @Override
+    public String method() {
+        return httpExchange.getRequestMethod();
+    }
+
+    @Override
+    public URI uri() {
+        return httpExchange.getRequestURI();
+    }
+
+    @Override
+    public String path() {
+        return httpExchange.getRequestURI().getPath();
+    }
+
+    @Override
+    public Optional<String> pathParam(final String name) {
+        if (exchange != null) {
+            return exchange.pathParam(name);
+        }
+
+        return Optional.empty();
+    }
+
+    @Override
+    public List<String> queryParams(final String name) {
+        final var query = httpExchange.getRequestURI().getQuery();
+
+        if (query == null) {
+            return List.of();
+        }
+
+        final var result = new java.util.ArrayList<String>();
+
+        for (final var param : query.split("&")) {
+            final var parts = param.split("=", 2);
+
+            if (parts[0].equals(name)) {
+                result.add(parts.length > 1 ? java.net.URLDecoder.decode(parts[1], StandardCharsets.UTF_8) : "");
+            }
+        }
+
+        return List.copyOf(result);
+    }
+
+    @Override
+    public Optional<String> queryParam(final String name) {
+        final var params = queryParams(name);
+
+        return params.isEmpty() ? Optional.empty() : Optional.of(params.getFirst());
+    }
+
+    @Override
+    public Map<String, List<String>> headers() {
+        return httpExchange.getRequestHeaders();
+    }
+
+    @Override
+    public Optional<String> header(final String name) {
+        return Optional.ofNullable(httpExchange.getRequestHeaders().getFirst(name));
+    }
+
+    @Override
+    public List<Cookie> cookies() {
+        final var cookieHeader = header("Cookie");
+
+        if (cookieHeader.isEmpty()) {
+            return List.of();
+        }
+
+        final var result = new ArrayList<Cookie>();
+
+        for (final var pair : cookieHeader.get().split(";")) {
+            final var trimmed = pair.trim();
+            final var eq = trimmed.indexOf('=');
+
+            if (eq > 0) {
+                final var name = trimmed.substring(0, eq).trim();
+                final var value = trimmed.substring(eq + 1).trim();
+
+                result.add(Cookie.of(name, value));
+            }
+        }
+
+        return List.copyOf(result);
+    }
+
+    @Override
+    public InputStream bodyAsStream() {
+        return httpExchange.getRequestBody();
+    }
+
+    @Override
+    public String bodyAsString() {
+        try (var stream = bodyAsStream()) {
+            return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (final java.io.IOException e) {
+            throw new RuntimeException("Failed to read request body", e);
+        }
+    }
+
+    @Override
+    public <T> T body(final Class<T> type) {
+        if (exchange != null) {
+            return exchange.bodyAs(type);
+        }
+
+        throw new UnsupportedOperationException(
+            "Body deserialization requires a transport module (e.g., serve-transport-json)");
+    }
+}

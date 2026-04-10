@@ -1,0 +1,62 @@
+/*-
+ * #%L
+ * Serve MCP
+ * %%
+ * Copyright (C) 2026 Reed von Redwitz
+ * %%
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ * #L%
+ */
+package build.serve.mcp;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
+/**
+ * A tool that can be invoked via the MCP protocol.
+ *
+ * @author reed.vonredwitz
+ * @since Mar-2026
+ */
+public interface McpTool {
+
+    /**
+     * Returns the name of this tool.
+     *
+     * @return the tool name
+     */
+    String name();
+
+    /**
+     * Returns a human-readable description of this tool.
+     *
+     * @return the description
+     */
+    String description();
+
+    /**
+     * Returns the JSON Schema describing the input parameters for this tool.
+     *
+     * @return the input schema as a Jackson {@link ObjectNode}
+     */
+    ObjectNode inputSchema();
+
+    /**
+     * Invokes this tool with the specified arguments.
+     *
+     * @param arguments the input arguments as a Jackson {@link JsonNode}
+     * @return the tool result
+     * @throws Exception if an error occurs during invocation
+     */
+    McpToolResult call(JsonNode arguments) throws Exception;
+}
