@@ -14,6 +14,7 @@
     <artifactId>serve-compression</artifactId>
 
     <name>Serve Compression</name>
+    <description>Transparent gzip and deflate response compression middleware with WebSocket passthrough.</description>
 
     <dependencies>
         <dependency>

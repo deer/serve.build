@@ -14,6 +14,7 @@
     <artifactId>serve-testing</artifactId>
 
     <name>Serve Testing</name>
+    <description>Integration test support: TestServer on ephemeral ports, TestRequest, TestResponse, and AssertJ assertions.</description>
 
     <dependencies>
         <dependency>

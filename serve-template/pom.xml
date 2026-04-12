@@ -14,6 +14,7 @@
     <artifactId>serve-template</artifactId>
 
     <name>Serve Template</name>
+    <description>Engine-agnostic template SPI: TemplateEngine, Template, and TemplateOutput interfaces.</description>
 
     <dependencies>
         <dependency>

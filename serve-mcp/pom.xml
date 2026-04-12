@@ -14,6 +14,7 @@
     <artifactId>serve-mcp</artifactId>
 
     <name>Serve MCP</name>
+    <description>Model Context Protocol server implementation over JSON-RPC 2.0 and HTTP POST.</description>
 
     <dependencies>
         <dependency>

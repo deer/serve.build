@@ -14,6 +14,7 @@
     <artifactId>serve-logging</artifactId>
 
     <name>Serve Logging</name>
+    <description>Access log middleware with nanosecond timing, slow-request threshold, and path exclusions.</description>
 
     <dependencies>
         <dependency>
