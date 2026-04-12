@@ -15,10 +15,6 @@
 
     <name>Serve Example</name>
 
-    <properties>
-        <central-publishing-maven-plugin.skip>true</central-publishing-maven-plugin.skip>
-    </properties>
-
     <dependencies>
         <dependency>
             <groupId>build.serve</groupId>
@@ -188,5 +184,23 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>deploy</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>${maven-central-publishing-plugin.version}</version>
+                        <configuration>
+                            <skipPublishing>true</skipPublishing>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>
