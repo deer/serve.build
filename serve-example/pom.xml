@@ -15,6 +15,10 @@
 
     <name>Serve Example</name>
 
+    <properties>
+        <central-publishing-maven-plugin.skip>true</central-publishing-maven-plugin.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>build.serve</groupId>
