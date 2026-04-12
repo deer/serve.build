@@ -14,6 +14,7 @@
     <artifactId>serve-jte</artifactId>
 
     <name>Serve JTE</name>
+    <description>JTE template engine adapter with dev hot-reload and precompiled production modes.</description>
 
     <dependencies>
         <dependency>

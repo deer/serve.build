@@ -14,6 +14,7 @@
     <artifactId>serve-htmx</artifactId>
 
     <name>Serve HTMX</name>
+    <description>Typed HX-* request and response header wrappers and htmxOnly() guard for HTMX-driven applications.</description>
 
     <dependencies>
         <dependency>

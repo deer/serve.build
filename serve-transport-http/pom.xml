@@ -14,6 +14,7 @@
     <artifactId>serve-transport-http</artifactId>
 
     <name>Serve Transport (HTTP)</name>
+    <description>jdk.httpserver adapter and virtual thread dispatcher for serve-foundation.</description>
 
     <dependencies>
         <dependency>

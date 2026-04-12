@@ -14,6 +14,7 @@
     <artifactId>serve-static</artifactId>
 
     <name>Serve Static</name>
+    <description>Static file serving from filesystem and classpath with ETag/304 support and path traversal protection.</description>
 
     <dependencies>
         <dependency>

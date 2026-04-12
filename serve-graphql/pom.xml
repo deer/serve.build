@@ -14,6 +14,7 @@
     <artifactId>serve-graphql</artifactId>
 
     <name>Serve GraphQL</name>
+    <description>GraphQL over HTTP via graphql-java: SDL-first schema, query execution, and GraphiQL IDE handler.</description>
 
     <dependencies>
         <dependency>

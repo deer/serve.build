@@ -14,6 +14,7 @@
     <artifactId>serve-websocket</artifactId>
 
     <name>Serve WebSocket</name>
+    <description>RFC 6455 WebSocket support with frame codec and upgrade handling.</description>
 
     <dependencies>
         <dependency>

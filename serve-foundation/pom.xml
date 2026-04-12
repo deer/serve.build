@@ -14,6 +14,7 @@
     <artifactId>serve-foundation</artifactId>
 
     <name>Serve Foundation</name>
+    <description>Core HTTP abstractions: Exchange, Handler, Router, Middleware, error hierarchy, and server configuration options.</description>
 
     <dependencies>
         <dependency>

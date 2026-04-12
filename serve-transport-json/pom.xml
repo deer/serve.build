@@ -14,6 +14,7 @@
     <artifactId>serve-transport-json</artifactId>
 
     <name>Serve Transport (JSON)</name>
+    <description>Jackson-based JSON body reader and writer injected via Exchange attributes.</description>
 
     <dependencies>
         <dependency>

@@ -14,6 +14,7 @@
     <artifactId>serve-sse</artifactId>
 
     <name>Serve SSE</name>
+    <description>Server-Sent Events support: SseEmitter, SseEvent, and upgrade handler factory.</description>
 
     <dependencies>
         <dependency>
