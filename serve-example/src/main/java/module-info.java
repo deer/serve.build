@@ -23,7 +23,7 @@
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-open module build.serve.example {
+module build.serve.example {
     requires build.serve.application;
     requires build.serve.transport.json;
     requires build.serve.websocket;
@@ -40,4 +40,10 @@ open module build.serve.example {
     requires java.net.http;
     requires gg.jte.runtime;
     requires gg.jte;
+
+    opens build.serve.example to com.fasterxml.jackson.databind;
+    opens build.serve.example.api to com.fasterxml.jackson.databind;
+    opens build.serve.example.domain to com.fasterxml.jackson.databind, com.graphqljava;
+    opens build.serve.example.graphql to com.fasterxml.jackson.databind;
+    opens gg.jte.generated.precompiled to gg.jte.runtime;
 }
