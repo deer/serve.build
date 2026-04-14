@@ -20,7 +20,6 @@ For detailed architecture, see [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md).
 - **Test method names** must start with `should` or `shouldNot`
 - **No mocks**: use stub implementations (`StubRequest`, `StubResponse`) in tests
 - **Middleware order**: first-registered = outermost (applied in reverse)
-- All modules are `open module` with explicit `requires`/`exports`
 
 ## Build
 

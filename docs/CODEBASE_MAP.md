@@ -154,7 +154,7 @@ serve.build/
 - `{param}` route patterns compiled to regex at `Route` construction time; prefix routes append `(/.*)?$`
 - Attribute bag on `Exchange` with typed `attribute(key, Class<T>)` access
 
-**Exports:** `build.serve.foundation` (split into sub-packages; all open module)
+**Exports:** `build.serve.foundation` (split into sub-packages)
 
 **Dependencies:** `build.base.configuration`, `build.base.telemetry`, `java.logging`
 
@@ -701,7 +701,7 @@ sequenceDiagram
 - **Null policy:** `Optional<T>` in public APIs; internal code avoids null by convention
 - **Test naming:** methods must start with `should` or `shouldNot`
 - **Test implementation:** no mocks; stub/test implementations (`TestRequest`, `TestResponse`, `TestServer`)
-- **Module structure:** all modules are `open module` with explicit `requires`/`exports`
+- **Module structure:** all modules have explicit `requires`/`exports`
 - **Middleware:** `first-registered = outermost` (applied in reverse within `RouterBuilder`)
 - **Factories over constructors:** static factory methods (`of`, `builder`, `defaults`) used consistently
 - **Records for options and value types:** `ListenAddress`, `MaxRequestSize`, `SseEvent`, `Task`, etc.
