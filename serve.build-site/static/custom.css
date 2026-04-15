@@ -1,0 +1,70 @@
+/* serve.build — Forge theme */
+
+/* Dot-grid background texture */
+body {
+  background-image: radial-gradient(circle, #1e1e1b 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-attachment: fixed;
+}
+
+/* Tight, confident heading tracking */
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: -0.035em;
+  font-weight: 700;
+}
+
+/* Left accent bar on code blocks — the amber line signals "this runs" */
+pre {
+  border-left: 2px solid #e07b39;
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+}
+
+/* Inline code — warm tint to match the accent */
+:not(pre) > code {
+  background-color: #1c1b18;
+  color: #e8b88a;
+  padding: 0.15em 0.4em;
+}
+
+/* Blockquotes — amber left rule, muted text */
+blockquote {
+  border-left: 2px solid #e07b39;
+  padding-left: 1.25rem;
+  color: #a09d97;
+  font-style: normal;
+}
+
+/* Tables — clean, no excess chrome */
+table {
+  border-collapse: collapse;
+}
+
+th {
+  text-align: left;
+  border-bottom: 1px solid #2a2a27;
+  color: #a09d97;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+  padding-bottom: 0.5rem;
+}
+
+td {
+  border-bottom: 1px solid #1a1a18;
+  padding: 0.6rem 1rem 0.6rem 0;
+  vertical-align: top;
+}
+
+/* Hero badge — sharp pill with amber stroke */
+.badge, [class*="badge"] {
+  border: 1px solid #e07b39;
+  color: #e07b39;
+  background: transparent;
+  letter-spacing: 0.06em;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  font-weight: 600;
+}
