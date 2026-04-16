@@ -34,7 +34,7 @@ graph TB
         Compression[serve-compression]
         Logging[serve-logging]
         Health[serve-health]
-        Static[serve-static]
+        Static[serve-staticfiles]
     end
 
     subgraph Templates
@@ -103,7 +103,7 @@ serve.build/
 ├── serve-compression/          Transparent gzip/deflate; buffer-and-compress; WebSocket passthrough
 ├── serve-logging/              Access log; nanosecond timing; slow-request threshold; path exclusions
 ├── serve-health/               Liveness + readiness endpoints; JSON status output; HealthCheck SPI
-├── serve-static/               Filesystem + classpath static file serving; ETag/304; path traversal guard
+├── serve-staticfiles/               Filesystem + classpath static file serving; ETag/304; path traversal guard
 │
 ├── serve-template/             Engine-agnostic SPI: TemplateEngine, Template, TemplateOutput
 ├── serve-jte/                  JTE adapter (dev hot-reload + precompiled production modes)
@@ -514,7 +514,7 @@ Logging → CORS → Security(pre-call) → Compression(buffer) → JSON(inject)
 | **Patterns** | `HealthCheck` is a `@FunctionalInterface`; exceptions from checks silently count as DOWN; JSON built with `StringBuilder` |
 | **Gotcha** | Check names are not HTML/JSON-escaped in the hand-built JSON response; exception details from failing checks are discarded |
 
-### serve-static
+### serve-staticfiles
 
 | | |
 |---|---|

@@ -126,9 +126,13 @@ Without it, `exchange.bodyAs(T)` and `exchange.response().json(obj)` throw
 
 ### Static files
 
-`StaticHandler` serves files from the classpath or filesystem with ETag/304
+`StaticFileHandler` serves files from the classpath or filesystem with ETag/304
 support. Mount it at any path prefix:
 
 ```java
-.route("/static", StaticHandler.fromClasspath("/static"))
+// Classpath resources (bundled with the application)
+.route("/static", StaticFileHandler.resources(MyApp.class, "/static"))
+
+// Filesystem directory
+.route("/static", StaticFileHandler.directory(Path.of("public")))
 ```

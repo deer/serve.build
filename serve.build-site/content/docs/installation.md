@@ -1,69 +1,49 @@
 ---
-title: Quickstart
-description: Run your first serve.build HTTP server in five minutes.
-ai-summary: Step-by-step guide to running a serve.build HTTP server. Shows a minimal working application first, then covers Maven setup, module-info, and how to run the included example app. Requires Java 25 with preview features.
+title: Installation
+description: Add serve.build to a Java 25 Maven project.
+ai-summary: How to add serve.build to a Java 25 Maven project. Covers prerequisites (Java 25 + preview features), module selection by layer, Maven dependency declarations, compiler plugin configuration, and module-info.java setup.
 ai-keywords: [
-  quickstart,
+  installation,
   maven,
-  module-info,
   java-25,
   preview,
-  RouterBuilder,
-  Launcher,
-  Handler,
-  Exchange,
-  JsonMiddleware,
+  jpms,
+  module-info,
+  dependencies,
+  serve-foundation,
+  serve-application,
+  serve-transport-http,
 ]
 ---
 
-# Quickstart
+# Installation
 
-serve.build requires Java 25 with preview features enabled.
+## Prerequisites
 
-## Minimal server
+serve.build requires **Java 25** with preview features enabled. It has no
+runtime dependencies beyond the JDK and the modules you choose to add.
 
-Extend `ServerApplication.Implementation`, override `configure()` to return a
-router, and launch:
+## Choosing modules
 
-```java
-public final class MyApp extends ServerApplication.Implementation {
+serve.build is split into focused modules. Most applications only need the core
+layer:
 
-    public static void main(String[] args) {
-        Launcher.launch(new MyApp(), Port.of(8080));
-    }
+| Module                 | What it provides                                                              |
+| ---------------------- | ----------------------------------------------------------------------------- |
+| `serve-foundation`     | Core abstractions: `Exchange`, `Handler`, `RouterBuilder`, middleware SPI     |
+| `serve-transport-http` | HTTP transport backed by `jdk.httpserver`, virtual-thread dispatch            |
+| `serve-transport-json` | Jackson-based JSON reading and writing (`JsonMiddleware`, `JsonErrorHandler`) |
+| `serve-application`    | `ServerApplication` lifecycle, `Launcher` for standalone use                  |
+| `serve-testing`        | In-process test utilities (`StubRequest`, `StubResponse`)                     |
 
-    @Override
-    protected Router configure() {
-        return RouterBuilder.create()
-            .get("/hello", exchange -> exchange.response().send("Hello, world!"))
-            .build();
-    }
-}
-```
+Additional modules are available for specific needs: `serve-websocket`,
+`serve-sse`, `serve-mcp`, `serve-graphql`, `serve-lsp`, `serve-cors`,
+`serve-security`, `serve-compression`, `serve-logging`, `serve-health`,
+`serve-staticfiles`, `serve-template`, `serve-jte`, `serve-htmx`.
 
-Visit `http://localhost:8080/hello`.
+## Maven
 
-## Adding JSON
-
-Wire in `JsonMiddleware` to enable `exchange.bodyAs(T)` and
-`exchange.response().json(obj)`:
-
-```java
-record Greeting(String message) {}
-
-RouterBuilder.create()
-    .middleware(new JsonMiddleware())
-    .get("/hello", exchange -> exchange.response().json(new Greeting("Hello!")))
-    .post("/echo", exchange -> {
-        var body = exchange.bodyAs(Greeting.class);
-        exchange.response().json(body);
-    })
-    .build();
-```
-
-## Maven setup
-
-Add the modules you need. The three below cover most applications:
+Add the modules you need. These three cover most applications:
 
 ```xml
 <dependency>
@@ -83,7 +63,7 @@ Add the modules you need. The three below cover most applications:
 </dependency>
 ```
 
-Enable preview in the compiler plugin:
+Enable preview features in the compiler plugin:
 
 ```xml
 <plugin>
@@ -95,7 +75,9 @@ Enable preview in the compiler plugin:
 </plugin>
 ```
 
-Declare your module:
+## JPMS
+
+Declare the modules your application uses in `module-info.java`:
 
 ```java
 module com.example.myapp {
@@ -105,13 +87,7 @@ module com.example.myapp {
 }
 ```
 
-## Run the example app
-
-The repo ships a full demo covering REST, GraphQL, WebSocket, JTE templates,
-HTMX, and health endpoints:
-
-```bash
-./mvnw -pl serve-example exec:java -Dexec.mainClass=build.serve.example.ExampleApp
-```
-
-Visit `http://localhost:8080` to explore the running application.
+Add a `requires` for each serve.build module you depend on. The module name
+mirrors the artifact ID with hyphens replaced by dots and prefixed with
+`build.serve` — for example, `serve-transport-json` →
+`build.serve.transport.json`.

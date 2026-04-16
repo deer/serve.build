@@ -9,13 +9,12 @@ annotation magic. Part of the [*.build](https://github.com/deer) open-source eco
 
 ## Why
 
-Modern Java has virtual threads, scoped values, structured concurrency, and a built-in HTTP server — yet most frameworks
-still ship Spring-era abstractions built for Java 8. If you're reaching for Go or Rust because Spring feels too heavy
-for a simple service, this is the alternative that stays in Java.
+Modern Java has virtual threads, scoped values, structured concurrency, and a built-in HTTP server. serve.build
+surfaces all of them as first-class citizens.
 
 - **JPMS-first** — real `module-info.java` with proper `requires`/`exports`, not classpath
 - **Virtual threads as architecture** — not a config flag, the only execution model
-- **No annotation magic** — routing is code, DI is explicit `@Inject`, no component scanning
+- **Routing is code** — `RouterBuilder` wires routes explicitly; DI is `@Inject` resolved at startup
 - **JDK only for HTTP** — `jdk.httpserver` under the hood, Jackson only if you want JSON
 
 ## Quick Start
@@ -43,8 +42,7 @@ public class HelloServer extends ServerApplication.Implementation {
 }
 ```
 
-That's it. No `@SpringBootApplication`, no `@RestController`, no auto-configuration. One virtual thread per request,
-started in milliseconds.
+That's it. Routes are code, wired at startup. One virtual thread per request, started in milliseconds.
 
 ## Features
 
@@ -52,7 +50,7 @@ started in milliseconds.
 - **19 JPMS modules** — real `module-info.java` with explicit `requires`/`exports`; take only what you need
 - **Type-safe routing** — path parameters (`/users/{id}`), HTTP method matching, nested routers
 - **Middleware pipeline** — `Middleware` wraps `Handler`, applied in registration order
-- **Dependency injection** — Jakarta `@Inject` via codemodel.injection, resolved at startup
+- **Dependency injection** — Jakarta `@Inject` via [codemodel.build](https://github.com/Workday/codemodel.build), resolved at startup
 - **JSON support** — Jackson-based body reading/writing via `JsonMiddleware`
 - **Typed error handling** — `HttpException` hierarchy (`NotFoundException`, `BadRequestException`, etc.)
 - **Scoped Values** — request context (`RequestContext.EXCHANGE`, `REQUEST_ID`, `START_TIME`) without ThreadLocal
@@ -97,7 +95,7 @@ started in milliseconds.
 | `serve-compression`  | `build.serve.compression`     | Gzip/deflate compression  | `CompressionMiddleware`       |
 | `serve-logging`      | `build.serve.logging`         | Access logging            | `RequestLoggingMiddleware`    |
 | `serve-health`       | `build.serve.health`          | Health/readiness checks   | `HealthHandler`, `HealthCheck` |
-| `serve-static`       | `build.serve.staticfiles`     | Static file serving       | `StaticFileHandler`           |
+| `serve-staticfiles`  | `build.serve.staticfiles`     | Static file serving       | `StaticFileHandler`           |
 
 ### Templates
 
@@ -176,7 +174,7 @@ public class UserServer extends ServerApplication.Implementation {
             .post("/users", exchange -> {
                 var user = exchange.bodyAs(User.class);
                 users.save(user);
-                exchange.response().status(201).sendBody(user);
+                exchange.response().status(201).json(user);
             })
             .middleware(new JsonMiddleware())
             .build();
@@ -210,22 +208,6 @@ class HelloWorldTest {
 ```
 
 `TestServer.of()` accepts a `RouterBuilder`, `Router`, or `Handler`. Binds to an ephemeral port. Closes automatically.
-
-## Comparison with Spring Boot
-
-|                    | serve.build                            | Spring Boot                            |
-|--------------------|----------------------------------------|----------------------------------------|
-| Startup time       | < 100ms                                | 1.5–3s                                 |
-| Heap (hello world) | ~20 MB                                 | ~80 MB                                 |
-| Module system      | JPMS (`module-info.java`)              | Classpath                              |
-| Thread model       | Virtual threads only                   | Configurable (platform/virtual)        |
-| Routing            | Code (`RouterBuilder`)                 | Annotations (`@GetMapping`)            |
-| DI                 | Explicit `@Inject`, startup resolution | Component scanning, runtime reflection |
-| Configuration      | Type-safe `Option` records             | YAML/properties + `@Value`             |
-| Dependencies       | JDK `jdk.httpserver`                   | Embedded Tomcat/Jetty/Netty            |
-
-serve.build is not trying to replace Spring Boot. It's for new services where you want the smallest possible surface
-area and don't need Spring's ecosystem.
 
 ## Building
 
@@ -261,9 +243,9 @@ the full feature set in one app — the same task list is served three ways simu
 
 serve.build builds on the `*.build` open-source ecosystem:
 
-- [**base.build**](https://github.com/deer/base.build) — Foundation: configuration, options, flow, transport
-- [**codemodel.build**](https://github.com/deer/codemodel.build) — Code generation + dependency injection
-- [**spawn.build**](https://github.com/deer/spawn.build) — Application lifecycle, platform, process management
+- [**base.build**](https://github.com/Workday/base.build) — Foundation: configuration, options, flow, transport
+- [**codemodel.build**](https://github.com/Workday/codemodel.build) — Code generation + dependency injection
+- [**spawn.build**](https://github.com/Workday/spawn.build) — Application lifecycle, platform, process management
 
 ## Status
 
@@ -286,9 +268,8 @@ serve.build builds on the `*.build` open-source ecosystem:
 **Planned:**
 
 - gRPC
-- Maven Central
 
-API will change. Not yet published to Maven Central.
+API will change.
 
 ## License
 

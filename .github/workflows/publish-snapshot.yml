@@ -3,6 +3,8 @@ name: Publish Snapshot
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'serve.build-site/**'
   workflow_dispatch:
 
 jobs:
