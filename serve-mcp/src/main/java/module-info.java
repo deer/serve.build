@@ -18,6 +18,7 @@
  * #L%
  */
 module build.serve.mcp {
+    requires transitive build.base.flow;
     requires transitive build.serve.foundation;
     requires build.serve.sse;
     requires transitive com.fasterxml.jackson.databind;
