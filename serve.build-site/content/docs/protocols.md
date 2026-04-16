@@ -68,8 +68,7 @@ emitter sets `X-Accel-Buffering: no` automatically for nginx compatibility.
 `McpServer` exposes callable tools to AI clients over JSON-RPC 2.0.
 
 ```java
-Handler mcpHandler = McpServer.builder()
-    .serverInfo(new McpServerInfo("my-server", "1.0"))
+Handler mcpHandler = McpServer.builder("my-server", "1.0")
     .tool(new McpTool() {
         public String name() { return "greet"; }
         public String description() { return "Returns a greeting"; }

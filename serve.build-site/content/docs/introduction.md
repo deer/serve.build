@@ -1,7 +1,7 @@
 ---
 title: Introduction
 description: serve.build is a lightweight, JPMS-native HTTP server framework for Java 25+ built directly on jdk.httpserver.
-ai-summary: Introduces serve.build — a lightweight Java 25 HTTP server framework built on jdk.httpserver, virtual threads, and structured concurrency. Covers the design philosophy (no Spring, no annotation scanning, routes are code), the module layers (core, protocol, middleware, template), and the key abstractions (Exchange, Handler, Router, Middleware).
+ai-summary: Introduces serve.build — a lightweight Java 25 HTTP server framework built on jdk.httpserver, virtual threads, and structured concurrency. Covers the design philosophy (routes are code, explicit DI, JPMS-native), the module layers (core, protocol, middleware, template), and the key abstractions (Exchange, Handler, Router, Middleware).
 ai-keywords: [
   serve.build,
   java,
@@ -24,16 +24,15 @@ directly on top of `jdk.httpserver` — the HTTP server that ships inside the JD
 — and adds only what's missing: a routing DSL, middleware composition,
 virtual-thread dispatch, and a clean request/response abstraction.
 
-There is no annotation scanning, no classpath magic, and no Spring. Routes are
-code. Dependency injection is explicit. The result is a framework you can read
-top-to-bottom in an afternoon.
+Routes are code. Dependency injection is handled by
+[codemodel.build](https://github.com/Workday/codemodel.build). The result is a
+framework you can read top-to-bottom in an afternoon.
 
 ## Design principles
 
 **Code over convention.** Routes are registered with `RouterBuilder`, middleware
 is composed with `.middleware()`, and the application wires itself in a single
-`configure()` method. Nothing is inferred from annotations or classpath
-scanning.
+`configure()` method.
 
 **JPMS-native.** Every module has explicit `requires` and `exports`. You know
 exactly what depends on what.
@@ -47,12 +46,12 @@ thread pools to tune, no reactive programming model to learn.
 
 serve.build is organized into four layers:
 
-| Layer          | Modules                                                                                                  |
-| -------------- | -------------------------------------------------------------------------------------------------------- |
-| **Core**       | `serve-foundation`, `serve-transport-http`, `serve-transport-json`, `serve-application`, `serve-testing` |
-| **Protocol**   | `serve-websocket`, `serve-sse`, `serve-mcp`, `serve-lsp`, `serve-graphql`                                |
-| **Middleware** | `serve-cors`, `serve-security`, `serve-compression`, `serve-logging`, `serve-health`, `serve-static`     |
-| **Template**   | `serve-template`, `serve-jte`, `serve-htmx`                                                              |
+| Layer          | Modules                                                                                                   |
+| -------------- | --------------------------------------------------------------------------------------------------------- |
+| **Core**       | `serve-foundation`, `serve-transport-http`, `serve-transport-json`, `serve-application`, `serve-testing`  |
+| **Protocol**   | `serve-websocket`, `serve-sse`, `serve-mcp`, `serve-lsp`, `serve-graphql`                                 |
+| **Middleware** | `serve-cors`, `serve-security`, `serve-compression`, `serve-logging`, `serve-health`, `serve-staticfiles` |
+| **Template**   | `serve-template`, `serve-jte`, `serve-htmx`                                                               |
 
 Most applications only need core + a handful of middleware. Protocol and
 template modules are opt-in.

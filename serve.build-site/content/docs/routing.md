@@ -42,7 +42,7 @@ Curly-brace segments are captured as named parameters:
 
 ```java
 .get("/users/{id}", exchange -> {
-    String id = exchange.request().pathParam("id");
+    String id = exchange.pathParam("id").orElseThrow();
     exchange.response().json(userService.find(id));
 })
 ```
@@ -107,7 +107,7 @@ logging the stack trace at SEVERE. Wire in `JsonErrorHandler` (from
 ```java
 Exchange exchange = RequestContext.EXCHANGE.get();
 String requestId  = RequestContext.REQUEST_ID.get();
-long   startTime  = RequestContext.START_TIME.get();
+Instant startTime = RequestContext.START_TIME.get();
 ```
 
 These propagate automatically to virtual-thread subtasks via `ScopedValue`, so

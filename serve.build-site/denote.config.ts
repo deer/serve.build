@@ -24,10 +24,10 @@ export const config: DenoteConfig = {
       title: "HTTP without the",
       titleHighlight: "framework tax",
       description:
-        "A lightweight server built directly on jdk.httpserver, virtual threads, and structured concurrency. Routes are code. No annotation scanning.",
+        "A lightweight server built directly on jdk.httpserver, virtual threads, and structured concurrency. Routes are code. Dependency injection is explicit.",
     },
     cta: {
-      primary: { text: "Get Started", href: "/docs/installation" },
+      primary: { text: "Get Started", href: "/docs/introduction" },
       secondary: {
         text: "GitHub",
         href: "https://github.com/deer/serve.build",
@@ -51,7 +51,7 @@ export const config: DenoteConfig = {
         icon: "🔧",
         title: "Routes are code",
         description:
-          "Wire routes with RouterBuilder. No annotation scanning, no classpath magic — just a configure() method.",
+          "Wire routes with RouterBuilder. Everything is explicit — just a configure() method.",
       },
       {
         icon: "🔌",
@@ -66,6 +66,7 @@ export const config: DenoteConfig = {
       title: "Getting Started",
       children: [
         { title: "Introduction", href: "/docs/introduction" },
+        { title: "Installation", href: "/docs/installation" },
         { title: "Quickstart", href: "/docs/quickstart" },
       ],
     },
