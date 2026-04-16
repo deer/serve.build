@@ -19,6 +19,8 @@
  */
 package build.serve.mcp;
 
+import build.base.flow.Publisher;
+import build.base.flow.SubscriberRegistry;
 import build.serve.foundation.Handler;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -40,6 +42,7 @@ public final class McpServer {
     private final McpServerInfo info;
     private final Map<String, McpTool> tools;
     private final ObjectMapper mapper;
+    private final SubscriberRegistry<ToolCallEvent> toolCallEvents = new SubscriberRegistry<>();
 
     private McpServer(final Builder builder) {
         this.info = new McpServerInfo(builder.name, builder.version);
@@ -107,6 +110,19 @@ public final class McpServer {
         };
     }
 
+    /**
+     * Returns a {@link Publisher} of {@link ToolCallEvent}s.
+     *
+     * <p>Subscribers receive one event per tool invocation, published after the
+     * tool returns (or throws). Subscribers are observers only — they do not
+     * participate in dispatch and cannot alter the result seen by the caller.
+     *
+     * @return the tool-call event publisher
+     */
+    public Publisher<ToolCallEvent> toolCallEvents() {
+        return toolCallEvents;
+    }
+
     private ObjectNode handleInitialize() {
         final var result = mapper.createObjectNode();
 
@@ -152,13 +168,21 @@ public final class McpServer {
 
         final var tool = tools.get(toolName);
         if (tool == null) {
+            // Unknown-tool lookups do not publish events — no tool invocation occurred.
             return errorResponse(-32602, "Unknown tool: " + toolName);
         }
 
+        final var start = System.currentTimeMillis();
         try {
             final var toolResult = tool.call(arguments);
+            final var duration = System.currentTimeMillis() - start;
+            // Publish after the tool returns so the result is available.
+            // Subscribers are observers: publish does not alter the return value.
+            toolCallEvents.publish(ToolCallEvent.success(toolName, arguments, toolResult, duration));
             return buildToolResult(toolResult);
         } catch (final Exception e) {
+            final var duration = System.currentTimeMillis() - start;
+            toolCallEvents.publish(ToolCallEvent.failure(toolName, arguments, e, duration));
             return buildToolResult(McpToolResult.error(e.getMessage()));
         }
     }
@@ -190,7 +214,8 @@ public final class McpServer {
         return result;
     }
 
-    private ObjectNode errorResponse(final int code, final String message) {
+    private ObjectNode errorResponse(final int code,
+                                     final String message) {
         final var result = mapper.createObjectNode();
         final var error = mapper.createObjectNode();
         error.put("code", code);
@@ -206,7 +231,8 @@ public final class McpServer {
      * @param version the server version
      * @return the builder
      */
-    public static Builder builder(final String name, final String version) {
+    public static Builder builder(final String name,
+                                  final String version) {
         return new Builder(name, version);
     }
 

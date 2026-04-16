@@ -18,6 +18,11 @@
 
     <dependencies>
         <dependency>
+            <groupId>build.base</groupId>
+            <artifactId>base-flow</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>build.serve</groupId>
             <artifactId>serve-foundation</artifactId>
         </dependency>
