@@ -11,20 +11,15 @@
         <version>${revision}</version>
     </parent>
 
-    <artifactId>serve-logging</artifactId>
+    <artifactId>serve-staticfiles</artifactId>
 
-    <name>Serve Logging</name>
-    <description>Access log middleware with nanosecond timing, slow-request threshold, and path exclusions.</description>
+    <name>Serve Static</name>
+    <description>Static file serving from filesystem and classpath with ETag/304 support and path traversal protection.</description>
 
     <dependencies>
         <dependency>
             <groupId>build.serve</groupId>
             <artifactId>serve-foundation</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>build.base</groupId>
-            <artifactId>base-logging</artifactId>
         </dependency>
 
         <!-- Test Dependencies -->

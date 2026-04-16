@@ -20,96 +20,81 @@
         <dependency>
             <groupId>build.serve</groupId>
             <artifactId>serve-foundation</artifactId>
-            <version>${revision}</version>
         </dependency>
 
         <dependency>
             <groupId>build.serve</groupId>
             <artifactId>serve-transport-http</artifactId>
-            <version>${revision}</version>
         </dependency>
 
         <dependency>
             <groupId>build.spawn</groupId>
             <artifactId>spawn-application</artifactId>
-            <version>${spawn.version}</version>
         </dependency>
 
         <dependency>
             <groupId>build.codemodel</groupId>
             <artifactId>dependency-injection</artifactId>
-            <version>${codemodel.version}</version>
         </dependency>
 
         <dependency>
             <groupId>build.base</groupId>
             <artifactId>base-configuration</artifactId>
-            <version>${base.version}</version>
         </dependency>
 
         <dependency>
             <groupId>build.base</groupId>
             <artifactId>base-logging</artifactId>
-            <version>${base.version}</version>
         </dependency>
 
         <dependency>
             <groupId>build.base</groupId>
             <artifactId>base-network</artifactId>
-            <version>${base.version}</version>
         </dependency>
 
         <dependency>
             <groupId>build.base</groupId>
             <artifactId>base-telemetry</artifactId>
-            <version>${base.version}</version>
         </dependency>
 
         <dependency>
             <groupId>build.base</groupId>
             <artifactId>base-telemetry-foundation</artifactId>
-            <version>${base.version}</version>
         </dependency>
 
         <dependency>
             <groupId>jakarta.inject</groupId>
             <artifactId>jakarta.inject-api</artifactId>
-            <version>${jakarta-inject.version}</version>
         </dependency>
 
         <!-- Test Dependencies -->
         <dependency>
             <groupId>build.serve</groupId>
             <artifactId>serve-testing</artifactId>
-            <version>${revision}</version>
             <scope>test</scope>
         </dependency>
 
         <dependency>
             <groupId>build.serve</groupId>
             <artifactId>serve-transport-json</artifactId>
-            <version>${revision}</version>
             <scope>test</scope>
         </dependency>
 
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>${jackson.version}</version>
             <scope>test</scope>
         </dependency>
 
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
-            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
 
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
-            <version>${assertj.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

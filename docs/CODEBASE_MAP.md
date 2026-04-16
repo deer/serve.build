@@ -103,7 +103,7 @@ serve.build/
 ├── serve-compression/          Transparent gzip/deflate; buffer-and-compress; WebSocket passthrough
 ├── serve-logging/              Access log; nanosecond timing; slow-request threshold; path exclusions
 ├── serve-health/               Liveness + readiness endpoints; JSON status output; HealthCheck SPI
-├── serve-staticfiles/               Filesystem + classpath static file serving; ETag/304; path traversal guard
+├── serve-staticfiles/           Filesystem + classpath static file serving; ETag/304; path traversal guard
 │
 ├── serve-template/             Engine-agnostic SPI: TemplateEngine, Template, TemplateOutput
 ├── serve-jte/                  JTE adapter (dev hot-reload + precompiled production modes)
