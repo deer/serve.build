@@ -22,6 +22,7 @@ package build.serve.health;
 import build.serve.foundation.Handler;
 import build.serve.foundation.routing.Router;
 import build.serve.foundation.routing.RouterBuilder;
+import build.serve.foundation.util.JsonStrings;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -132,7 +133,7 @@ public final class HealthHandler {
                     sb.append(',');
                 }
 
-                sb.append('"').append(escapeJson(entry.getKey())).append("\":\"");
+                sb.append('"').append(JsonStrings.escape(entry.getKey())).append("\":\"");
                 sb.append(entry.getValue() ? "UP" : "DOWN");
                 sb.append('"');
                 first = false;
@@ -146,25 +147,6 @@ public final class HealthHandler {
         return sb.toString();
     }
 
-    private static String escapeJson(final String value) {
-        final var sb = new StringBuilder(value.length());
-
-        for (int i = 0; i < value.length(); i++) {
-            final char c = value.charAt(i);
-
-            if (c == '"') {
-                sb.append("\\\"");
-            } else if (c == '\\') {
-                sb.append("\\\\");
-            } else if (c < 0x20) {
-                sb.append(String.format("\\u%04x", (int) c));
-            } else {
-                sb.append(c);
-            }
-        }
-
-        return sb.toString();
-    }
 
     /**
      * A builder for constructing a combined health check {@link Router} with liveness and readiness endpoints.

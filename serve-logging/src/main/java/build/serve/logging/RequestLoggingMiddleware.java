@@ -23,6 +23,7 @@ import build.base.logging.Logger;
 import build.serve.foundation.Handler;
 import build.serve.foundation.context.RequestContext;
 import build.serve.foundation.middleware.Middleware;
+import build.serve.foundation.util.JsonStrings;
 
 import java.time.Duration;
 import java.util.LinkedHashSet;
@@ -135,13 +136,13 @@ public final class RequestLoggingMiddleware implements Middleware {
             final var requestId = RequestContext.REQUEST_ID.isBound() ? RequestContext.REQUEST_ID.get() : null;
             final var sb = new StringBuilder(128);
 
-            sb.append("{\"method\":\"").append(escapeJson(method)).append("\"");
-            sb.append(",\"path\":\"").append(escapeJson(path)).append("\"");
+            sb.append("{\"method\":\"").append(JsonStrings.escape(method)).append("\"");
+            sb.append(",\"path\":\"").append(JsonStrings.escape(path)).append("\"");
             sb.append(",\"status\":").append(status);
             sb.append(",\"duration_ms\":").append(durationMs);
 
             if (requestId != null) {
-                sb.append(",\"request_id\":\"").append(escapeJson(requestId)).append("\"");
+                sb.append(",\"request_id\":\"").append(JsonStrings.escape(requestId)).append("\"");
             }
 
             sb.append('}');
@@ -154,26 +155,6 @@ public final class RequestLoggingMiddleware implements Middleware {
 
     private static String appendJsonField(final String jsonObject, final String key, final boolean value) {
         return jsonObject.substring(0, jsonObject.length() - 1) + ",\"" + key + "\":" + value + "}";
-    }
-
-    private static String escapeJson(final String value) {
-        final var sb = new StringBuilder(value.length());
-
-        for (int i = 0; i < value.length(); i++) {
-            final char c = value.charAt(i);
-
-            if (c == '"') {
-                sb.append("\\\"");
-            } else if (c == '\\') {
-                sb.append("\\\\");
-            } else if (c < 0x20) {
-                sb.append(String.format("\\u%04x", (int) c));
-            } else {
-                sb.append(c);
-            }
-        }
-
-        return sb.toString();
     }
 
     /**
