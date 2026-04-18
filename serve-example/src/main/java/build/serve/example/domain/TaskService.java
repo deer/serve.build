@@ -41,7 +41,8 @@ public final class TaskService {
     /**
      * A mutation event carrying the event type and affected task.
      */
-    public record TaskEvent(String type, Task task) {}
+    public record TaskEvent(String type, Task task) {
+    }
 
     private final ConcurrentHashMap<Long, Task> tasks = new ConcurrentHashMap<>();
     private final AtomicLong nextId = new AtomicLong(1);

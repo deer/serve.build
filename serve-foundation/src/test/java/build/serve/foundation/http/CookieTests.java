@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CookieTests {
 
@@ -200,6 +201,36 @@ class CookieTests {
 
         assertThat(response.setCookieHeader).contains("session=");
         assertThat(response.setCookieHeader).contains("Max-Age=0");
+    }
+
+    // --- CRLF injection prevention ---
+
+    @Test
+    void shouldRejectCrlfInName() {
+        assertThatThrownBy(() -> Cookie.of("bad\r\nname", "value"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("name");
+    }
+
+    @Test
+    void shouldRejectCrlfInValue() {
+        assertThatThrownBy(() -> Cookie.of("name", "bad\r\nInjected: header"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("value");
+    }
+
+    @Test
+    void shouldRejectCrlfInPath() {
+        assertThatThrownBy(() -> Cookie.of("n", "v").toBuilder().path("/\r\nX-Inject: bad").build())
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("path");
+    }
+
+    @Test
+    void shouldRejectCrlfInDomain() {
+        assertThatThrownBy(() -> Cookie.of("n", "v").toBuilder().domain("evil\r\ndomain").build())
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("domain");
     }
 
     // --- Stubs ---

@@ -36,7 +36,8 @@ import build.serve.foundation.routing.RouterBuilder;
  */
 public final class TaskApiHandler {
 
-    private record CreateRequest(String title) {}
+    private record CreateRequest(String title) {
+    }
 
     private final TaskService service;
 

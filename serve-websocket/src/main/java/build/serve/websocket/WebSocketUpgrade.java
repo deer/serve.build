@@ -32,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
+import java.util.Set;
 
 /**
  * Bridges HTTP to WebSocket by performing the RFC 6455 opening handshake.
@@ -89,6 +90,22 @@ public final class WebSocketUpgrade {
      * @return a {@link Handler} that performs the WebSocket upgrade
      */
     public static Handler upgrade(final WebSocketHandler wsHandler) {
+        return upgrade(wsHandler, Set.of());
+    }
+
+    /**
+     * Creates a {@link Handler} that upgrades HTTP connections to WebSocket, enforcing an
+     * {@code Origin} allowlist.
+     * <p>
+     * If {@code allowedOrigins} is non-empty, the {@code Origin} request header must exactly
+     * match one of the allowed values (e.g. {@code "https://example.com"}); otherwise the
+     * upgrade is rejected with {@code 403 Forbidden}.
+     *
+     * @param wsHandler      the handler for the established WebSocket connection
+     * @param allowedOrigins the set of permitted {@code Origin} values; empty means no check
+     * @return a {@link Handler} that performs the WebSocket upgrade
+     */
+    public static Handler upgrade(final WebSocketHandler wsHandler, final Set<String> allowedOrigins) {
         return exchange -> {
             final var request = exchange.request();
 
@@ -103,6 +120,16 @@ public final class WebSocketUpgrade {
                 exchange.response().status(400).send("Not a WebSocket upgrade request");
 
                 return;
+            }
+
+            if (!allowedOrigins.isEmpty()) {
+                final var origin = request.header("Origin").orElse("");
+
+                if (!allowedOrigins.contains(origin)) {
+                    exchange.response().status(403).send("Forbidden: Origin not allowed");
+
+                    return;
+                }
             }
 
             // Compute accept key

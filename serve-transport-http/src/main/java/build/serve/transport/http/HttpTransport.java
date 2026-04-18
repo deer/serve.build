@@ -26,6 +26,7 @@ import build.serve.foundation.SimpleExchange;
 import build.serve.foundation.context.RequestContext;
 import build.serve.foundation.error.DefaultErrorHandler;
 import build.serve.foundation.error.ErrorHandler;
+import build.serve.foundation.option.MaxRequestSize;
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpsConfigurator;
 import com.sun.net.httpserver.HttpsParameters;
@@ -66,6 +67,11 @@ public class HttpTransport {
     private final InetSocketAddress address;
 
     /**
+     * The maximum allowed request body size.
+     */
+    private final MaxRequestSize maxRequestSize;
+
+    /**
      * Constructs an {@link HttpTransport} with a default {@link DefaultErrorHandler}.
      *
      * @param address the address to bind to
@@ -76,7 +82,7 @@ public class HttpTransport {
     public HttpTransport(final InetSocketAddress address,
                          final int backlog,
                          final Handler handler) throws IOException {
-        this(address, backlog, handler, new DefaultErrorHandler());
+        this(address, backlog, handler, new DefaultErrorHandler(), MaxRequestSize.DEFAULT);
     }
 
     /**
@@ -92,7 +98,25 @@ public class HttpTransport {
                          final int backlog,
                          final Handler handler,
                          final ErrorHandler errorHandler) throws IOException {
-        this(HttpServer.create(address, backlog), address, handler, errorHandler);
+        this(HttpServer.create(address, backlog), address, handler, errorHandler, MaxRequestSize.DEFAULT);
+    }
+
+    /**
+     * Constructs an {@link HttpTransport} with a custom {@link MaxRequestSize}.
+     *
+     * @param address        the address to bind to
+     * @param backlog        the maximum number of queued incoming connections (0 for system default)
+     * @param handler        the {@link Handler} to dispatch requests to
+     * @param errorHandler   the {@link ErrorHandler} for unhandled exceptions
+     * @param maxRequestSize the maximum allowed request body size
+     * @throws IOException if the server cannot be created
+     */
+    public HttpTransport(final InetSocketAddress address,
+                         final int backlog,
+                         final Handler handler,
+                         final ErrorHandler errorHandler,
+                         final MaxRequestSize maxRequestSize) throws IOException {
+        this(HttpServer.create(address, backlog), address, handler, errorHandler, maxRequestSize);
     }
 
     /**
@@ -109,7 +133,7 @@ public class HttpTransport {
                                       final int backlog,
                                       final Handler handler,
                                       final SSLContext sslContext) throws IOException {
-        return https(address, backlog, handler, new DefaultErrorHandler(), sslContext);
+        return https(address, backlog, handler, new DefaultErrorHandler(), MaxRequestSize.DEFAULT, sslContext);
     }
 
     /**
@@ -128,6 +152,27 @@ public class HttpTransport {
                                       final Handler handler,
                                       final ErrorHandler errorHandler,
                                       final SSLContext sslContext) throws IOException {
+        return https(address, backlog, handler, errorHandler, MaxRequestSize.DEFAULT, sslContext);
+    }
+
+    /**
+     * Creates an HTTPS {@link HttpTransport} with a custom {@link MaxRequestSize}.
+     *
+     * @param address        the address to bind to
+     * @param backlog        the maximum number of queued incoming connections (0 for system default)
+     * @param handler        the {@link Handler} to dispatch requests to
+     * @param errorHandler   the {@link ErrorHandler} for unhandled exceptions
+     * @param maxRequestSize the maximum allowed request body size
+     * @param sslContext     the {@link SSLContext} used for TLS
+     * @return a new HTTPS {@link HttpTransport}
+     * @throws IOException if the server cannot be created
+     */
+    public static HttpTransport https(final InetSocketAddress address,
+                                      final int backlog,
+                                      final Handler handler,
+                                      final ErrorHandler errorHandler,
+                                      final MaxRequestSize maxRequestSize,
+                                      final SSLContext sslContext) throws IOException {
         Objects.requireNonNull(sslContext, "sslContext must not be null");
 
         final var server = HttpsServer.create(address, backlog);
@@ -142,7 +187,7 @@ public class HttpTransport {
             }
         });
 
-        return new HttpTransport(server, address, handler, errorHandler);
+        return new HttpTransport(server, address, handler, errorHandler, maxRequestSize);
     }
 
     /**
@@ -151,15 +196,17 @@ public class HttpTransport {
     private HttpTransport(final HttpServer server,
                           final InetSocketAddress address,
                           final Handler handler,
-                          final ErrorHandler errorHandler) {
+                          final ErrorHandler errorHandler,
+                          final MaxRequestSize maxRequestSize) {
         this.address = Objects.requireNonNull(address, "address must not be null");
+        this.maxRequestSize = Objects.requireNonNull(maxRequestSize, "maxRequestSize must not be null");
         Objects.requireNonNull(handler, "handler must not be null");
         Objects.requireNonNull(errorHandler, "errorHandler must not be null");
 
         this.httpServer = server;
         this.httpServer.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         this.httpServer.createContext("/", httpExchange -> {
-            final var request = new HttpRequest(httpExchange);
+            final var request = new HttpRequest(httpExchange, this.maxRequestSize);
             final var response = new HttpResponse(httpExchange);
             final var exchange = new SimpleExchange(request, response);
 

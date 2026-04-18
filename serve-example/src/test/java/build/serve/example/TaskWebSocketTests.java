@@ -64,9 +64,9 @@ class TaskWebSocketTests {
 
                         @Override
                         public java.util.concurrent.CompletionStage<?> onText(
-                                final WebSocket ws,
-                                final CharSequence data,
-                                final boolean last) {
+                            final WebSocket ws,
+                            final CharSequence data,
+                            final boolean last) {
                             received.complete(data.toString());
                             return null;
                         }
@@ -120,9 +120,9 @@ class TaskWebSocketTests {
 
                         @Override
                         public java.util.concurrent.CompletionStage<?> onText(
-                                final WebSocket ws,
-                                final CharSequence data,
-                                final boolean last) {
+                            final WebSocket ws,
+                            final CharSequence data,
+                            final boolean last) {
                             received.complete(data.toString());
                             return null;
                         }
@@ -172,9 +172,9 @@ class TaskWebSocketTests {
 
                         @Override
                         public java.util.concurrent.CompletionStage<?> onText(
-                                final WebSocket ws,
-                                final CharSequence data,
-                                final boolean last) {
+                            final WebSocket ws,
+                            final CharSequence data,
+                            final boolean last) {
                             received.complete(data.toString());
                             return null;
                         }
@@ -193,5 +193,6 @@ class TaskWebSocketTests {
         }
     }
 
-    private record CreateRequest(String title) {}
+    private record CreateRequest(String title) {
+    }
 }

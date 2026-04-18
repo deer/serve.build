@@ -1,6 +1,6 @@
 /*-
  * #%L
- * Serve Example
+ * Serve Foundation
  * %%
  * Copyright (C) 2026 Reed von Redwitz
  * %%
@@ -17,13 +17,22 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.example.domain;
+package build.serve.foundation.error;
 
 /**
- * A single to-do task.
+ * An {@link HttpException} for HTTP 413 Payload Too Large.
  *
  * @author reed.vonredwitz
- * @since Mar-2026
+ * @since Apr-2026
  */
-public record Task(long id, String title, boolean done) {
+public class PayloadTooLargeException extends HttpException {
+
+    /**
+     * Constructs a {@link PayloadTooLargeException} with a message.
+     *
+     * @param message the detail message
+     */
+    public PayloadTooLargeException(final String message) {
+        super(413, message);
+    }
 }

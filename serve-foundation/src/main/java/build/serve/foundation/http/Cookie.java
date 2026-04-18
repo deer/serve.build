@@ -48,6 +48,29 @@ public record Cookie(
     public Cookie {
         Objects.requireNonNull(name, "name must not be null");
         Objects.requireNonNull(value, "value must not be null");
+        requireNoCrlf(name, "name");
+        requireNoCrlf(value, "value");
+
+        if (path != null) {
+            requireNoCrlf(path, "path");
+        }
+
+        if (domain != null) {
+            requireNoCrlf(domain, "domain");
+        }
+
+        if (sameSite != null) {
+            requireNoCrlf(sameSite, "sameSite");
+        }
+    }
+
+    /**
+     * Throws {@link IllegalArgumentException} if the value contains CR or LF characters.
+     */
+    private static void requireNoCrlf(final String value, final String field) {
+        if (value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0) {
+            throw new IllegalArgumentException("Cookie " + field + " must not contain CR or LF characters");
+        }
     }
 
     /**

@@ -123,7 +123,7 @@ public final class SecurityHeadersMiddleware implements Middleware {
         private String xFrameOptions = "DENY";
         private String xContentTypeOptions = "nosniff";
         private String xXssProtection = "0";
-        private String strictTransportSecurity = "max-age=63072000";
+        private String strictTransportSecurity = "max-age=63072000; includeSubDomains; preload";
         private String contentSecurityPolicy;
         private String referrerPolicy = "strict-origin-when-cross-origin";
         private String permissionsPolicy;

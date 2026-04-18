@@ -47,7 +47,7 @@ public class DefaultErrorHandler implements ErrorHandler {
 
         if (error instanceof HttpException httpException) {
             statusCode = httpException.statusCode();
-            message = httpException.getMessage();
+            message = stripControlChars(httpException.getMessage());
         } else {
             statusCode = 500;
             message = "Internal Server Error";
@@ -59,5 +59,13 @@ public class DefaultErrorHandler implements ErrorHandler {
             .status(statusCode)
             .header("Content-Type", "text/plain")
             .send(message);
+    }
+
+    private static String stripControlChars(final String s) {
+        if (s == null) {
+            return "";
+        }
+
+        return s.replaceAll("[\\r\\n\\t\\x00-\\x1F\\x7F]", " ");
     }
 }
