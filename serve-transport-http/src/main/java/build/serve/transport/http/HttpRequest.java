@@ -22,6 +22,7 @@ package build.serve.transport.http;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.Request;
 import build.serve.foundation.http.Cookie;
+import build.serve.foundation.option.MaxRequestSize;
 import com.sun.net.httpserver.HttpExchange;
 
 import java.io.InputStream;
@@ -51,6 +52,11 @@ public class HttpRequest
     private final HttpExchange httpExchange;
 
     /**
+     * The maximum allowed request body size.
+     */
+    private final long maxBodyBytes;
+
+    /**
      * The owning {@link Exchange}, used to resolve path parameters from exchange attributes.
      */
     private Exchange exchange;
@@ -58,10 +64,12 @@ public class HttpRequest
     /**
      * Constructs an {@link HttpRequest}.
      *
-     * @param httpExchange the JDK {@link HttpExchange}
+     * @param httpExchange   the JDK {@link HttpExchange}
+     * @param maxRequestSize the maximum allowed request body size
      */
-    public HttpRequest(final HttpExchange httpExchange) {
+    HttpRequest(final HttpExchange httpExchange, final MaxRequestSize maxRequestSize) {
         this.httpExchange = Objects.requireNonNull(httpExchange, "httpExchange must not be null");
+        this.maxBodyBytes = Objects.requireNonNull(maxRequestSize, "maxRequestSize must not be null").bytes();
     }
 
     /**
@@ -97,6 +105,8 @@ public class HttpRequest
         return Optional.empty();
     }
 
+    private static final int MAX_QUERY_PARAMS = 100;
+
     @Override
     public List<String> queryParams(final String name) {
         final var query = httpExchange.getRequestURI().getQuery();
@@ -106,8 +116,13 @@ public class HttpRequest
         }
 
         final var result = new java.util.ArrayList<String>();
+        int paramCount = 0;
 
         for (final var param : query.split("&")) {
+            if (++paramCount > MAX_QUERY_PARAMS) {
+                break;
+            }
+
             final var parts = param.split("=", 2);
 
             if (parts[0].equals(name)) {
@@ -135,6 +150,8 @@ public class HttpRequest
         return Optional.ofNullable(httpExchange.getRequestHeaders().getFirst(name));
     }
 
+    private static final int MAX_COOKIES = 50;
+
     @Override
     public List<Cookie> cookies() {
         final var cookieHeader = header("Cookie");
@@ -144,8 +161,13 @@ public class HttpRequest
         }
 
         final var result = new ArrayList<Cookie>();
+        int cookieCount = 0;
 
         for (final var pair : cookieHeader.get().split(";")) {
+            if (++cookieCount > MAX_COOKIES) {
+                break;
+            }
+
             final var trimmed = pair.trim();
             final var eq = trimmed.indexOf('=');
 
@@ -162,7 +184,7 @@ public class HttpRequest
 
     @Override
     public InputStream bodyAsStream() {
-        return httpExchange.getRequestBody();
+        return new LimitedInputStream(httpExchange.getRequestBody(), maxBodyBytes);
     }
 
     @Override

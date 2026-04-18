@@ -49,7 +49,7 @@ class SecurityHeadersMiddlewareTests {
         assertThat(response.headers).containsEntry("X-Frame-Options", "DENY");
         assertThat(response.headers).containsEntry("X-Content-Type-Options", "nosniff");
         assertThat(response.headers).containsEntry("X-XSS-Protection", "0");
-        assertThat(response.headers).containsEntry("Strict-Transport-Security", "max-age=63072000");
+        assertThat(response.headers).containsEntry("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
         assertThat(response.headers).containsEntry("Referrer-Policy", "strict-origin-when-cross-origin");
         assertThat(response.headers).containsEntry("Cross-Origin-Opener-Policy", "same-origin");
         assertThat(response.headers).containsEntry("Cross-Origin-Resource-Policy", "same-origin");

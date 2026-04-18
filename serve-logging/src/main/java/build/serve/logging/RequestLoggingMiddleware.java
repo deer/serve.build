@@ -139,7 +139,7 @@ public final class RequestLoggingMiddleware implements Middleware {
     public static final class Builder {
 
         private boolean includeHeaders;
-        private boolean includeQueryString = true;
+        private boolean includeQueryString = false;
         private final Set<String> excludedPaths = new LinkedHashSet<>();
         private Duration slowRequestThreshold;
 

@@ -44,6 +44,17 @@ class DefaultErrorHandlerTests {
     }
 
     @Test
+    void shouldStripCrlfFromHttpExceptionMessage() {
+        var response = new StubResponse();
+        var exchange = exchangeWith(response);
+
+        handler.handle(exchange, new BadRequestException("bad input\r\nX-Injected: evil"));
+
+        assertThat(response.statusCode).isEqualTo(400);
+        assertThat(response.body).doesNotContain("\r").doesNotContain("\n");
+    }
+
+    @Test
     void doesNotLeakStackTrace() {
         var response = new StubResponse();
         var exchange = exchangeWith(response);

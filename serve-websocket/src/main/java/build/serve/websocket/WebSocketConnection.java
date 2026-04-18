@@ -203,6 +203,10 @@ final class WebSocketConnection implements WebSocket {
 
                     case WebSocketFrame.OPCODE_CONTINUATION -> {
                         if (fragmentBuffer != null) {
+                            if (fragmentBuffer.size() + frame.payload().length > 16 * 1024 * 1024) {
+                                throw new IOException("Fragmented WebSocket message exceeds 16 MiB limit");
+                            }
+
                             fragmentBuffer.write(frame.payload());
 
                             if (frame.isFin()) {

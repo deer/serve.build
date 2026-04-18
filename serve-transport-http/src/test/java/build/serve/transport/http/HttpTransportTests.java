@@ -1,6 +1,7 @@
 package build.serve.transport.http;
 
 import build.serve.foundation.Handler;
+import build.serve.foundation.option.MaxRequestSize;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -100,6 +101,64 @@ class HttpTransportTests {
         var conn = get("/");
 
         assertThat(conn.getResponseCode()).isEqualTo(500);
+    }
+
+    @Test
+    void shouldCapQueryParamsAt100() throws Exception {
+        startWith(exchange -> {
+            var values = exchange.request().queryParams("x");
+            exchange.response().send(String.valueOf(values.size()));
+        });
+
+        var query = "x=1&".repeat(101).stripTrailing().replaceAll("&$", "");
+        var conn = openConnection("/?" + query);
+        conn.connect();
+
+        // 101 params sent — server should see at most 100
+        assertThat(Integer.parseInt(readBody(conn))).isLessThanOrEqualTo(100);
+    }
+
+    @Test
+    void shouldCapCookiesAt50() throws Exception {
+        startWith(exchange -> {
+            var cookies = exchange.request().cookies();
+            exchange.response().send(String.valueOf(cookies.size()));
+        });
+
+        var cookieHeader = new StringBuilder();
+        for (int i = 0; i < 51; i++) {
+            if (i > 0) cookieHeader.append("; ");
+            cookieHeader.append("c").append(i).append("=v");
+        }
+
+        var conn = openConnection("/");
+        conn.setRequestProperty("Cookie", cookieHeader.toString());
+        conn.connect();
+
+        assertThat(Integer.parseInt(readBody(conn))).isLessThanOrEqualTo(50);
+    }
+
+    @Test
+    void shouldReturn413WhenBodyExceedsMaxRequestSize() throws Exception {
+        var address = new InetSocketAddress("127.0.0.1", 0);
+        transport = new HttpTransport(address, 0,
+            exchange -> {
+                exchange.request().bodyAsString();
+                exchange.response().send("ok");
+            },
+            (ex, e) -> ex.response().status(e instanceof build.serve.foundation.error.HttpException he
+                ? he.statusCode() : 500).send(e.getMessage()),
+            MaxRequestSize.of(5));
+        transport.start();
+
+        var conn = openConnection("/");
+        conn.setRequestMethod("POST");
+        conn.setDoOutput(true);
+        try (OutputStream os = conn.getOutputStream()) {
+            os.write("this body is longer than 5 bytes".getBytes(StandardCharsets.UTF_8));
+        }
+
+        assertThat(conn.getResponseCode()).isEqualTo(413);
     }
 
     @Test

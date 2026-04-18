@@ -5,10 +5,16 @@ import build.serve.transport.http.HttpTransport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.nio.ByteBuffer;
+import java.util.Base64;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -189,6 +195,42 @@ class WebSocketTests {
         ws.sendClose(java.net.http.WebSocket.NORMAL_CLOSURE, "done");
     }
 
+    @Test
+    void shouldRejectUpgradeFromDisallowedOrigin() throws Exception {
+        var router = RouterBuilder.create()
+            .route("/ws", WebSocketUpgrade.upgrade(ws -> {}, Set.of("https://allowed.example.com")))
+            .build();
+        transport = new HttpTransport(new InetSocketAddress("127.0.0.1", 0), 0, router);
+        transport.start();
+
+        // HttpURLConnection silently drops Upgrade/Connection headers; use a raw socket instead
+        var statusLine = sendRawUpgradeRequest(transport.address().getPort(), "https://evil.example.com");
+
+        assertThat(statusLine).contains("403");
+    }
+
+    @Test
+    void shouldAllowUpgradeFromAllowedOrigin() throws Exception {
+        startWithOrigins(ws -> {}, Set.of("https://allowed.example.com"));
+
+        var clientReceived = new CompletableFuture<String>();
+        var client = HttpClient.newHttpClient();
+        var ws = client.newWebSocketBuilder()
+            .header("Origin", "https://allowed.example.com")
+            .buildAsync(wsUri("/ws"), new java.net.http.WebSocket.Listener() {
+                @Override
+                public CompletionStage<?> onText(java.net.http.WebSocket webSocket,
+                                                 CharSequence data, boolean last) {
+                    clientReceived.complete(data.toString());
+                    return null;
+                }
+            })
+            .get(5, TimeUnit.SECONDS);
+
+        ws.sendText("hi", true);
+        ws.sendClose(java.net.http.WebSocket.NORMAL_CLOSURE, "done");
+    }
+
     // --- Helpers ---
 
     private void startWith(WebSocketHandler wsHandler) throws Exception {
@@ -198,6 +240,33 @@ class WebSocketTests {
 
         transport = new HttpTransport(new InetSocketAddress("127.0.0.1", 0), 0, router);
         transport.start();
+    }
+
+    private void startWithOrigins(WebSocketHandler wsHandler, Set<String> allowedOrigins) throws Exception {
+        var router = RouterBuilder.create()
+            .route("/ws", WebSocketUpgrade.upgrade(wsHandler, allowedOrigins))
+            .build();
+
+        transport = new HttpTransport(new InetSocketAddress("127.0.0.1", 0), 0, router);
+        transport.start();
+    }
+
+    private String sendRawUpgradeRequest(int port, String origin) throws Exception {
+        try (var socket = new Socket("127.0.0.1", port);
+             var out = new PrintWriter(socket.getOutputStream(), true);
+             var in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+            var key = Base64.getEncoder().encodeToString(new byte[16]);
+            out.print("GET /ws HTTP/1.1\r\n");
+            out.print("Host: 127.0.0.1:" + port + "\r\n");
+            out.print("Upgrade: websocket\r\n");
+            out.print("Connection: Upgrade\r\n");
+            out.print("Sec-WebSocket-Key: " + key + "\r\n");
+            out.print("Sec-WebSocket-Version: 13\r\n");
+            out.print("Origin: " + origin + "\r\n");
+            out.print("\r\n");
+            out.flush();
+            return in.readLine(); // HTTP/1.1 403 Forbidden (or 101, etc.)
+        }
     }
 
     private URI wsUri(String path) {
