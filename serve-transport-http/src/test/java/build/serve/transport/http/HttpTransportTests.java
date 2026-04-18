@@ -1,6 +1,8 @@
 package build.serve.transport.http;
 
 import build.serve.foundation.Handler;
+import build.serve.foundation.error.DefaultErrorHandler;
+import build.serve.foundation.error.HttpException;
 import build.serve.foundation.option.MaxRequestSize;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -146,7 +148,7 @@ class HttpTransportTests {
                 exchange.request().bodyAsString();
                 exchange.response().send("ok");
             },
-            (ex, e) -> ex.response().status(e instanceof build.serve.foundation.error.HttpException he
+            (ex, e) -> ex.response().status(e instanceof HttpException he
                 ? he.statusCode() : 500).send(e.getMessage()),
             MaxRequestSize.of(5));
         transport.start();
@@ -184,6 +186,75 @@ class HttpTransportTests {
         transport.start();
 
         assertThat(transport.address().getPort()).isGreaterThan(0);
+    }
+
+    @Test
+    void httpsWithTlsOptionsBindsToPort() throws Exception {
+        var ctx = SSLContext.getDefault();
+        transport = HttpTransport.https(new InetSocketAddress("127.0.0.1", 0), 0,
+            exchange -> exchange.response().status(200).send("OK"),
+            new DefaultErrorHandler(),
+            MaxRequestSize.DEFAULT,
+            ctx,
+            TlsOptions.minimum(TlsVersion.TLS_1_2));
+        transport.start();
+
+        assertThat(transport.address().getPort()).isGreaterThan(0);
+    }
+
+    @Test
+    void shouldFilterProtocolsBelowMinimum() {
+        var protocols = new String[]{"TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"};
+
+        var result = HttpTransport.filterProtocols(protocols, "TLSv1.2");
+
+        assertThat(result).containsExactly("TLSv1.2", "TLSv1.3");
+    }
+
+    @Test
+    void shouldKeepOnlyTls13WhenMinimumIsTls13() {
+        var protocols = new String[]{"TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"};
+
+        var result = HttpTransport.filterProtocols(protocols, "TLSv1.3");
+
+        assertThat(result).containsExactly("TLSv1.3");
+    }
+
+    @Test
+    void shouldNotFilterWhenAllProtocolsMeetMinimum() {
+        var protocols = new String[]{"TLSv1.2", "TLSv1.3"};
+
+        var result = HttpTransport.filterProtocols(protocols, "TLSv1.2");
+
+        assertThat(result).containsExactly("TLSv1.2", "TLSv1.3");
+    }
+
+    @Test
+    void shouldFilterNullAndExportCiphers() {
+        var ciphers = new String[]{
+            "TLS_AES_128_GCM_SHA256",
+            "TLS_RSA_WITH_NULL_SHA",
+            "TLS_RSA_WITH_AES_128_CBC_SHA",
+            "TLS_ECDHE_EXPORT_WITH_RC4_40_SHA"
+        };
+
+        var result = HttpTransport.filterCiphers(ciphers, "TLSv1.2");
+
+        assertThat(result).containsExactly("TLS_AES_128_GCM_SHA256", "TLS_RSA_WITH_AES_128_CBC_SHA");
+    }
+
+    @Test
+    void shouldFilterCbcAndRsaStaticCiphersForTls13Minimum() {
+        var ciphers = new String[]{
+            "TLS_AES_128_GCM_SHA256",
+            "TLS_AES_256_GCM_SHA384",
+            "TLS_RSA_WITH_AES_128_CBC_SHA",
+            "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256"
+        };
+
+        var result = HttpTransport.filterCiphers(ciphers, "TLSv1.3");
+
+        assertThat(result).containsExactly("TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384");
     }
 
     // --- Helpers ---

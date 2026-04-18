@@ -132,7 +132,7 @@ public final class HealthHandler {
                     sb.append(',');
                 }
 
-                sb.append('"').append(entry.getKey()).append("\":\"");
+                sb.append('"').append(escapeJson(entry.getKey())).append("\":\"");
                 sb.append(entry.getValue() ? "UP" : "DOWN");
                 sb.append('"');
                 first = false;
@@ -142,6 +142,26 @@ public final class HealthHandler {
         }
 
         sb.append('}');
+
+        return sb.toString();
+    }
+
+    private static String escapeJson(final String value) {
+        final var sb = new StringBuilder(value.length());
+
+        for (int i = 0; i < value.length(); i++) {
+            final char c = value.charAt(i);
+
+            if (c == '"') {
+                sb.append("\\\"");
+            } else if (c == '\\') {
+                sb.append("\\\\");
+            } else if (c < 0x20) {
+                sb.append(String.format("\\u%04x", (int) c));
+            } else {
+                sb.append(c);
+            }
+        }
 
         return sb.toString();
     }

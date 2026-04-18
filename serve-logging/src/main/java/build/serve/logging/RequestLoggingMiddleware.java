@@ -21,6 +21,7 @@ package build.serve.logging;
 
 import build.base.logging.Logger;
 import build.serve.foundation.Handler;
+import build.serve.foundation.context.RequestContext;
 import build.serve.foundation.middleware.Middleware;
 
 import java.time.Duration;
@@ -45,12 +46,14 @@ public final class RequestLoggingMiddleware implements Middleware {
     private final boolean includeQueryString;
     private final Set<String> excludedPaths;
     private final Duration slowRequestThreshold;
+    private final LogFormat format;
 
     private RequestLoggingMiddleware(final Builder builder) {
         this.includeHeaders = builder.includeHeaders;
         this.includeQueryString = builder.includeQueryString;
         this.excludedPaths = Set.copyOf(builder.excludedPaths);
         this.slowRequestThreshold = builder.slowRequestThreshold;
+        this.format = builder.format;
     }
 
     /**
@@ -92,15 +95,16 @@ public final class RequestLoggingMiddleware implements Middleware {
 
                 final var durationMs = (System.nanoTime() - startTime) / 1_000_000;
                 final var status = exchange.response().status();
-                final var message = formatMessage(method, displayPath, status, durationMs);
+                final var message = formatMessage(format, method, displayPath, status, durationMs);
+                final var slow = slowRequestThreshold != null && durationMs >= slowRequestThreshold.toMillis();
 
-                if (slowRequestThreshold != null && durationMs >= slowRequestThreshold.toMillis()) {
-                    LOGGER.warn(message + " [SLOW]");
+                if (slow) {
+                    LOGGER.warn(format == LogFormat.JSON ? appendJsonField(message, "slow", true) : message + " [SLOW]");
                 } else {
                     LOGGER.info(message);
                 }
 
-                if (includeHeaders) {
+                if (includeHeaders && format != LogFormat.JSON) {
                     LOGGER.info("  Headers: " + request.headers());
                 }
             } catch (final Exception exception) {
@@ -125,9 +129,51 @@ public final class RequestLoggingMiddleware implements Middleware {
         return request.path();
     }
 
-    private static String formatMessage(final String method, final String path, final int status,
-                                        final long durationMs) {
+    private static String formatMessage(final LogFormat format, final String method, final String path,
+                                        final int status, final long durationMs) {
+        if (format == LogFormat.JSON) {
+            final var requestId = RequestContext.REQUEST_ID.isBound() ? RequestContext.REQUEST_ID.get() : null;
+            final var sb = new StringBuilder(128);
+
+            sb.append("{\"method\":\"").append(escapeJson(method)).append("\"");
+            sb.append(",\"path\":\"").append(escapeJson(path)).append("\"");
+            sb.append(",\"status\":").append(status);
+            sb.append(",\"duration_ms\":").append(durationMs);
+
+            if (requestId != null) {
+                sb.append(",\"request_id\":\"").append(escapeJson(requestId)).append("\"");
+            }
+
+            sb.append('}');
+
+            return sb.toString();
+        }
+
         return method + " " + path + " -> " + status + " (" + durationMs + "ms)";
+    }
+
+    private static String appendJsonField(final String jsonObject, final String key, final boolean value) {
+        return jsonObject.substring(0, jsonObject.length() - 1) + ",\"" + key + "\":" + value + "}";
+    }
+
+    private static String escapeJson(final String value) {
+        final var sb = new StringBuilder(value.length());
+
+        for (int i = 0; i < value.length(); i++) {
+            final char c = value.charAt(i);
+
+            if (c == '"') {
+                sb.append("\\\"");
+            } else if (c == '\\') {
+                sb.append("\\\\");
+            } else if (c < 0x20) {
+                sb.append(String.format("\\u%04x", (int) c));
+            } else {
+                sb.append(c);
+            }
+        }
+
+        return sb.toString();
     }
 
     /**
@@ -142,6 +188,7 @@ public final class RequestLoggingMiddleware implements Middleware {
         private boolean includeQueryString = false;
         private final Set<String> excludedPaths = new LinkedHashSet<>();
         private Duration slowRequestThreshold;
+        private LogFormat format = LogFormat.TEXT;
 
         private Builder() {
         }
@@ -191,6 +238,18 @@ public final class RequestLoggingMiddleware implements Middleware {
          */
         public Builder slowRequestThreshold(final Duration threshold) {
             this.slowRequestThreshold = Objects.requireNonNull(threshold, "threshold");
+
+            return this;
+        }
+
+        /**
+         * Sets the log output format. Defaults to {@link LogFormat#TEXT}.
+         *
+         * @param format the {@link LogFormat} to use
+         * @return this {@link Builder}
+         */
+        public Builder format(final LogFormat format) {
+            this.format = Objects.requireNonNull(format, "format");
 
             return this;
         }

@@ -120,6 +120,25 @@ class RequestLoggingMiddlewareTests {
     }
 
     @Test
+    void jsonFormatPassesThroughResponse() throws Exception {
+        var middleware = RequestLoggingMiddleware.builder()
+            .format(LogFormat.JSON)
+            .build();
+
+        var response = new StubResponse();
+        var exchange = createExchange("GET", "/api/items", response);
+        var nextCalled = new AtomicBoolean(false);
+
+        middleware.apply(ex -> {
+            ex.response().status(200);
+            nextCalled.set(true);
+        }).handle(exchange);
+
+        assertThat(nextCalled).isTrue();
+        assertThat(response.statusCode).isEqualTo(200);
+    }
+
+    @Test
     void builderConfiguration() throws Exception {
         var middleware = RequestLoggingMiddleware.builder()
             .includeHeaders(true)
