@@ -34,6 +34,8 @@ import com.sun.net.httpserver.HttpsServer;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executors;
 import javax.net.ssl.SSLContext;
@@ -173,21 +175,79 @@ public class HttpTransport {
                                       final ErrorHandler errorHandler,
                                       final MaxRequestSize maxRequestSize,
                                       final SSLContext sslContext) throws IOException {
+        return https(address, backlog, handler, errorHandler, maxRequestSize, sslContext, TlsOptions.defaults());
+    }
+
+    /**
+     * Creates an HTTPS {@link HttpTransport} with TLS hardening options.
+     *
+     * @param address        the address to bind to
+     * @param backlog        the maximum number of queued incoming connections (0 for system default)
+     * @param handler        the {@link Handler} to dispatch requests to
+     * @param errorHandler   the {@link ErrorHandler} for unhandled exceptions
+     * @param maxRequestSize the maximum allowed request body size
+     * @param sslContext     the {@link SSLContext} used for TLS
+     * @param tlsOptions     the {@link TlsOptions} controlling minimum TLS version and cipher filtering
+     * @return a new HTTPS {@link HttpTransport}
+     * @throws IOException if the server cannot be created
+     */
+    public static HttpTransport https(final InetSocketAddress address,
+                                      final int backlog,
+                                      final Handler handler,
+                                      final ErrorHandler errorHandler,
+                                      final MaxRequestSize maxRequestSize,
+                                      final SSLContext sslContext,
+                                      final TlsOptions tlsOptions) throws IOException {
         Objects.requireNonNull(sslContext, "sslContext must not be null");
+        Objects.requireNonNull(tlsOptions, "tlsOptions must not be null");
 
         final var server = HttpsServer.create(address, backlog);
         server.setHttpsConfigurator(new HttpsConfigurator(sslContext) {
             @Override
             public void configure(final HttpsParameters params) {
                 final var engine = getSSLContext().createSSLEngine();
+                final var enabledProtocols = engine.getEnabledProtocols();
+                final var enabledCiphers = engine.getEnabledCipherSuites();
+
                 params.setNeedClientAuth(false);
-                params.setCipherSuites(engine.getEnabledCipherSuites());
-                params.setProtocols(engine.getEnabledProtocols());
+
+                if (tlsOptions.minimumVersion() != null) {
+                    final var minName = tlsOptions.minimumVersion().protocolName();
+                    final var filteredProtocols = filterProtocols(enabledProtocols, minName);
+                    final var filteredCiphers = filterCiphers(enabledCiphers, minName);
+                    params.setProtocols(filteredProtocols);
+                    params.setCipherSuites(filteredCiphers);
+                } else {
+                    params.setProtocols(enabledProtocols);
+                    params.setCipherSuites(enabledCiphers);
+                }
+
                 params.setSSLParameters(getSSLContext().getDefaultSSLParameters());
             }
         });
 
         return new HttpTransport(server, address, handler, errorHandler, maxRequestSize);
+    }
+
+    static String[] filterProtocols(final String[] protocols, final String minProtocol) {
+        final var order = List.of("TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3");
+        final int minIndex = order.indexOf(minProtocol);
+
+        return Arrays.stream(protocols)
+            .filter(p -> order.indexOf(p) >= minIndex)
+            .toArray(String[]::new);
+    }
+
+    static String[] filterCiphers(final String[] ciphers, final String minProtocol) {
+        if ("TLSv1.3".equals(minProtocol)) {
+            return Arrays.stream(ciphers)
+                .filter(c -> !c.contains("_CBC_") && !c.startsWith("TLS_RSA_"))
+                .toArray(String[]::new);
+        }
+
+        return Arrays.stream(ciphers)
+            .filter(c -> !c.contains("_NULL_") && !c.contains("_anon_") && !c.contains("EXPORT"))
+            .toArray(String[]::new);
     }
 
     /**

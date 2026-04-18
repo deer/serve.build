@@ -95,6 +95,19 @@ class HealthHandlerTests {
     }
 
     @Test
+    void readinessEscapesSpecialCharactersInCheckNames() throws Exception {
+        var response = new StubResponse();
+        var exchange = createExchange("GET", response);
+
+        HealthHandler.readiness(
+            HealthCheck.of("db\"shard\\1", () -> true)
+        ).handle(exchange);
+
+        assertThat(response.body).isEqualTo(
+            "{\"status\":\"UP\",\"checks\":{\"db\\\"shard\\\\1\":\"UP\"}}");
+    }
+
+    @Test
     void readinessWithNoChecksReturns200() throws Exception {
         var response = new StubResponse();
         var exchange = createExchange("GET", response);
