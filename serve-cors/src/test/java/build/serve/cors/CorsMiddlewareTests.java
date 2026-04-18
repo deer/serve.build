@@ -99,6 +99,14 @@ class CorsMiddlewareTests {
     }
 
     @Test
+    @SuppressWarnings("deprecation")
+    void allowAllIsDeprecated() throws Exception {
+        var method = CorsMiddleware.class.getMethod("allowAll");
+
+        assertThat(method.isAnnotationPresent(Deprecated.class)).isTrue();
+    }
+
+    @Test
     void credentialsWithWildcardOriginThrows() {
         assertThatThrownBy(() -> CorsMiddleware.builder()
             .allowAnyOrigin()
