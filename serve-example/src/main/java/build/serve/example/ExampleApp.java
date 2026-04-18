@@ -48,7 +48,7 @@ import build.serve.transport.json.JsonMiddleware;
  *   <li>Full middleware stack: logging, CORS, security headers, gzip compression</li>
  *   <li>Health endpoints at {@code /health/live} and {@code /health/ready}</li>
  * </ul>
- *
+ * <p>
  * Run with {@code ./mvnw -pl serve-example exec:java -Dexec.mainClass=build.serve.example.ExampleApp}
  * or {@code java --enable-preview -m build.serve.example/build.serve.example.ExampleApp}
  *

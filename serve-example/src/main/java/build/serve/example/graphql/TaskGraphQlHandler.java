@@ -33,7 +33,7 @@ import build.serve.graphql.GraphiQlHandler;
  *   <li>{@code POST /graphql} — executes GraphQL operations</li>
  *   <li>{@code GET  /graphiql} — serves the GraphiQL browser IDE</li>
  * </ul>
- *
+ * <p>
  * Supported operations:
  * <pre>
  * query  { tasks { id title done } }

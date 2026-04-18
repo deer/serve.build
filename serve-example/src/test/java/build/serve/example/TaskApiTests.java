@@ -123,5 +123,6 @@ class TaskApiTests {
         }
     }
 
-    private record CreateRequest(String title) {}
+    private record CreateRequest(String title) {
+    }
 }

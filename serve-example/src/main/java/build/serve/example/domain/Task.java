@@ -25,4 +25,5 @@ package build.serve.example.domain;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record Task(long id, String title, boolean done) {}
+public record Task(long id, String title, boolean done) {
+}

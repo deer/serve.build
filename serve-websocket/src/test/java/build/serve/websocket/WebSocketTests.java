@@ -198,7 +198,8 @@ class WebSocketTests {
     @Test
     void shouldRejectUpgradeFromDisallowedOrigin() throws Exception {
         var router = RouterBuilder.create()
-            .route("/ws", WebSocketUpgrade.upgrade(ws -> {}, Set.of("https://allowed.example.com")))
+            .route("/ws", WebSocketUpgrade.upgrade(ws -> {
+            }, Set.of("https://allowed.example.com")))
             .build();
         transport = new HttpTransport(new InetSocketAddress("127.0.0.1", 0), 0, router);
         transport.start();
@@ -211,7 +212,8 @@ class WebSocketTests {
 
     @Test
     void shouldAllowUpgradeFromAllowedOrigin() throws Exception {
-        startWithOrigins(ws -> {}, Set.of("https://allowed.example.com"));
+        startWithOrigins(ws -> {
+        }, Set.of("https://allowed.example.com"));
 
         var clientReceived = new CompletableFuture<String>();
         var client = HttpClient.newHttpClient();

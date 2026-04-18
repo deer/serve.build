@@ -60,10 +60,10 @@ class HealthTests {
     @Test
     void shouldReturnReadinessDownWhenCheckFails() {
         try (final var s = TestServer.of(RouterBuilder.create()
-                .route("/health", HealthHandler.create()
-                    .readiness("/ready", HealthCheck.of("tasks", () -> false))
-                    .build())
-                .build())) {
+            .route("/health", HealthHandler.create()
+                .readiness("/ready", HealthCheck.of("tasks", () -> false))
+                .build())
+            .build())) {
             s.get("/health/ready")
                 .send()
                 .assertStatus(503)
