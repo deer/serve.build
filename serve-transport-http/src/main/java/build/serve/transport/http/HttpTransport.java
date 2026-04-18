@@ -27,6 +27,7 @@ import build.serve.foundation.context.RequestContext;
 import build.serve.foundation.error.DefaultErrorHandler;
 import build.serve.foundation.error.ErrorHandler;
 import build.serve.foundation.option.MaxRequestSize;
+import build.serve.foundation.option.RequestTimeout;
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpsConfigurator;
 import com.sun.net.httpserver.HttpsParameters;
@@ -74,6 +75,11 @@ public class HttpTransport {
     private final MaxRequestSize maxRequestSize;
 
     /**
+     * The timeout executor, non-null only when a request timeout is configured.
+     */
+    private final TimeoutExecutor timeoutExecutor;
+
+    /**
      * Constructs an {@link HttpTransport} with a default {@link DefaultErrorHandler}.
      *
      * @param address the address to bind to
@@ -100,7 +106,7 @@ public class HttpTransport {
                          final int backlog,
                          final Handler handler,
                          final ErrorHandler errorHandler) throws IOException {
-        this(HttpServer.create(address, backlog), address, handler, errorHandler, MaxRequestSize.DEFAULT);
+        this(address, backlog, handler, errorHandler, MaxRequestSize.DEFAULT, RequestTimeout.NONE);
     }
 
     /**
@@ -118,7 +124,27 @@ public class HttpTransport {
                          final Handler handler,
                          final ErrorHandler errorHandler,
                          final MaxRequestSize maxRequestSize) throws IOException {
-        this(HttpServer.create(address, backlog), address, handler, errorHandler, maxRequestSize);
+        this(address, backlog, handler, errorHandler, maxRequestSize, RequestTimeout.NONE);
+    }
+
+    /**
+     * Constructs an {@link HttpTransport} with a custom {@link MaxRequestSize} and {@link RequestTimeout}.
+     *
+     * @param address        the address to bind to
+     * @param backlog        the maximum number of queued incoming connections (0 for system default)
+     * @param handler        the {@link Handler} to dispatch requests to
+     * @param errorHandler   the {@link ErrorHandler} for unhandled exceptions
+     * @param maxRequestSize the maximum allowed request body size
+     * @param requestTimeout the maximum time a request handler may run before being interrupted
+     * @throws IOException if the server cannot be created
+     */
+    public HttpTransport(final InetSocketAddress address,
+                         final int backlog,
+                         final Handler handler,
+                         final ErrorHandler errorHandler,
+                         final MaxRequestSize maxRequestSize,
+                         final RequestTimeout requestTimeout) throws IOException {
+        this(HttpServer.create(address, backlog), address, handler, errorHandler, maxRequestSize, requestTimeout);
     }
 
     /**
@@ -226,7 +252,7 @@ public class HttpTransport {
             }
         });
 
-        return new HttpTransport(server, address, handler, errorHandler, maxRequestSize);
+        return new HttpTransport(server, address, handler, errorHandler, maxRequestSize, RequestTimeout.NONE);
     }
 
     static String[] filterProtocols(final String[] protocols, final String minProtocol) {
@@ -257,14 +283,24 @@ public class HttpTransport {
                           final InetSocketAddress address,
                           final Handler handler,
                           final ErrorHandler errorHandler,
-                          final MaxRequestSize maxRequestSize) {
+                          final MaxRequestSize maxRequestSize,
+                          final RequestTimeout requestTimeout) {
         this.address = Objects.requireNonNull(address, "address must not be null");
         this.maxRequestSize = Objects.requireNonNull(maxRequestSize, "maxRequestSize must not be null");
         Objects.requireNonNull(handler, "handler must not be null");
         Objects.requireNonNull(errorHandler, "errorHandler must not be null");
+        Objects.requireNonNull(requestTimeout, "requestTimeout must not be null");
 
-        this.httpServer = server;
-        this.httpServer.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
+        final var baseExecutor = Executors.newVirtualThreadPerTaskExecutor();
+        if (requestTimeout.duration().isZero()) {
+            this.timeoutExecutor = null;
+            this.httpServer = server;
+            this.httpServer.setExecutor(baseExecutor);
+        } else {
+            this.timeoutExecutor = new TimeoutExecutor(baseExecutor, requestTimeout.duration());
+            this.httpServer = server;
+            this.httpServer.setExecutor(this.timeoutExecutor);
+        }
         this.httpServer.createContext("/", httpExchange -> {
             final var request = new HttpRequest(httpExchange, this.maxRequestSize);
             final var response = new HttpResponse(httpExchange);
@@ -309,6 +345,10 @@ public class HttpTransport {
      */
     public void stop(final int delay) {
         httpServer.stop(delay);
+
+        if (timeoutExecutor != null) {
+            timeoutExecutor.close();
+        }
 
         LOGGER.info("HttpTransport stopped");
     }

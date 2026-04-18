@@ -25,6 +25,7 @@
  */
 module build.serve.cors {
     requires transitive build.serve.foundation;
+    requires build.base.logging;
 
     exports build.serve.cors;
 }

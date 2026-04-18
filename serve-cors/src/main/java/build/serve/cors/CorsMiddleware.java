@@ -19,6 +19,7 @@
  */
 package build.serve.cors;
 
+import build.base.logging.Logger;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.Handler;
 import build.serve.foundation.middleware.Middleware;
@@ -40,6 +41,8 @@ import java.util.Set;
  * @since Mar-2026
  */
 public final class CorsMiddleware implements Middleware {
+
+    private static final Logger LOGGER = Logger.get(CorsMiddleware.class);
 
     private final Set<String> allowedOrigins;
     private final boolean anyOrigin;
@@ -71,11 +74,17 @@ public final class CorsMiddleware implements Middleware {
     /**
      * Creates a permissive {@link CorsMiddleware} that allows all origins, methods, and headers.
      * <p>
-     * Intended for development use only.
+     * <strong>Development use only.</strong> Do not use in production — this permits every origin,
+     * method, and header with no restrictions.
      *
      * @return a permissive {@link CorsMiddleware}
+     * @deprecated Use {@link #builder()} to configure specific allowed origins, methods, and headers.
      */
+    @Deprecated
     public static CorsMiddleware allowAll() {
+        LOGGER.warn("CorsMiddleware.allowAll() is for development only — permits all origins, methods,"
+            + " and headers. Do not use in production.");
+
         return builder()
             .allowAnyOrigin()
             .allowAnyMethod()

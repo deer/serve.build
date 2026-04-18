@@ -22,6 +22,7 @@ package build.serve.graphql;
 import build.serve.foundation.Handler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -47,16 +48,46 @@ public final class GraphQlHandler {
      * @return a new {@link Handler}
      */
     public static Handler graphql(final GraphQlSchema schema) {
+        return graphql(schema, GraphQlOptions.defaults());
+    }
+
+    /**
+     * Creates a {@link Handler} that processes GraphQL requests with the given security options.
+     * <p>
+     * Options control introspection, max query depth, and max query complexity.
+     *
+     * @param schema  the {@link GraphQlSchema} to execute against
+     * @param options the {@link GraphQlOptions} to apply
+     * @return a new {@link Handler}
+     */
+    public static Handler graphql(final GraphQlSchema schema, final GraphQlOptions options) {
         Objects.requireNonNull(schema, "schema must not be null");
+        Objects.requireNonNull(options, "options must not be null");
+
+        final var effectiveSchema = schema.withOptions(options);
 
         return exchange -> {
             final var request = MAPPER.readValue(
                 exchange.request().bodyAsStream(), GraphQlRequest.class);
-            final var result = schema.execute(request);
 
-            final var json = MAPPER.writeValueAsBytes(result);
+            if (options.disableIntrospection() && isIntrospectionQuery(request.query())) {
+                final var error = MAPPER.writeValueAsBytes(new GraphQlResult(
+                    null, List.of(new GraphQlError("Introspection is not allowed", null))));
+                exchange.response()
+                    .status(400)
+                    .header("Content-Type", "application/json")
+                    .send(error);
+
+                return;
+            }
+
+            final var result = effectiveSchema.execute(request);
             exchange.response().header("Content-Type", "application/json");
-            exchange.response().send(json);
+            exchange.response().send(MAPPER.writeValueAsBytes(result));
         };
+    }
+
+    private static boolean isIntrospectionQuery(final String query) {
+        return query != null && (query.contains("__schema") || query.contains("__type"));
     }
 }

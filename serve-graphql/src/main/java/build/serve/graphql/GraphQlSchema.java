@@ -22,11 +22,16 @@ package build.serve.graphql;
 import graphql.ExecutionInput;
 import graphql.ExecutionResult;
 import graphql.GraphQL;
+import graphql.analysis.MaxQueryComplexityInstrumentation;
+import graphql.analysis.MaxQueryDepthInstrumentation;
+import graphql.execution.instrumentation.ChainedInstrumentation;
+import graphql.execution.instrumentation.Instrumentation;
 import graphql.schema.idl.RuntimeWiring;
 import graphql.schema.idl.SchemaGenerator;
 import graphql.schema.idl.SchemaParser;
 import graphql.schema.idl.TypeDefinitionRegistry;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -79,6 +84,32 @@ public final class GraphQlSchema {
             .toList();
 
         return new GraphQlResult(result.getData(), errors);
+    }
+
+    /**
+     * Returns a new {@link GraphQlSchema} with instrumentations derived from the given options applied.
+     * Used by {@link GraphQlHandler} to wire depth and complexity limits without rebuilding the full schema.
+     */
+    GraphQlSchema withOptions(final GraphQlOptions options) {
+        final var instrumentations = new ArrayList<Instrumentation>();
+
+        if (options.maxDepth() > 0) {
+            instrumentations.add(new MaxQueryDepthInstrumentation(options.maxDepth()));
+        }
+
+        if (options.maxComplexity() > 0) {
+            instrumentations.add(new MaxQueryComplexityInstrumentation(options.maxComplexity()));
+        }
+
+        if (instrumentations.isEmpty()) {
+            return this;
+        }
+
+        return new GraphQlSchema(
+            GraphQL.newGraphQL(graphQL.getGraphQLSchema())
+                .instrumentation(new ChainedInstrumentation(instrumentations))
+                .build()
+        );
     }
 
     /**

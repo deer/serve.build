@@ -4,6 +4,7 @@ import build.serve.foundation.Handler;
 import build.serve.foundation.error.DefaultErrorHandler;
 import build.serve.foundation.error.HttpException;
 import build.serve.foundation.option.MaxRequestSize;
+import build.serve.foundation.option.RequestTimeout;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -241,6 +242,28 @@ class HttpTransportTests {
         var result = HttpTransport.filterCiphers(ciphers, "TLSv1.2");
 
         assertThat(result).containsExactly("TLS_AES_128_GCM_SHA256", "TLS_RSA_WITH_AES_128_CBC_SHA");
+    }
+
+    @Test
+    void shouldInterruptHandlerThatExceedsRequestTimeout() throws Exception {
+        var address = new InetSocketAddress("127.0.0.1", 0);
+        transport = new HttpTransport(address, 0,
+            exchange -> {
+                try {
+                    Thread.sleep(10_000);
+                } catch (final InterruptedException e) {
+                    // interrupted by timeout; interrupt flag is cleared so we can write the response
+                }
+                exchange.response().status(503).send("timeout");
+            },
+            new DefaultErrorHandler(),
+            MaxRequestSize.DEFAULT,
+            RequestTimeout.ofSeconds(1));
+        transport.start();
+
+        var conn = openConnection("/");
+        conn.setReadTimeout(5_000);
+        assertThat(conn.getResponseCode()).isEqualTo(503);
     }
 
     @Test

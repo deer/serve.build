@@ -139,6 +139,79 @@ class GraphQlHandlerTests {
     }
 
     @Test
+    void introspectionBlockedWhenDisabled() throws Exception {
+        var schema = GraphQlSchema.builder("""
+                type Query { hello: String }
+                """)
+            .fetcher("Query", "hello", env -> "hi")
+            .build();
+
+        var restrictedServer = TestServer.of(
+            build.serve.foundation.routing.RouterBuilder.create()
+                .post("/graphql", GraphQlHandler.graphql(schema,
+                    GraphQlOptions.builder().disableIntrospection().build()))
+                .build());
+
+        try {
+            var response = restrictedServer.post("/graphql")
+                .header("Content-Type", "application/json")
+                .body("{\"query\":\"{ __schema { types { name } } }\"}")
+                .send();
+
+            assertThat(response.status()).isEqualTo(400);
+            var json = MAPPER.readTree(response.body());
+            assertThat(json.path("errors").get(0).path("message").asText())
+                .isEqualTo("Introspection is not allowed");
+        } finally {
+            restrictedServer.close();
+        }
+    }
+
+    @Test
+    void introspectionAllowedByDefault() throws Exception {
+        var response = server.post("/graphql")
+            .header("Content-Type", "application/json")
+            .body("{\"query\":\"{ __schema { queryType { name } } }\"}")
+            .send()
+            .assertStatus(200);
+
+        var json = MAPPER.readTree(response.body());
+        assertThat(json.path("data").path("__schema").path("queryType").path("name").asText())
+            .isEqualTo("Query");
+    }
+
+    @Test
+    void queryExceedingMaxDepthIsRejected() throws Exception {
+        var schema = GraphQlSchema.builder("""
+                type Query { user: User }
+                type User { friend: Friend }
+                type Friend { name: String }
+                """)
+            .fetcher("Query", "user", env -> java.util.Map.of())
+            .fetcher("User", "friend", env -> java.util.Map.of("name", "Bob"))
+            .build();
+
+        var depthServer = TestServer.of(
+            build.serve.foundation.routing.RouterBuilder.create()
+                .post("/graphql", GraphQlHandler.graphql(schema,
+                    GraphQlOptions.builder().maxDepth(1).build()))
+                .build());
+
+        try {
+            var response = depthServer.post("/graphql")
+                .header("Content-Type", "application/json")
+                .body("{\"query\":\"{ user { friend { name } } }\"}")
+                .send()
+                .assertStatus(200);
+
+            var json = MAPPER.readTree(response.body());
+            assertThat(json.path("errors")).isNotEmpty();
+        } finally {
+            depthServer.close();
+        }
+    }
+
+    @Test
     void unknownFieldTest() throws Exception {
         final var response = server.post("/graphql")
             .header("Content-Type", "application/json")
