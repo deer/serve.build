@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.htmx.
+ * Typed HX-* request and response header wrappers and htmxOnly() guard for HTMX-driven applications.
  *
  * @author reed.vonredwitz
  * @since Mar-2026

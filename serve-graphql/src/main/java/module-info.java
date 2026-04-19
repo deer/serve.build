@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.graphql.
+ * GraphQL over HTTP via graphql-java: SDL-first schema, query execution, and GraphiQL IDE handler.
  *
  * @author reed.vonredwitz
  * @since Mar-2026

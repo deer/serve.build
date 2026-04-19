@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.websocket.
+ * RFC 6455 WebSocket support with frame codec and upgrade handling.
  *
  * @author reed.vonredwitz
  * @since Mar-2026

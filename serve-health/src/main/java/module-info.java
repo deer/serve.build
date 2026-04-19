@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.health.
+ * Liveness and readiness health check endpoints with JSON status output and HealthCheck SPI.
  *
  * @author reed.vonredwitz
  * @since Mar-2026

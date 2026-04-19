@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.logging.
+ * Access log middleware with nanosecond timing, slow-request threshold, and path exclusions.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
