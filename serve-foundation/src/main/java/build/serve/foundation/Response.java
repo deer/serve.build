@@ -79,6 +79,27 @@ public interface Response {
     void json(Object body);
 
     /**
+     * Sends a redirect response to the given location with status 302.
+     *
+     * @param location the redirect target URL or path
+     */
+    default void redirect(final String location) {
+        redirect(location, 302);
+    }
+
+    /**
+     * Sends a redirect response to the given location with the specified status code.
+     *
+     * @param location   the redirect target URL or path
+     * @param statusCode the HTTP redirect status code (e.g., 301, 302, 303)
+     */
+    default void redirect(final String location, final int statusCode) {
+        header("Location", location)
+            .status(statusCode)
+            .send("");
+    }
+
+    /**
      * Adds a {@code Set-Cookie} header to this {@link Response} for the given {@link Cookie}.
      *
      * @param cookie the {@link Cookie} to set
