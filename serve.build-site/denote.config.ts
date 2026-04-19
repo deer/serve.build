@@ -93,6 +93,11 @@ export const config: DenoteConfig = {
   },
   footer: {
     copyright: "© 2026 Reed von Redwitz",
+    links: [
+      { title: "GitHub", href: "https://github.com/deer/serve.build" },
+      { title: "Privacy", href: "/privacy" },
+      { title: "Impressum", href: "/impressum" },
+    ],
   },
   seo: {
     url: "https://serve.build",
@@ -111,5 +116,8 @@ export const config: DenoteConfig = {
   },
   ai: {
     mcp: true,
+  },
+  analytics: {
+    provider: "umami",
   },
 };
