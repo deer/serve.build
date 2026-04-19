@@ -23,6 +23,7 @@ import build.base.flow.Publisher;
 import build.base.flow.SubscriberRegistry;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.Handler;
+import build.serve.sse.SseEvent;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -122,7 +123,7 @@ public final class McpServer {
             final var jsonString = mapper.writeValueAsString(result);
 
             if (acceptsSse(exchange)) {
-                final var sseBody = ("event: message\ndata: " + jsonString + "\n\n")
+                final var sseBody = SseEvent.of("message", jsonString).serialize()
                     .getBytes(StandardCharsets.UTF_8);
                 exchange.response()
                     .status(200)

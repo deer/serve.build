@@ -29,6 +29,11 @@
 
         <dependency>
             <groupId>build.serve</groupId>
+            <artifactId>serve-sse</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>build.serve</groupId>
             <artifactId>serve-transport-json</artifactId>
         </dependency>
 
