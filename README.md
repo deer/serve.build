@@ -64,7 +64,7 @@ That's it. Routes are code, wired at startup. One virtual thread per request, st
 - **MCP** — Model Context Protocol (2025-03-26, Streamable HTTP transport)
 - **LSP** — Language Server Protocol 3.17 with full typed handler support
 - **GraphQL** — GraphQL over HTTP backed by graphql-java, with GraphiQL IDE
-- **Middleware** — CORS, security headers, gzip/deflate compression, access logging, health checks, static files
+- **Middleware** — CORS, security headers, gzip/deflate compression, access logging, rate limiting, health checks, static files
 - **Templates** — engine-agnostic SPI with JTE implementation and HTMX helpers
 - **Test harness** — `TestServer` with fluent assertions, ephemeral port binding, zero boilerplate
 
@@ -98,6 +98,7 @@ That's it. Routes are code, wired at startup. One virtual thread per request, st
 | `serve-security`     | `build.serve.security`        | Security headers          | `SecurityHeadersMiddleware`   |
 | `serve-compression`  | `build.serve.compression`     | Gzip/deflate compression  | `CompressionMiddleware`       |
 | `serve-logging`      | `build.serve.logging`         | Access logging            | `RequestLoggingMiddleware`    |
+| `serve-ratelimit`    | `build.serve.ratelimit`       | Token-bucket rate limiting | `RateLimitMiddleware`        |
 | `serve-health`       | `build.serve.health`          | Health/readiness checks   | `HealthHandler`, `HealthCheck` |
 | `serve-staticfiles`  | `build.serve.staticfiles`     | Static file serving       | `StaticFileHandler`           |
 
