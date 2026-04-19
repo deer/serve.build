@@ -130,6 +130,42 @@ public class Route {
     }
 
     /**
+     * Returns the HTTP method constraint for this route, or {@code null} for any method.
+     *
+     * @return the HTTP method, or {@code null}
+     */
+    public String method() {
+        return method;
+    }
+
+    /**
+     * Returns the path pattern for this route (e.g., {@code "/users/{id}"}).
+     *
+     * @return the path pattern
+     */
+    public String pattern() {
+        return pattern;
+    }
+
+    /**
+     * Returns whether this route matches as a prefix (used for nested router mounting).
+     *
+     * @return {@code true} if this is a prefix route
+     */
+    public boolean isPrefix() {
+        return prefix;
+    }
+
+    /**
+     * Returns the handler for this route.
+     *
+     * @return the {@link Handler}
+     */
+    public Handler handler() {
+        return handler;
+    }
+
+    /**
      * Attempts to match this {@link Route} against the specified method and path.
      *
      * @param requestMethod the HTTP method

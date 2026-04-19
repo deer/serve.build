@@ -276,6 +276,109 @@ class RouterBuilderTests {
         assertThat(order).containsExactly("top-handler");
     }
 
+    // --- group() ---
+
+    @Test
+    void shouldApplyGroupMiddlewareToRoutesInsideGroup() throws Exception {
+        var order = new ArrayList<String>();
+
+        var router = RouterBuilder.create()
+            .get("/health", exchange -> order.add("health"))
+            .group(g -> g
+                .middleware(next -> exchange -> {
+                    order.add("auth");
+                    next.handle(exchange);
+                })
+                .get("/api/data", exchange -> order.add("data")))
+            .build();
+
+        router.handle(exchangeFor("GET", "/api/data"));
+        assertThat(order).containsExactly("auth", "data");
+    }
+
+    @Test
+    void shouldNotApplyGroupMiddlewareToRoutesOutsideGroup() throws Exception {
+        var order = new ArrayList<String>();
+
+        var router = RouterBuilder.create()
+            .get("/health", exchange -> order.add("health"))
+            .group(g -> g
+                .middleware(next -> exchange -> {
+                    order.add("auth");
+                    next.handle(exchange);
+                })
+                .get("/api/data", exchange -> order.add("data")))
+            .build();
+
+        router.handle(exchangeFor("GET", "/health"));
+        assertThat(order).containsExactly("health");
+    }
+
+    @Test
+    void shouldPreserveFullPathsInsideGroup() throws Exception {
+        var called = new AtomicReference<String>();
+
+        var router = RouterBuilder.create()
+            .group(g -> g
+                .get("/mcp", exchange -> called.set("mcp"))
+                .get("/sse", exchange -> called.set("sse")))
+            .build();
+
+        router.handle(exchangeFor("GET", "/mcp"));
+        assertThat(called.get()).isEqualTo("mcp");
+
+        router.handle(exchangeFor("GET", "/sse"));
+        assertThat(called.get()).isEqualTo("sse");
+    }
+
+    @Test
+    void shouldApplyMultipleGroupMiddlewareInOrder() throws Exception {
+        var order = new ArrayList<String>();
+
+        var router = RouterBuilder.create()
+            .group(g -> g
+                .middleware(next -> exchange -> {
+                    order.add("first");
+                    next.handle(exchange);
+                })
+                .middleware(next -> exchange -> {
+                    order.add("second");
+                    next.handle(exchange);
+                })
+                .get("/route", exchange -> order.add("handler")))
+            .build();
+
+        router.handle(exchangeFor("GET", "/route"));
+        assertThat(order).containsExactly("first", "second", "handler");
+    }
+
+    @Test
+    void shouldSupportMultipleGroupsWithDifferentMiddleware() throws Exception {
+        var order = new ArrayList<String>();
+
+        var router = RouterBuilder.create()
+            .group(g -> g
+                .middleware(next -> exchange -> {
+                    order.add("auth");
+                    next.handle(exchange);
+                })
+                .get("/protected", exchange -> order.add("protected")))
+            .group(g -> g
+                .middleware(next -> exchange -> {
+                    order.add("log");
+                    next.handle(exchange);
+                })
+                .get("/logged", exchange -> order.add("logged")))
+            .build();
+
+        router.handle(exchangeFor("GET", "/protected"));
+        assertThat(order).containsExactly("auth", "protected");
+
+        order.clear();
+        router.handle(exchangeFor("GET", "/logged"));
+        assertThat(order).containsExactly("log", "logged");
+    }
+
     // --- Helpers ---
 
     private static Exchange exchangeFor(String method, String path) {

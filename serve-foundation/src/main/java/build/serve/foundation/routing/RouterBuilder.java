@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * A builder for constructing {@link Router} instances with routes and middleware.
@@ -162,6 +163,39 @@ public class RouterBuilder {
     public RouterBuilder route(final String prefix,
                                final RouterBuilder subBuilder) {
         return route(prefix, subBuilder.build());
+    }
+
+    /**
+     * Defines a group of routes that share a common set of middleware, without path prefix stripping.
+     * <p>
+     * Routes registered inside the group keep their full paths. Middleware registered on the group
+     * applies only to those routes and does not affect routes outside the group.
+     * <pre>{@code
+     * RouterBuilder.create()
+     *     .get("/health", healthHandler)          // no auth
+     *     .group(g -> g
+     *         .middleware(authMiddleware)
+     *         .route("/mcp", mcpHandler)          // auth required
+     *         .get("/api/data", dataHandler))     // auth required
+     *     .build()
+     * }</pre>
+     *
+     * @param configure a {@link Consumer} that configures the group's routes and middleware
+     * @return this {@link RouterBuilder} for fluent chaining
+     */
+    public RouterBuilder group(final Consumer<RouterBuilder> configure) {
+        final var group = new RouterBuilder();
+        configure.accept(group);
+
+        for (final var route : group.routes) {
+            Handler handler = route.handler();
+            for (int i = group.middlewares.size() - 1; i >= 0; i--) {
+                handler = group.middlewares.get(i).apply(handler);
+            }
+            routes.add(new Route(route.method(), route.pattern(), handler, route.isPrefix()));
+        }
+
+        return this;
     }
 
     /**
