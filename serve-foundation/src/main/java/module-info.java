@@ -42,4 +42,5 @@ module build.serve.foundation {
     exports build.serve.foundation.context;
     exports build.serve.foundation.concurrent;
     exports build.serve.foundation.util;
+    exports build.serve.foundation.validation;
 }
