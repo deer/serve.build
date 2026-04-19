@@ -3,8 +3,7 @@
 ## Codebase Overview
 
 A lightweight, JPMS-native HTTP server framework for Java 25+ built directly on `jdk.httpserver`, virtual threads,
-scoped values, and structured concurrency. No Spring, no annotation scanning — routes are code, DI is explicit. Part of
-the `*.build` family.
+scoped values, and structured concurrency. Routes are code, DI is explicit. Part of the `*.build` family.
 
 **Stack**: Java 25 (preview enabled), Maven multi-module, Jackson, graphql-java, JTE, JUnit 5 + AssertJ  
 **Structure**: 19 JPMS modules — core layer (foundation, transports, application, testing), protocol layer (WebSocket,

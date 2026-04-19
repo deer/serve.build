@@ -49,17 +49,17 @@ Add the modules you need. These three cover most applications:
 <dependency>
   <groupId>build.serve</groupId>
   <artifactId>serve-foundation</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
 </dependency>
 <dependency>
   <groupId>build.serve</groupId>
   <artifactId>serve-transport-http</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
 </dependency>
 <dependency>
   <groupId>build.serve</groupId>
   <artifactId>serve-application</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
 </dependency>
 ```
 
@@ -91,3 +91,8 @@ Add a `requires` for each serve.build module you depend on. The module name
 mirrors the artifact ID with hyphens replaced by dots and prefixed with
 `build.serve` — for example, `serve-transport-json` →
 `build.serve.transport.json`.
+
+## Next steps
+
+- [Quickstart](/docs/quickstart) — run your first server
+- [Routing](/docs/routing) — define routes and handle requests

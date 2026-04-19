@@ -69,17 +69,17 @@ Add the modules you need. The three below cover most applications:
 <dependency>
   <groupId>build.serve</groupId>
   <artifactId>serve-foundation</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
 </dependency>
 <dependency>
   <groupId>build.serve</groupId>
   <artifactId>serve-transport-http</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
 </dependency>
 <dependency>
   <groupId>build.serve</groupId>
   <artifactId>serve-application</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
 </dependency>
 ```
 
@@ -115,3 +115,8 @@ HTMX, and health endpoints:
 ```
 
 Visit `http://localhost:8080` to explore the running application.
+
+## Next steps
+
+- [Routing](/docs/routing) — path parameters, sub-routers, error handling
+- [Middleware](/docs/middleware) — logging, CORS, security headers, compression

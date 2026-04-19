@@ -2,6 +2,10 @@
 
 A server framework for Java developers who'd rather write code than configure it.
 
+[![CI](https://github.com/deer/serve.build/actions/workflows/main-pull-request.yml/badge.svg)](https://github.com/deer/serve.build/actions/workflows/main-pull-request.yml)
+[![Maven Central](https://img.shields.io/maven-central/v/build.serve/serve-foundation)](https://central.sonatype.com/artifact/build.serve/serve-foundation)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 ## What Is This
 
 A JPMS-native server framework for Java 25+. Virtual threads as the only execution model, real Java modules, zero

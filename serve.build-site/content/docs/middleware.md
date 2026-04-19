@@ -136,3 +136,8 @@ support. Mount it at any path prefix:
 // Filesystem directory
 .route("/static", StaticFileHandler.directory(Path.of("public")))
 ```
+
+## See also
+
+- [Routing](/docs/routing) — `RouterBuilder`, `Exchange`, and error handling
+- [Protocols](/docs/protocols) — WebSocket, SSE, MCP, and GraphQL
