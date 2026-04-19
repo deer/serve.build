@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.staticfiles.
+ * Static file serving from filesystem and classpath with ETag/304 support and path traversal protection.
  *
  * @author reed.vonredwitz
  * @since Mar-2026

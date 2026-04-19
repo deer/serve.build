@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.transport.http.
+ * jdk.httpserver adapter and virtual thread dispatcher for serve-foundation.
  *
  * @author reed.vonredwitz
  * @since Mar-2026

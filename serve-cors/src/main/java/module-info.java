@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.cors.
+ * CORS middleware with origin, method, and header allowlists and OPTIONS preflight handling.
  *
  * @author reed.vonredwitz
  * @since Mar-2026

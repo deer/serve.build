@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.ratelimit.
+ * Token-bucket rate limiting middleware with per-key tracking and configurable request windows.
  *
  * @author reed.vonredwitz
  * @since Apr-2026

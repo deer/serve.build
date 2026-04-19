@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.template.
+ * Engine-agnostic template SPI: TemplateEngine, Template, and TemplateOutput interfaces.
  *
  * @author reed.vonredwitz
  * @since Mar-2026

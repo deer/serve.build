@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.application.
+ * Application lifecycle management: startup, shutdown, DI integration, and JVM shutdown hook.
  *
  * @author reed.vonredwitz
  * @since Mar-2026

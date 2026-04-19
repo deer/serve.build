@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.transport.json.
+ * Jackson-based JSON body reader and writer injected via Exchange attributes.
  *
  * @author reed.vonredwitz
  * @since Mar-2026

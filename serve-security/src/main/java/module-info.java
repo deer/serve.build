@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.security.
+ * Security headers middleware: CSP, HSTS, X-Frame-Options, and related response headers.
  *
  * @author reed.vonredwitz
  * @since Mar-2026

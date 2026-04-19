@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.example.
+ * Example application demonstrating routing, middleware, WebSocket, GraphQL, and template rendering.
  *
  * @author reed.vonredwitz
  * @since Mar-2026

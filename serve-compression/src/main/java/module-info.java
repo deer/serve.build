@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.compression.
+ * Transparent gzip and deflate response compression middleware with WebSocket passthrough.
  *
  * @author reed.vonredwitz
  * @since Mar-2026

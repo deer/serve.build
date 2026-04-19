@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.foundation.
+ * Core abstractions — Exchange, Request, Response, Handler, Middleware, routing, and error handling.
  *
  * @author reed.vonredwitz
  * @since Mar-2026

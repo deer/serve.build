@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.jte.
+ * JTE template engine adapter with dev hot-reload and precompiled production modes.
  *
  * @author reed.vonredwitz
  * @since Mar-2026

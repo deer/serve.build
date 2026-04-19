@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.sse.
+ * Server-Sent Events support: SseEmitter, SseEvent, and upgrade handler factory.
  *
  * @author reed.vonredwitz
  * @since Mar-2026

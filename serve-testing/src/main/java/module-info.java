@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Module descriptor for build.serve.testing.
+ * Integration test support: TestServer on ephemeral ports, TestRequest, TestResponse, and AssertJ assertions.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
