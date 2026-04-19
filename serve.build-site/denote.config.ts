@@ -21,7 +21,6 @@ export const config: DenoteConfig = {
   },
   landing: {
     hero: {
-      badge: "Java 25",
       title: "HTTP without the",
       titleHighlight: "framework tax",
       description:
