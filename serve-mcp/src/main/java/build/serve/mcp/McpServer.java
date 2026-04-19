@@ -21,15 +21,20 @@ package build.serve.mcp;
 
 import build.base.flow.Publisher;
 import build.base.flow.SubscriberRegistry;
+import build.serve.foundation.Exchange;
 import build.serve.foundation.Handler;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * An MCP (Model Context Protocol) server that exposes tools via JSON-RPC 2.0 over HTTP.
@@ -43,6 +48,7 @@ public final class McpServer {
     private final Map<String, McpTool> tools;
     private final ObjectMapper mapper;
     private final SubscriberRegistry<ToolCallEvent> toolCallEvents = new SubscriberRegistry<>();
+    private final Set<String> sessions = ConcurrentHashMap.newKeySet();
 
     private McpServer(final Builder builder) {
         this.info = new McpServerInfo(builder.name, builder.version);
@@ -58,7 +64,9 @@ public final class McpServer {
     /**
      * Returns a serve.build {@link Handler} that handles the MCP endpoint.
      * <p>
-     * Handles POST for JSON-RPC requests and returns 405 for GET.
+     * Implements the MCP streamable HTTP transport (spec 2025-03-26). POST requests receive either
+     * a JSON response or an SSE stream depending on the client's {@code Accept} header. Session IDs
+     * are issued during {@code initialize} and validated on subsequent requests.
      *
      * @return the handler
      */
@@ -66,13 +74,14 @@ public final class McpServer {
         return exchange -> {
             final var method = exchange.request().method();
 
-            if ("GET".equalsIgnoreCase(method)) {
+            if (!"POST".equalsIgnoreCase(method)) {
                 exchange.response().status(405).send("Method Not Allowed");
                 return;
             }
 
-            if (!"POST".equalsIgnoreCase(method)) {
-                exchange.response().status(405).send("Method Not Allowed");
+            final var sessionId = exchange.request().header("Mcp-Session-Id");
+            if (sessionId.isPresent() && !sessions.contains(sessionId.get())) {
+                exchange.response().status(404).send("Session not found");
                 return;
             }
 
@@ -90,6 +99,7 @@ public final class McpServer {
 
             final var result = switch (rpcMethod) {
                 case "initialize" -> handleInitialize();
+                case "ping" -> handlePing();
                 case "tools/list" -> handleToolsList();
                 case "tools/call" -> handleToolsCall(request.path("params"));
                 default -> errorResponse(-32601, "Method not found");
@@ -103,11 +113,34 @@ public final class McpServer {
                 result.put("id", id.asText());
             }
 
-            final var json = mapper.writeValueAsBytes(result);
-            exchange.response()
-                .header("Content-Type", "application/json")
-                .send(json);
+            if ("initialize".equals(rpcMethod)) {
+                final var newSessionId = UUID.randomUUID().toString();
+                sessions.add(newSessionId);
+                exchange.response().header("Mcp-Session-Id", newSessionId);
+            }
+
+            final var jsonString = mapper.writeValueAsString(result);
+
+            if (acceptsSse(exchange)) {
+                final var sseBody = ("event: message\ndata: " + jsonString + "\n\n")
+                    .getBytes(StandardCharsets.UTF_8);
+                exchange.response()
+                    .status(200)
+                    .header("Content-Type", "text/event-stream")
+                    .header("Cache-Control", "no-cache")
+                    .send(sseBody);
+            } else {
+                exchange.response()
+                    .header("Content-Type", "application/json")
+                    .send(jsonString.getBytes(StandardCharsets.UTF_8));
+            }
         };
+    }
+
+    private boolean acceptsSse(final Exchange exchange) {
+        return exchange.request().header("Accept")
+            .map(a -> a.contains("text/event-stream"))
+            .orElse(false);
     }
 
     /**
@@ -121,6 +154,12 @@ public final class McpServer {
      */
     public Publisher<ToolCallEvent> toolCallEvents() {
         return toolCallEvents;
+    }
+
+    private ObjectNode handlePing() {
+        final var result = mapper.createObjectNode();
+        result.set("result", mapper.createObjectNode());
+        return result;
     }
 
     private ObjectNode handleInitialize() {
