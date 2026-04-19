@@ -82,6 +82,7 @@
     </properties>
 
     <modules>
+        <module>serve-auth</module>
         <module>serve-foundation</module>
         <module>serve-transport-http</module>
         <module>serve-application</module>
@@ -108,6 +109,11 @@
     <dependencyManagement>
         <dependencies>
             <!-- Intra-project -->
+            <dependency>
+                <groupId>build.serve</groupId>
+                <artifactId>serve-auth</artifactId>
+                <version>${revision}</version>
+            </dependency>
             <dependency>
                 <groupId>build.serve</groupId>
                 <artifactId>serve-application</artifactId>
