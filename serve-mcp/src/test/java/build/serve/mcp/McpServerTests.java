@@ -178,9 +178,110 @@ class McpServerTests {
     }
 
     @Test
-    void getReturns405Test() {
+    void shouldReturn405ForGet() {
         server.get("/mcp")
             .send()
             .assertStatus(405);
+    }
+
+    // --- ping ---
+
+    @Test
+    void shouldRespondToPing() throws Exception {
+        final var response = server.post("/mcp")
+            .header("Content-Type", "application/json")
+            .body("{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"ping\"}")
+            .send()
+            .assertStatus(200);
+
+        final var json = MAPPER.readTree(response.body());
+        assertThat(json.get("id").asInt()).isEqualTo(10);
+        assertThat(json.path("result").isObject()).isTrue();
+    }
+
+    // --- session management ---
+
+    @Test
+    void shouldReturnSessionIdOnInitialize() {
+        final var response = server.post("/mcp")
+            .header("Content-Type", "application/json")
+            .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
+            .send()
+            .assertStatus(200);
+
+        assertThat(response.header("Mcp-Session-Id")).isNotBlank();
+    }
+
+    @Test
+    void shouldAcceptValidSessionId() throws Exception {
+        final var init = server.post("/mcp")
+            .header("Content-Type", "application/json")
+            .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
+            .send();
+        final var sessionId = init.header("Mcp-Session-Id");
+
+        server.post("/mcp")
+            .header("Content-Type", "application/json")
+            .header("Mcp-Session-Id", sessionId)
+            .body("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}")
+            .send()
+            .assertStatus(200);
+    }
+
+    @Test
+    void shouldReturn404ForUnknownSessionId() {
+        server.post("/mcp")
+            .header("Content-Type", "application/json")
+            .header("Mcp-Session-Id", "unknown-session-id")
+            .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{}}")
+            .send()
+            .assertStatus(404);
+    }
+
+    // --- SSE transport ---
+
+    @Test
+    void shouldRespondWithSseWhenAcceptHeaderIncludesEventStream() throws Exception {
+        final var response = server.post("/mcp")
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
+            .send()
+            .assertStatus(200);
+
+        assertThat(response.contentType()).contains("text/event-stream");
+        assertThat(response.body()).startsWith("event: message\ndata: ");
+        assertThat(response.body()).endsWith("\n\n");
+    }
+
+    @Test
+    void shouldIncludeValidJsonInSseDataField() throws Exception {
+        final var response = server.post("/mcp")
+            .header("Content-Type", "application/json")
+            .header("Accept", "text/event-stream")
+            .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
+            .send()
+            .assertStatus(200);
+
+        final var body = response.body();
+        final var dataPrefix = "data: ";
+        final var dataLine = body.lines()
+            .filter(l -> l.startsWith(dataPrefix))
+            .findFirst()
+            .orElseThrow();
+        final var json = MAPPER.readTree(dataLine.substring(dataPrefix.length()));
+        assertThat(json.path("result").path("protocolVersion").asText()).isEqualTo("2025-03-26");
+    }
+
+    @Test
+    void shouldReturnJsonWhenAcceptHeaderIsAbsent() throws Exception {
+        final var response = server.post("/mcp")
+            .header("Content-Type", "application/json")
+            .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
+            .send()
+            .assertStatus(200);
+
+        assertThat(response.contentType()).contains("application/json");
+        MAPPER.readTree(response.body()); // parses without error
     }
 }

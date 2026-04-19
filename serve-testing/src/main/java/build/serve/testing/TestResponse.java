@@ -102,7 +102,11 @@ public final class TestResponse {
      * @return the header value, or {@code null}
      */
     public String header(final String name) {
-        return headers.get(name);
+        return headers.entrySet().stream()
+            .filter(e -> e.getKey().equalsIgnoreCase(name))
+            .map(Map.Entry::getValue)
+            .findFirst()
+            .orElse(null);
     }
 
     /**

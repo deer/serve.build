@@ -70,7 +70,6 @@
                 <configuration>
                     <!-- Dependencies required by module-info.java but not detected via bytecode analysis -->
                     <usedDependencies>
-                        <usedDependency>build.serve:serve-sse</usedDependency>
                         <usedDependency>build.serve:serve-transport-json</usedDependency>
                     </usedDependencies>
                 </configuration>
