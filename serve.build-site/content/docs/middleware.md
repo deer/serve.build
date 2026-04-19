@@ -8,6 +8,7 @@ ai-keywords: [
   security-headers,
   compression,
   logging,
+  rate-limiting,
   health,
   static,
   json,
@@ -15,6 +16,7 @@ ai-keywords: [
   CorsMiddleware,
   SecurityHeadersMiddleware,
   CompressionMiddleware,
+  RateLimitMiddleware,
   JsonMiddleware,
   HealthHandler,
 ]
@@ -109,6 +111,30 @@ Without it, `exchange.bodyAs(T)` and `exchange.response().json(obj)` throw
 
 ```java
 .middleware(new JsonMiddleware())
+```
+
+### Rate limiting
+
+`RateLimitMiddleware` enforces a token-bucket limit per request key. The default
+key is the first IP in `X-Forwarded-For`. Every response gets
+`X-RateLimit-Limit` and `X-RateLimit-Remaining` headers; rate-limited responses
+get a 429 with `Retry-After`.
+
+```java
+.middleware(RateLimitMiddleware.builder()
+    .limit(100)
+    .per(Duration.ofMinutes(1))
+    .build())
+```
+
+Rate limit by user ID or API key instead of IP:
+
+```java
+.middleware(RateLimitMiddleware.builder()
+    .limit(1000)
+    .per(Duration.ofHours(1))
+    .keyExtractor(req -> req.header("X-Api-Key").orElse("anonymous"))
+    .build())
 ```
 
 ### Health endpoints

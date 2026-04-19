@@ -19,3 +19,5 @@ Thumbs.db
 
 # Flatten plugin
 .flattened-pom.xml
+
+.build/

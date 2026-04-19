@@ -95,6 +95,7 @@
         <module>serve-cors</module>
         <module>serve-health</module>
         <module>serve-staticfiles</module>
+        <module>serve-ratelimit</module>
         <module>serve-security</module>
         <module>serve-logging</module>
         <module>serve-compression</module>
@@ -160,6 +161,11 @@
             <dependency>
                 <groupId>build.serve</groupId>
                 <artifactId>serve-mcp</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>build.serve</groupId>
+                <artifactId>serve-ratelimit</artifactId>
                 <version>${revision}</version>
             </dependency>
             <dependency>
