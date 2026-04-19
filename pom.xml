@@ -84,6 +84,7 @@
     <modules>
         <module>serve-auth</module>
         <module>serve-form</module>
+        <module>serve-session</module>
         <module>serve-foundation</module>
         <module>serve-transport-http</module>
         <module>serve-application</module>
