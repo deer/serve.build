@@ -112,3 +112,8 @@ Instant startTime = RequestContext.START_TIME.get();
 
 These propagate automatically to virtual-thread subtasks via `ScopedValue`, so
 structured-concurrency fan-outs inherit the full request context.
+
+## See also
+
+- [Middleware](/docs/middleware) — wrap routes with logging, CORS, and JSON
+- [Protocols](/docs/protocols) — WebSocket, SSE, MCP, and GraphQL handlers

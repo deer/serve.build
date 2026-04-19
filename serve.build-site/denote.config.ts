@@ -6,6 +6,7 @@ export const config: DenoteConfig = {
     text: "serve",
     suffix: ".build",
   },
+  favicon: "/favicon.svg",
   colors: {
     primary: "#e07b39",
     background: "#0c0c0b",
@@ -33,7 +34,7 @@ export const config: DenoteConfig = {
         href: "https://github.com/deer/serve.build",
       },
     },
-    install: "build.serve:serve-foundation:0.1.0",
+    install: "build.serve:serve-foundation:0.1.1",
     features: [
       {
         icon: "⚡",
@@ -94,6 +95,18 @@ export const config: DenoteConfig = {
   footer: {
     copyright: "© 2026 Reed von Redwitz",
   },
+  seo: {
+    url: "https://serve.build",
+    description:
+      "HTTP for Java 25 — virtual threads, structured concurrency, zero magic.",
+    locale: "en",
+    jsonLdType: "WebSite",
+    jsonLdExtra: {
+      author: { "@type": "Person", name: "Reed von Redwitz" },
+    },
+  },
+  editUrl:
+    "https://github.com/deer/serve.build/edit/main/serve.build-site/content/docs",
   search: {
     enabled: true,
   },

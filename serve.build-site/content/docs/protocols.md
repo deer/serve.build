@@ -122,3 +122,9 @@ Introspection is always enabled. There are no query depth or complexity limits.
 stream-oriented rather than HTTP-oriented and does not produce a `Handler` —
 wire it via `LspTransport.stdio(server)` or `LspTransport.tcp(server, port)`
 instead of through `RouterBuilder`.
+
+## See also
+
+- [Routing](/docs/routing) — mounting handlers with `RouterBuilder`
+- [Middleware](/docs/middleware) — CORS, logging, and compression for protocol
+  endpoints

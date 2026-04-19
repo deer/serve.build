@@ -73,3 +73,9 @@ middleware-wrapped chains, and routers themselves.
 `Middleware` is `Handler apply(Handler next)` — a function that wraps a handler.
 Compose middleware with `.middleware()` on `RouterBuilder`. The first-registered
 middleware is the outermost wrapper.
+
+## Next steps
+
+- [Quickstart](/docs/quickstart) — a working server in five minutes
+- [Installation](/docs/installation) — Maven setup and module selection
+- [Routing](/docs/routing) — path parameters, sub-routers, and `Exchange`
