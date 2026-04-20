@@ -17,19 +17,19 @@
  * limitations under the License.
  * #L%
  */
+package build.serve.testing;
+
+import java.util.Optional;
+
 /**
- * Integration test support: TestServer on ephemeral ports, TestRequest, TestResponse, and AssertJ assertions.
+ * A parsed Server-Sent Event received during a test.
  *
  * @author reed.vonredwitz
- * @since Mar-2026
+ * @since Apr-2026
  */
-module build.serve.testing {
-    requires transitive build.serve.foundation;
-    requires build.serve.transport.http;
-    requires transitive org.junit.jupiter.api;
-    requires transitive org.assertj.core;
-    requires com.fasterxml.jackson.databind;
-    requires java.net.http;
+public record TestSseEvent(String data, Optional<String> event, Optional<String> id) {
 
-    exports build.serve.testing;
+    public static TestSseEvent data(final String data) {
+        return new TestSseEvent(data, Optional.empty(), Optional.empty());
+    }
 }

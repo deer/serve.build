@@ -19,8 +19,6 @@
  */
 package build.serve.mcp;
 
-import build.serve.foundation.routing.RouterBuilder;
-import build.serve.testing.TestServer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -43,21 +41,17 @@ class McpServerTests {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private TestServer server;
+    private McpTestClient client;
 
     @BeforeEach
     void setUp() {
-        final var handler = McpServer.builder("test-server", "1.0.0")
+        final var mcpServer = McpServer.builder("test-server", "1.0.0")
             .tool(new McpTool() {
                 @Override
-                public String name() {
-                    return "get_weather";
-                }
+                public String name() { return "get_weather"; }
 
                 @Override
-                public String description() {
-                    return "Get weather for a location";
-                }
+                public String description() { return "Get weather for a location"; }
 
                 @Override
                 public ObjectNode inputSchema() {
@@ -72,32 +66,20 @@ class McpServerTests {
                     return McpToolResult.text("Weather in " + location + ": sunny, 72°F");
                 }
             })
-            .build()
-            .handler();
-
-        final var router = RouterBuilder.create()
-            .route("/mcp", handler)
             .build();
 
-        server = TestServer.of(router);
+        client = McpTestClient.start(mcpServer);
     }
 
     @AfterEach
     void tearDown() {
-        server.close();
+        client.close();
     }
 
     @Test
     void initializeTest() throws Exception {
-        final var response = server.post("/mcp")
-            .header("Content-Type", "application/json")
-            .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
-            .send()
-            .assertStatus(200);
-
-        final var json = MAPPER.readTree(response.body());
+        final var json = client.initialize();
         assertThat(json.get("jsonrpc").asText()).isEqualTo("2.0");
-        assertThat(json.get("id").asInt()).isEqualTo(1);
         assertThat(json.path("result").path("protocolVersion").asText()).isEqualTo("2025-03-26");
         assertThat(json.path("result").path("capabilities").path("tools").path("listChanged").asBoolean()).isFalse();
         assertThat(json.path("result").path("serverInfo").path("name").asText()).isEqualTo("test-server");
@@ -106,16 +88,7 @@ class McpServerTests {
 
     @Test
     void toolsListTest() throws Exception {
-        final var response = server.post("/mcp")
-            .header("Content-Type", "application/json")
-            .body("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}")
-            .send()
-            .assertStatus(200);
-
-        final var json = MAPPER.readTree(response.body());
-        assertThat(json.get("id").asInt()).isEqualTo(2);
-
-        final var tools = json.path("result").path("tools");
+        final var tools = client.listTools();
         assertThat(tools.isArray()).isTrue();
         assertThat(tools.size()).isEqualTo(1);
         assertThat(tools.get(0).get("name").asText()).isEqualTo("get_weather");
@@ -125,16 +98,7 @@ class McpServerTests {
 
     @Test
     void toolsCallTest() throws Exception {
-        final var response = server.post("/mcp")
-            .header("Content-Type", "application/json")
-            .body("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"get_weather\",\"arguments\":{\"location\":\"Berlin\"}}}")
-            .send()
-            .assertStatus(200);
-
-        final var json = MAPPER.readTree(response.body());
-        assertThat(json.get("id").asInt()).isEqualTo(3);
-
-        final var result = json.path("result");
+        final var result = client.call("get_weather", Map.of("location", "Berlin"));
         assertThat(result.path("isError").asBoolean()).isFalse();
         assertThat(result.path("content").get(0).get("type").asText()).isEqualTo("text");
         assertThat(result.path("content").get(0).get("text").asText()).isEqualTo("Weather in Berlin: sunny, 72°F");
@@ -142,21 +106,15 @@ class McpServerTests {
 
     @Test
     void toolsCallUnknownTest() throws Exception {
-        final var response = server.post("/mcp")
-            .header("Content-Type", "application/json")
-            .body("{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"nonexistent\",\"arguments\":{}}}")
-            .send()
-            .assertStatus(200);
-
-        final var json = MAPPER.readTree(response.body());
-        assertThat(json.get("id").asInt()).isEqualTo(4);
+        final var json = client.send("tools/call",
+            Map.of("name", "nonexistent", "arguments", Map.of()));
         assertThat(json.path("error").path("code").asInt()).isEqualTo(-32602);
         assertThat(json.path("error").path("message").asText()).contains("Unknown tool");
     }
 
     @Test
     void notificationIgnoredTest() {
-        server.post("/mcp")
+        client.post("/mcp")
             .header("Content-Type", "application/json")
             .body("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}")
             .send()
@@ -165,72 +123,47 @@ class McpServerTests {
 
     @Test
     void unknownMethodTest() throws Exception {
-        final var response = server.post("/mcp")
-            .header("Content-Type", "application/json")
-            .body("{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"unknown/method\",\"params\":{}}")
-            .send()
-            .assertStatus(200);
-
-        final var json = MAPPER.readTree(response.body());
-        assertThat(json.get("id").asInt()).isEqualTo(5);
+        final var json = client.send("unknown/method", Map.of());
         assertThat(json.path("error").path("code").asInt()).isEqualTo(-32601);
         assertThat(json.path("error").path("message").asText()).isEqualTo("Method not found");
     }
 
     @Test
     void shouldReturn405ForGet() {
-        server.get("/mcp")
-            .send()
-            .assertStatus(405);
+        client.get("/mcp").send().assertStatus(405);
     }
 
     // --- ping ---
 
     @Test
     void shouldRespondToPing() throws Exception {
-        final var response = server.post("/mcp")
-            .header("Content-Type", "application/json")
-            .body("{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"ping\"}")
-            .send()
-            .assertStatus(200);
-
-        final var json = MAPPER.readTree(response.body());
-        assertThat(json.get("id").asInt()).isEqualTo(10);
+        final var json = client.send("ping", Map.of());
         assertThat(json.path("result").isObject()).isTrue();
     }
 
     // --- session management ---
 
     @Test
-    void shouldReturnSessionIdOnInitialize() {
-        final var response = server.post("/mcp")
+    void shouldReturnSessionIdOnInitialize() throws Exception {
+        final var response = client.post("/mcp")
             .header("Content-Type", "application/json")
             .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
             .send()
             .assertStatus(200);
-
         assertThat(response.header("Mcp-Session-Id")).isNotBlank();
     }
 
     @Test
     void shouldAcceptValidSessionId() throws Exception {
-        final var init = server.post("/mcp")
-            .header("Content-Type", "application/json")
-            .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
-            .send();
-        final var sessionId = init.header("Mcp-Session-Id");
-
-        server.post("/mcp")
-            .header("Content-Type", "application/json")
-            .header("Mcp-Session-Id", sessionId)
-            .body("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}")
-            .send()
-            .assertStatus(200);
+        client.initialize();
+        // subsequent calls via client automatically include the session ID
+        final var tools = client.listTools();
+        assertThat(tools.isArray()).isTrue();
     }
 
     @Test
     void shouldReturn404ForUnknownSessionId() {
-        server.post("/mcp")
+        client.post("/mcp")
             .header("Content-Type", "application/json")
             .header("Mcp-Session-Id", "unknown-session-id")
             .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{}}")
@@ -242,13 +175,12 @@ class McpServerTests {
 
     @Test
     void shouldRespondWithSseWhenAcceptHeaderIncludesEventStream() throws Exception {
-        final var response = server.post("/mcp")
+        final var response = client.post("/mcp")
             .header("Content-Type", "application/json")
             .header("Accept", "application/json, text/event-stream")
             .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
             .send()
             .assertStatus(200);
-
         assertThat(response.contentType()).contains("text/event-stream");
         assertThat(response.body()).startsWith("event: message\ndata: ");
         assertThat(response.body()).endsWith("\n\n");
@@ -256,31 +188,27 @@ class McpServerTests {
 
     @Test
     void shouldIncludeValidJsonInSseDataField() throws Exception {
-        final var response = server.post("/mcp")
+        final var response = client.post("/mcp")
             .header("Content-Type", "application/json")
             .header("Accept", "text/event-stream")
             .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
             .send()
             .assertStatus(200);
-
-        final var body = response.body();
-        final var dataPrefix = "data: ";
-        final var dataLine = body.lines()
-            .filter(l -> l.startsWith(dataPrefix))
+        final var dataLine = response.body().lines()
+            .filter(l -> l.startsWith("data: "))
             .findFirst()
             .orElseThrow();
-        final var json = MAPPER.readTree(dataLine.substring(dataPrefix.length()));
+        final var json = MAPPER.readTree(dataLine.substring("data: ".length()));
         assertThat(json.path("result").path("protocolVersion").asText()).isEqualTo("2025-03-26");
     }
 
     @Test
     void shouldReturnJsonWhenAcceptHeaderIsAbsent() throws Exception {
-        final var response = server.post("/mcp")
+        final var response = client.post("/mcp")
             .header("Content-Type", "application/json")
             .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
             .send()
             .assertStatus(200);
-
         assertThat(response.contentType()).contains("application/json");
         MAPPER.readTree(response.body()); // parses without error
     }
