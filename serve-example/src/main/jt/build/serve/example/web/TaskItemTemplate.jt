@@ -1,0 +1,20 @@
+package build.serve.example.web;
+
+import build.serve.example.domain.Task;
+
+template HtmlOut TaskItemTemplate(Task task) {
+<li id="task-#{task.id()}" class="task-item#{task.done() ? " done" : ""}">
+    <button class="btn-toggle"
+            hx-put="/tasks/#{task.id()}/toggle"
+            hx-target="#task-#{task.id()}"
+            hx-swap="outerHTML"
+            title="#{task.done() ? "Mark incomplete" : "Mark complete"}">✓</button>
+    <span class="title">#{task.title()}</span>
+    <button class="btn-delete"
+            hx-delete="/tasks/#{task.id()}"
+            hx-target="#task-#{task.id()}"
+            hx-swap="outerHTML"
+            hx-confirm="Delete this task?"
+            title="Delete">✕</button>
+</li>
+@end

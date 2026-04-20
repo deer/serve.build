@@ -265,6 +265,16 @@
             </dependency>
             <dependency>
                 <groupId>build.base</groupId>
+                <artifactId>base-template</artifactId>
+                <version>${base.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>build.base</groupId>
+                <artifactId>base-template-processor</artifactId>
+                <version>${base.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>build.base</groupId>
                 <artifactId>base-transport-json</artifactId>
                 <version>${base.version}</version>
             </dependency>
