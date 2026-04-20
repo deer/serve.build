@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.util.Map;
 
 /**
  * A fluent test server that manages lifecycle automatically.
@@ -171,6 +172,38 @@ public final class TestServer implements AutoCloseable {
      */
     public TestRequest request(final String method, final String path) {
         return new TestRequest(baseUri(), method, path);
+    }
+
+    /**
+     * Connects a WebSocket test client to the given path.
+     *
+     * @param path the WebSocket endpoint path
+     * @return a connected {@link TestWebSocket}
+     */
+    public TestWebSocket connectWebSocket(final String path) {
+        return connectWebSocket(path, Map.of());
+    }
+
+    /**
+     * Connects a WebSocket test client to the given path with custom request headers.
+     *
+     * @param path    the WebSocket endpoint path
+     * @param headers extra headers to include in the upgrade request
+     * @return a connected {@link TestWebSocket}
+     */
+    public TestWebSocket connectWebSocket(final String path, final Map<String, String> headers) {
+        final var wsUri = URI.create("ws://127.0.0.1:" + port() + path);
+        return TestWebSocket.connect(wsUri, headers);
+    }
+
+    /**
+     * Opens a streaming SSE connection to the given path.
+     *
+     * @param path the SSE endpoint path
+     * @return a {@link TestSseStream} that receives events as they arrive
+     */
+    public TestSseStream sse(final String path) {
+        return TestSseStream.connect(baseUri().resolve(path));
     }
 
     @Override
