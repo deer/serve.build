@@ -1,7 +1,9 @@
-@import build.serve.example.domain.Task
-@import java.util.List
+package build.serve.example.web;
 
-@param List<Task> tasks
+import java.util.List;
+import build.serve.example.domain.Task;
+
+template HtmlOut TasksTemplate(List<Task> tasks) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -86,7 +88,7 @@
     </style>
 </head>
 <body>
-    <h1>Tasks <small id="count">(${tasks.size()})</small></h1>
+    <h1>Tasks <small id="count">(#{tasks.size()})</small></h1>
 
     <form class="add-form"
           hx-post="/tasks"
@@ -98,23 +100,20 @@
     </form>
 
     <ul id="task-list">
-        @for(Task task : tasks)
-            @template.taskItem(task = task)
-        @endfor
+@for (var task : tasks) {
+@include new TaskItemTemplate(task)
+@}
     </ul>
 
     <p id="status">Connecting…</p>
 
     <script>
-        // Update the task count badge
         function updateCount() {
             document.getElementById('count').textContent =
                 '(' + document.querySelectorAll('#task-list .task-item').length + ')';
         }
-        // Keep count in sync after every HTMX swap
         document.addEventListener('htmx:afterSwap', updateCount);
 
-        // WebSocket — receives task events from the server and patches the DOM
         const ws = new WebSocket('ws://' + location.host + '/ws/tasks');
         ws.onopen = () => document.getElementById('status').textContent = '● Live';
         ws.onclose = () => document.getElementById('status').textContent = '○ Disconnected';
@@ -124,15 +123,11 @@
                 const el = document.getElementById('task-' + task.id);
                 if (el) { el.remove(); updateCount(); }
             } else if (event === 'updated') {
-                // HTMX swap already handles the requesting tab; other tabs need a patch
                 const el = document.getElementById('task-' + task.id);
-                if (el) {
-                    el.classList.toggle('done', task.done);
-                }
+                if (el) { el.classList.toggle('done', task.done); }
             }
-            // 'created' events from other tabs are not inserted automatically here —
-            // a full page refresh picks them up; this is intentional for demo clarity
         };
     </script>
 </body>
 </html>
+@end

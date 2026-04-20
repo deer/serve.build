@@ -29,8 +29,13 @@
             <artifactId>serve-websocket</artifactId>
         </dependency>
         <dependency>
-            <groupId>build.serve</groupId>
-            <artifactId>serve-jte</artifactId>
+            <groupId>build.base</groupId>
+            <artifactId>base-template</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>build.base</groupId>
+            <artifactId>base-template-processor</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>build.serve</groupId>
@@ -67,11 +72,6 @@
         </dependency>
 
         <dependency>
-            <groupId>build.serve</groupId>
-            <artifactId>serve-template</artifactId>
-        </dependency>
-
-        <dependency>
             <groupId>build.base</groupId>
             <artifactId>base-network</artifactId>
         </dependency>
@@ -86,10 +86,6 @@
             <artifactId>jackson-databind</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>gg.jte</groupId>
-            <artifactId>jte-runtime</artifactId>
-        </dependency>
 
         <!-- Test -->
         <dependency>
@@ -112,21 +108,20 @@
     <build>
         <plugins>
             <plugin>
-                <groupId>gg.jte</groupId>
-                <artifactId>jte-maven-plugin</artifactId>
-                <version>${jte.version}</version>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <sourceDirectory>${project.basedir}/src/main/jte</sourceDirectory>
-                    <contentType>Html</contentType>
+                    <generatedSourcesDirectory>${project.build.directory}/generated-sources/jt</generatedSourcesDirectory>
+                    <!-- Maven compiler plugin does not auto-route JPMS processor modules to processor-module-path.
+                         Required until tooling (spin.build) handles this automatically. -->
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>build.base</groupId>
+                            <artifactId>base-template-processor</artifactId>
+                            <version>${base.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
-                <executions>
-                    <execution>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>generate</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -159,6 +154,9 @@
                     <usedDependencies>
                         <usedDependency>build.serve:serve-htmx</usedDependency>
                     </usedDependencies>
+                    <ignoredUnusedDeclaredDependencies>
+                        <ignoredUnusedDeclaredDependency>build.base:base-template-processor</ignoredUnusedDeclaredDependency>
+                    </ignoredUnusedDeclaredDependencies>
                 </configuration>
             </plugin>
         </plugins>

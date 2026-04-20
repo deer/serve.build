@@ -23,11 +23,11 @@
  * @author reed.vonredwitz
  * @since Mar-2026
  */
+@build.base.template.ProcessTemplates
 module build.serve.example {
     requires build.serve.application;
     requires build.serve.transport.json;
     requires build.serve.websocket;
-    requires build.serve.jte;
     requires build.serve.htmx;
     requires build.serve.cors;
     requires build.serve.security;
@@ -36,14 +36,12 @@ module build.serve.example {
     requires build.serve.health;
     requires build.serve.graphql;
     requires build.base.network;
+    requires build.base.template;
     requires com.fasterxml.jackson.databind;
     requires java.net.http;
-    requires gg.jte.runtime;
-    requires gg.jte;
 
     opens build.serve.example to com.fasterxml.jackson.databind;
     opens build.serve.example.api to com.fasterxml.jackson.databind;
     opens build.serve.example.domain to com.fasterxml.jackson.databind, com.graphqljava;
     opens build.serve.example.graphql to com.fasterxml.jackson.databind;
-    opens gg.jte.generated.precompiled to gg.jte.runtime;
 }

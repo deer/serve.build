@@ -48,10 +48,14 @@ class McpServerTests {
         final var mcpServer = McpServer.builder("test-server", "1.0.0")
             .tool(new McpTool() {
                 @Override
-                public String name() { return "get_weather"; }
+                public String name() {
+                    return "get_weather";
+                }
 
                 @Override
-                public String description() { return "Get weather for a location"; }
+                public String description() {
+                    return "Get weather for a location";
+                }
 
                 @Override
                 public ObjectNode inputSchema() {
