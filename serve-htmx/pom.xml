@@ -21,6 +21,10 @@
             <groupId>build.serve</groupId>
             <artifactId>serve-foundation</artifactId>
         </dependency>
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-template</artifactId>
+        </dependency>
 
         <!-- Test Dependencies -->
         <dependency>

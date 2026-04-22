@@ -69,6 +69,29 @@ class HtmxTests {
     }
 
     @Test
+    void sendHtmlContentSetsStatusContentTypeAndBody() {
+        var response = new StubResponse();
+        HtmxResponse.of(response).send(() -> "<p>hello</p>");
+
+        assertThat(response.statusCode).isEqualTo(200);
+        assertThat(response.headers).containsEntry("Content-Type", "text/html; charset=utf-8");
+        assertThat(response.sentBody).isEqualTo("<p>hello</p>");
+    }
+
+    @Test
+    void sendHtmlContentPreservesHeadersSetBeforeSend() {
+        var response = new StubResponse();
+        HtmxResponse.of(response)
+            .trigger("myEvent")
+            .pushUrl("/next")
+            .send(() -> "<div/>");
+
+        assertThat(response.headers).containsEntry(HtmxHeaders.HX_TRIGGER, "myEvent");
+        assertThat(response.headers).containsEntry(HtmxHeaders.HX_PUSH_URL, "/next");
+        assertThat(response.sentBody).isEqualTo("<div/>");
+    }
+
+    @Test
     void fluentChainingWorks() {
         var response = new StubResponse();
         HtmxResponse.of(response)
@@ -184,6 +207,7 @@ class HtmxTests {
 
         final Map<String, String> headers = new LinkedHashMap<>();
         int statusCode = 200;
+        String sentBody;
 
         @Override
         public Response status(final int statusCode) {
@@ -206,6 +230,7 @@ class HtmxTests {
 
         @Override
         public void send(final String body) {
+            this.sentBody = body;
         }
 
         @Override
