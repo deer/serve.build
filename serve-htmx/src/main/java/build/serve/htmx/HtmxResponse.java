@@ -20,6 +20,7 @@
 package build.serve.htmx;
 
 import build.serve.foundation.Response;
+import build.serve.template.HtmlContent;
 
 import java.util.Objects;
 
@@ -177,5 +178,15 @@ public final class HtmxResponse {
         response.header(HtmxHeaders.HX_TRIGGER_AFTER_SWAP, eventName);
 
         return this;
+    }
+
+    /**
+     * Sends the given HTML content as a {@code 200 text/html} response.
+     * This is the terminal step in the fluent chain.
+     *
+     * @param content the content to send
+     */
+    public void send(final HtmlContent content) {
+        response.status(200).header("Content-Type", "text/html; charset=utf-8").send(content.get());
     }
 }

@@ -1,6 +1,6 @@
 /*-
  * #%L
- * Serve HTMX
+ * Serve Template
  * %%
  * Copyright (C) 2026 Reed von Redwitz
  * %%
@@ -17,15 +17,21 @@
  * limitations under the License.
  * #L%
  */
+package build.serve.template;
+
 /**
- * Typed HX-* request and response header wrappers and htmxOnly() guard for HTMX-driven applications.
+ * A source of rendered HTML content, independent of the underlying template engine.
  *
  * @author reed.vonredwitz
- * @since Mar-2026
+ * @since Apr-2026
  */
-module build.serve.htmx {
-    requires transitive build.serve.foundation;
-    requires transitive build.serve.template;
+@FunctionalInterface
+public interface HtmlContent {
 
-    exports build.serve.htmx;
+    /**
+     * Returns the rendered HTML string.
+     *
+     * @return rendered HTML
+     */
+    String get();
 }
