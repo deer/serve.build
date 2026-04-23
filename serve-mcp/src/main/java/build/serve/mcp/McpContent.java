@@ -25,7 +25,7 @@ package build.serve.mcp;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public sealed interface McpContent permits McpContent.Text, McpContent.Image {
+public sealed interface McpContent permits McpContent.Text, McpContent.Image, McpContent.Resource {
 
     /**
      * Text content.
@@ -42,5 +42,15 @@ public sealed interface McpContent permits McpContent.Text, McpContent.Image {
      * @param mimeType the MIME type of the image
      */
     record Image(String data, String mimeType) implements McpContent {
+    }
+
+    /**
+     * Embedded resource content (MCP spec: type=resource with blob).
+     *
+     * @param uri      a synthetic URI identifying the resource (e.g. "composition.mid")
+     * @param mimeType the MIME type (e.g. "audio/midi", "application/pdf")
+     * @param blob     base64-encoded binary data
+     */
+    record Resource(String uri, String mimeType, String blob) implements McpContent {
     }
 }

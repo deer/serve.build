@@ -244,6 +244,14 @@ public final class McpServer {
                     contentNode.put("data", image.data());
                     contentNode.put("mimeType", image.mimeType());
                 }
+                case McpContent.Resource resource -> {
+                    contentNode.put("type", "resource");
+                    final var resourceNode = mapper.createObjectNode();
+                    resourceNode.put("uri", resource.uri());
+                    resourceNode.put("mimeType", resource.mimeType());
+                    resourceNode.put("blob", resource.blob());
+                    contentNode.set("resource", resourceNode);
+                }
             }
             contentArray.add(contentNode);
         }
