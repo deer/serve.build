@@ -1,6 +1,7 @@
 package build.serve.example.web;
 
 import java.util.List;
+import build.serve.devtools.LiveReload;
 import build.serve.example.domain.Task;
 
 template HtmlOut TasksTemplate(List<Task> tasks) {
@@ -128,6 +129,7 @@ template HtmlOut TasksTemplate(List<Task> tasks) {
             }
         };
     </script>
+@out.raw(LiveReload.scriptTag());
 </body>
 </html>
 @end
