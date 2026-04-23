@@ -35,6 +35,11 @@ module build.serve.example {
     requires build.serve.logging;
     requires build.serve.health;
     requires build.serve.graphql;
+    requires build.serve.session;
+    requires build.serve.auth;
+    requires build.serve.ratelimit;
+    requires build.serve.devtools;
+    requires build.serve.form;
     requires build.base.network;
     requires build.base.template;
     requires com.fasterxml.jackson.databind;

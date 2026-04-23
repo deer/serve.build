@@ -22,12 +22,11 @@ package build.serve.example.web;
 import build.base.template.HtmlOut;
 import build.serve.example.domain.Task;
 import build.serve.example.domain.TaskService;
+import build.serve.form.FormData;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.routing.Router;
 import build.serve.foundation.routing.RouterBuilder;
-
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
+import build.serve.foundation.validation.Validate;
 
 /**
  * HTMX handler for the browser-facing task UI, using base-template for type-safe HTML generation.
@@ -55,14 +54,15 @@ public final class TaskWebHandler {
      */
     public Router router() {
         return RouterBuilder.create()
-            .get("/", exchange -> renderPage(exchange))
+            .get("/", this::renderPage)
             .post("/tasks", exchange -> {
-                final var title = parseField(exchange.request().bodyAsString(), "title");
+                final var form = FormData.from(exchange.request());
+                final var title = Validate.notBlank("title", form.get("title").orElse(null));
                 final var task = service.create(title);
                 renderItem(exchange, task);
             })
             .put("/tasks/{id}/toggle", exchange -> {
-                final var id = Long.parseLong(exchange.pathParam("id").orElseThrow());
+                final var id = Long.parseLong(Validate.present("id", exchange.pathParam("id")));
                 final var updated = service.toggle(id);
                 if (updated.isPresent()) {
                     renderItem(exchange, updated.get());
@@ -71,7 +71,7 @@ public final class TaskWebHandler {
                 }
             })
             .delete("/tasks/{id}", exchange -> {
-                final var id = Long.parseLong(exchange.pathParam("id").orElseThrow());
+                final var id = Long.parseLong(Validate.present("id", exchange.pathParam("id")));
                 service.delete(id);
                 exchange.response().status(200).send("");
             })
@@ -88,18 +88,5 @@ public final class TaskWebHandler {
         final var out = new HtmlOut();
         new TaskItemTemplate(task).render(out);
         exchange.response().header(CONTENT_TYPE, TEXT_HTML).send(out.toString());
-    }
-
-    private static String parseField(final String body, final String field) {
-        for (final var pair : body.split("&")) {
-            final var parts = pair.split("=", 2);
-            if (parts.length == 2) {
-                final var key = URLDecoder.decode(parts[0], StandardCharsets.UTF_8);
-                if (key.equals(field)) {
-                    return URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
-                }
-            }
-        }
-        return "";
     }
 }

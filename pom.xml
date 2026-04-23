@@ -124,6 +124,11 @@
             </dependency>
             <dependency>
                 <groupId>build.serve</groupId>
+                <artifactId>serve-session</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>build.serve</groupId>
                 <artifactId>serve-application</artifactId>
                 <version>${revision}</version>
             </dependency>

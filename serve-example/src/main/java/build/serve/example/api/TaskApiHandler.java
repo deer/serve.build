@@ -22,6 +22,7 @@ package build.serve.example.api;
 import build.serve.example.domain.TaskService;
 import build.serve.foundation.routing.Router;
 import build.serve.foundation.routing.RouterBuilder;
+import build.serve.foundation.validation.Validate;
 
 /**
  * JSON REST handler for tasks.
@@ -58,12 +59,13 @@ public final class TaskApiHandler {
             })
             .post("/tasks", exchange -> {
                 final var req = exchange.bodyAs(CreateRequest.class);
-                final var task = service.create(req.title());
+                final var title = Validate.notBlank("title", req.title());
+                final var task = service.create(title);
                 exchange.response().status(201);
                 exchange.sendBody(task);
             })
             .put("/tasks/{id}", exchange -> {
-                final var id = Long.parseLong(exchange.pathParam("id").orElseThrow());
+                final var id = Long.parseLong(Validate.present("id", exchange.pathParam("id")));
                 final var updated = service.toggle(id);
                 if (updated.isPresent()) {
                     exchange.sendBody(updated.get());
@@ -72,7 +74,7 @@ public final class TaskApiHandler {
                 }
             })
             .delete("/tasks/{id}", exchange -> {
-                final var id = Long.parseLong(exchange.pathParam("id").orElseThrow());
+                final var id = Long.parseLong(Validate.present("id", exchange.pathParam("id")));
                 if (service.delete(id)) {
                     exchange.response().status(204).send(new byte[0]);
                 } else {

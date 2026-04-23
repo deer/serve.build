@@ -65,10 +65,29 @@
             <groupId>build.serve</groupId>
             <artifactId>serve-graphql</artifactId>
         </dependency>
-
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-session</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-auth</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-ratelimit</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-devtools</artifactId>
+        </dependency>
         <dependency>
             <groupId>build.serve</groupId>
             <artifactId>serve-foundation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>build.serve</groupId>
+            <artifactId>serve-form</artifactId>
         </dependency>
 
         <dependency>
