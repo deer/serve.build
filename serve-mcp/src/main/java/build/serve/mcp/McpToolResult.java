@@ -19,6 +19,7 @@
  */
 package build.serve.mcp;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -39,6 +40,20 @@ public record McpToolResult(List<McpContent> content, boolean isError) {
      */
     public static McpToolResult text(final String text) {
         return new McpToolResult(List.of(new McpContent.Text(text)), false);
+    }
+
+    /**
+     * Creates a successful result with text and embedded resource content items.
+     *
+     * @param text      the text description
+     * @param resources resource content items to append
+     * @return the result
+     */
+    public static McpToolResult withResources(final String text, final List<McpContent.Resource> resources) {
+        final var content = new ArrayList<McpContent>();
+        content.add(new McpContent.Text(text));
+        content.addAll(resources);
+        return new McpToolResult(List.copyOf(content), false);
     }
 
     /**

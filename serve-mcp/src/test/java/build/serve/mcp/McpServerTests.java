@@ -109,6 +109,45 @@ class McpServerTests {
     }
 
     @Test
+    void shouldSerializeResourceContent() throws Exception {
+        try (final var resourceClient = McpTestClient.start(McpServer.builder("res-server", "1.0.0")
+            .tool(new McpTool() {
+                @Override
+                public String name() { return "get_file"; }
+
+                @Override
+                public String description() { return "Returns a binary file"; }
+
+                @Override
+                public ObjectNode inputSchema() {
+                    return McpTools.schema(MAPPER, Map.of(), List.of());
+                }
+
+                @Override
+                public McpToolResult call(final JsonNode arguments) {
+                    return McpToolResult.withResources("Here is the file.",
+                        List.of(new McpContent.Resource("output.mid", "audio/midi", "TVRoZA==")));
+                }
+            })
+            .build())) {
+
+            resourceClient.initialize();
+            final var result = resourceClient.call("get_file", Map.of());
+            assertThat(result.path("isError").asBoolean()).isFalse();
+
+            final var text = result.path("content").get(0);
+            assertThat(text.get("type").asText()).isEqualTo("text");
+            assertThat(text.get("text").asText()).isEqualTo("Here is the file.");
+
+            final var resource = result.path("content").get(1);
+            assertThat(resource.get("type").asText()).isEqualTo("resource");
+            assertThat(resource.path("resource").get("uri").asText()).isEqualTo("output.mid");
+            assertThat(resource.path("resource").get("mimeType").asText()).isEqualTo("audio/midi");
+            assertThat(resource.path("resource").get("blob").asText()).isEqualTo("TVRoZA==");
+        }
+    }
+
+    @Test
     void toolsCallUnknownTest() throws Exception {
         final var json = client.send("tools/call",
             Map.of("name", "nonexistent", "arguments", Map.of()));
