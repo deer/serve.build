@@ -34,6 +34,7 @@ import java.util.Optional;
  * successful result or the thrown error.
  *
  * @param timestamp  the instant the invocation completed
+ * @param sessionId  the MCP session ID that originated this call; {@code "local"} for sessionless calls
  * @param toolName   the name of the invoked tool
  * @param arguments  the raw JSON arguments passed to the tool
  * @param result     the tool result on success; empty on failure
@@ -43,6 +44,7 @@ import java.util.Optional;
  * @since Apr-2026
  */
 public record ToolCallEvent(Instant timestamp,
+                            String sessionId,
                             String toolName,
                             JsonNode arguments,
                             Optional<McpToolResult> result,
@@ -52,21 +54,25 @@ public record ToolCallEvent(Instant timestamp,
     /**
      * Creates a successful tool call event.
      *
+     * @param sessionId  the MCP session ID; {@code "local"} for sessionless calls
      * @param toolName   the tool name
      * @param arguments  the arguments passed to the tool
      * @param result     the successful result
      * @param durationMs elapsed milliseconds
      * @return the event
      */
-    public static ToolCallEvent success(final String toolName,
+    public static ToolCallEvent success(final String sessionId,
+                                        final String toolName,
                                         final JsonNode arguments,
                                         final McpToolResult result,
                                         final long durationMs) {
+        Objects.requireNonNull(sessionId, "sessionId must not be null");
         Objects.requireNonNull(toolName, "toolName must not be null");
         Objects.requireNonNull(arguments, "arguments must not be null");
         Objects.requireNonNull(result, "result must not be null");
         return new ToolCallEvent(
             Instant.now(),
+            sessionId,
             toolName,
             arguments,
             Optional.of(result),
@@ -78,21 +84,25 @@ public record ToolCallEvent(Instant timestamp,
     /**
      * Creates a failed tool call event.
      *
+     * @param sessionId  the MCP session ID; {@code "local"} for sessionless calls
      * @param toolName   the tool name
      * @param arguments  the arguments passed to the tool
      * @param error      the exception thrown by the tool
      * @param durationMs elapsed milliseconds
      * @return the event
      */
-    public static ToolCallEvent failure(final String toolName,
+    public static ToolCallEvent failure(final String sessionId,
+                                        final String toolName,
                                         final JsonNode arguments,
                                         final Throwable error,
                                         final long durationMs) {
+        Objects.requireNonNull(sessionId, "sessionId must not be null");
         Objects.requireNonNull(toolName, "toolName must not be null");
         Objects.requireNonNull(arguments, "arguments must not be null");
         Objects.requireNonNull(error, "error must not be null");
         return new ToolCallEvent(
             Instant.now(),
+            sessionId,
             toolName,
             arguments,
             Optional.empty(),
