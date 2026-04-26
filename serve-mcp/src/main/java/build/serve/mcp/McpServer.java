@@ -45,6 +45,12 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class McpServer {
 
+    /**
+     * ScopedValue bound to the current MCP session ID for the duration of each tool call.
+     * Absent for tool calls made without a session header (e.g. local single-user use).
+     */
+    public static final ScopedValue<String> SESSION_ID = ScopedValue.newInstance();
+
     private final McpServerInfo info;
     private final Map<String, McpTool> tools;
     private final ObjectMapper mapper;
@@ -102,7 +108,7 @@ public final class McpServer {
                 case "initialize" -> handleInitialize();
                 case "ping" -> handlePing();
                 case "tools/list" -> handleToolsList();
-                case "tools/call" -> handleToolsCall(request.path("params"));
+                case "tools/call" -> handleToolsCall(request.path("params"), sessionId.orElse("local"));
                 default -> errorResponse(-32601, "Method not found");
             };
 
@@ -202,7 +208,7 @@ public final class McpServer {
         return result;
     }
 
-    private ObjectNode handleToolsCall(final JsonNode params) {
+    private ObjectNode handleToolsCall(final JsonNode params, final String sessionId) {
         final var toolName = params.path("name").asText("");
         final var arguments = params.path("arguments");
 
@@ -214,15 +220,13 @@ public final class McpServer {
 
         final var start = System.currentTimeMillis();
         try {
-            final var toolResult = tool.call(arguments);
+            final var toolResult = ScopedValue.where(SESSION_ID, sessionId).call(() -> tool.call(arguments));
             final var duration = System.currentTimeMillis() - start;
-            // Publish after the tool returns so the result is available.
-            // Subscribers are observers: publish does not alter the return value.
-            toolCallEvents.publish(ToolCallEvent.success(toolName, arguments, toolResult, duration));
+            toolCallEvents.publish(ToolCallEvent.success(sessionId, toolName, arguments, toolResult, duration));
             return buildToolResult(toolResult);
         } catch (final Exception e) {
             final var duration = System.currentTimeMillis() - start;
-            toolCallEvents.publish(ToolCallEvent.failure(toolName, arguments, e, duration));
+            toolCallEvents.publish(ToolCallEvent.failure(sessionId, toolName, arguments, e, duration));
             return buildToolResult(McpToolResult.error(e.getMessage()));
         }
     }

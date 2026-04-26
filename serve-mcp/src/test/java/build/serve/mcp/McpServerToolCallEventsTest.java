@@ -123,6 +123,43 @@ class McpServerToolCallEventsTest {
     }
 
     @Test
+    void shouldCarrySessionIdOnEvent() throws Exception {
+        final var mcpServer = McpServer.builder("test", "1.0")
+            .tool(new EchoTool())
+            .build();
+        final var received = new CopyOnWriteArrayList<ToolCallEvent>();
+        mcpServer.toolCallEvents().subscribe(event -> received.add(event));
+
+        try (var client = McpTestClient.start(mcpServer)) {
+            client.initialize();
+            client.call("echo", java.util.Map.of("text", "hi"));
+        }
+
+        assertThat(received).hasSize(1);
+        assertThat(received.get(0).sessionId()).isNotNull().isNotBlank().isNotEqualTo("local");
+    }
+
+    @Test
+    void shouldUseLocalSessionIdWhenNoSessionHeader() throws Exception {
+        final var mcpServer = McpServer.builder("test", "1.0")
+            .tool(new EchoTool())
+            .build();
+        final var received = new CopyOnWriteArrayList<ToolCallEvent>();
+        mcpServer.toolCallEvents().subscribe(event -> received.add(event));
+        server = TestServer.of(RouterBuilder.create().route("/mcp", mcpServer.handler()).build());
+
+        server.post("/mcp")
+            .header("Content-Type", "application/json")
+            .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\","
+                + "\"params\":{\"name\":\"echo\",\"arguments\":{\"text\":\"no-session\"}}}")
+            .send()
+            .assertStatus(200);
+
+        assertThat(received).hasSize(1);
+        assertThat(received.get(0).sessionId()).isEqualTo("local");
+    }
+
+    @Test
     void shouldFanOutToMultipleSubscribers() throws Exception {
         final var mcpServer = McpServer.builder("test", "1.0")
             .tool(new EchoTool())
