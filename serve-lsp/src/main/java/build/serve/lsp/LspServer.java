@@ -246,12 +246,8 @@ public interface LspServer {
 
             @Override
             public LspResponse handle(final LspRequest request, final LspContext ctx) {
-                try {
-                    final var handler = requestHandlers.get(request.method());
-                    return new LspResponse.Ok(handler != null ? handler.apply(request, ctx) : null);
-                } catch (final Exception e) {
-                    return new LspResponse.Ok(null);
-                }
+                final var handler = requestHandlers.get(request.method());
+                return new LspResponse.Ok(handler != null ? handler.apply(request, ctx) : null);
             }
 
             @Override

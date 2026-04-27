@@ -19,17 +19,14 @@
  */
 package build.serve.lsp.types;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 /**
- * Sealed marker interface for all LSP domain types.
+ * Client capabilities sent in the initialize request.
  *
  * @author reed.vonredwitz
  * @since Apr-2026
  */
-public sealed interface LspType
-    permits ClientCapabilities, CodeAction, Command, CompletionItem, Diagnostic, DocumentHighlight,
-    DocumentSymbol, FoldingRange, Hover, InlayHint, Location,
-    MarkupContent, ParameterInformation, Position, Range, SelectionRange,
-    ServerCapabilities, ShowMessageParams, SignatureHelp, SignatureInformation,
-    SymbolInformation, TextDocumentContentChangeEvent, TextDocumentIdentifier,
-    TextDocumentItem, TextEdit, VersionedTextDocumentIdentifier, WorkspaceEdit {
+@JsonIgnoreProperties(ignoreUnknown = true)
+public record ClientCapabilities() implements LspType {
 }

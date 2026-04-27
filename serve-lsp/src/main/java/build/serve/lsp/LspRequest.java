@@ -193,7 +193,8 @@ public sealed interface LspRequest {
             case COMPLETION -> new Completion(mapper.treeToValue(params, TextDocumentPositionParams.class));
             case DECLARATION -> new Declaration(mapper.treeToValue(params, TextDocumentPositionParams.class));
             case DEFINITION -> new Definition(mapper.treeToValue(params, TextDocumentPositionParams.class));
-            case DOCUMENT_HIGHLIGHT -> new DocumentHighlight(mapper.treeToValue(params, TextDocumentPositionParams.class));
+            case DOCUMENT_HIGHLIGHT ->
+                new DocumentHighlight(mapper.treeToValue(params, TextDocumentPositionParams.class));
             case DOCUMENT_SYMBOL -> new DocumentSymbol(mapper.treeToValue(params, DocumentSymbolParams.class));
             case EXECUTE_COMMAND -> new ExecuteCommand(mapper.treeToValue(params, ExecuteCommandParams.class));
             case FOLDING_RANGE -> new FoldingRange(mapper.treeToValue(params, FoldingRangeParams.class));

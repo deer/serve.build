@@ -29,8 +29,7 @@ public enum LspServerPushMethod {
 
     LOG_MESSAGE("window/logMessage"),
     PUBLISH_DIAGNOSTICS("textDocument/publishDiagnostics"),
-    SHOW_MESSAGE("window/showMessage"),
-    SHOW_MESSAGE_REQUEST("window/showMessageRequest");
+    SHOW_MESSAGE("window/showMessage");
 
     public final String methodName;
 

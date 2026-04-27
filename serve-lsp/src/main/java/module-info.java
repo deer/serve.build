@@ -25,4 +25,7 @@ module build.serve.lsp {
     exports build.serve.lsp;
     exports build.serve.lsp.params;
     exports build.serve.lsp.types;
+
+    opens build.serve.lsp.params to com.fasterxml.jackson.databind;
+    opens build.serve.lsp.types to com.fasterxml.jackson.databind;
 }

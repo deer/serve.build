@@ -1,12 +1,10 @@
 package build.serve.lsp;
 
-import build.serve.lsp.params.DidOpenParams;
-import build.serve.lsp.params.InitializeParams;
-import build.serve.lsp.params.TextDocumentPositionParams;
 import build.serve.lsp.types.CompletionItem;
 import build.serve.lsp.types.CompletionItemKind;
 import build.serve.lsp.types.Hover;
 import build.serve.lsp.types.ServerCapabilities;
+import build.serve.lsp.types.ServerCapability;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -32,10 +30,7 @@ class LspTransportTests {
     @Test
     void initializeTest() throws Exception {
         final var server = LspServer.builder()
-            .onInitialize(params -> ServerCapabilities.builder()
-                .hoverProvider(true)
-                .completionProvider(true)
-                .build())
+            .onInitialize(params -> ServerCapabilities.of(ServerCapability.HOVER, ServerCapability.COMPLETION))
             .build();
 
         try (final var client = new LspTestClient(server)) {
@@ -147,7 +142,7 @@ class LspTransportTests {
     @Test
     void shouldAcceptTcpConnectionAndHandleRequest() throws Exception {
         final var server = LspServer.builder()
-            .onInitialize(params -> ServerCapabilities.builder().hoverProvider(true).build())
+            .onInitialize(params -> ServerCapabilities.of(ServerCapability.HOVER))
             .build();
 
         final int port;
@@ -180,7 +175,7 @@ class LspTransportTests {
     @Test
     void shouldHandleMultipleConcurrentTcpConnections() throws Exception {
         final var server = LspServer.builder()
-            .onInitialize(params -> ServerCapabilities.builder().completionProvider(true).build())
+            .onInitialize(params -> ServerCapabilities.of(ServerCapability.COMPLETION))
             .build();
 
         final int port;

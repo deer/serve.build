@@ -25,14 +25,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
-import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * LSP transport with Content-Length framing over stdio or custom streams.
@@ -94,6 +94,7 @@ public final class LspTransport {
     public static void run(final LspServer server, final InputStream in, final OutputStream out) throws Exception {
         final var mapper = new ObjectMapper();
         final var shutdownRequested = new AtomicBoolean(false);
+        final var outboundId = new AtomicInteger(0);
         final var lock = new Object();
 
         final LspContext ctx = new LspContext() {
@@ -126,29 +127,23 @@ public final class LspTransport {
                 final var node = mapper.createObjectNode();
                 node.put("type", params.type());
                 node.put("message", params.message());
-                sendNotification(mapper, out, lock, LspServerPushMethod.SHOW_MESSAGE_REQUEST, node);
+                sendOutboundRequest(mapper, out, lock, outboundId.incrementAndGet(),
+                    "window/showMessageRequest", node);
             }
         };
 
-        final var reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
-
         while (true) {
-            final var contentLength = readContentLength(reader);
+            final var contentLength = readContentLength(in);
             if (contentLength < 0) {
                 break;
             }
 
-            final var body = new char[contentLength];
-            var read = 0;
-            while (read < contentLength) {
-                final var n = reader.read(body, read, contentLength - read);
-                if (n < 0) {
-                    return;
-                }
-                read += n;
+            final var body = in.readNBytes(contentLength);
+            if (body.length < contentLength) {
+                return;
             }
 
-            final var message = mapper.readTree(new String(body));
+            final var message = mapper.readTree(body);
             final var methodStr = message.path("method").asText("");
             final var id = message.get("id");
             final var params = message.get("params");
@@ -165,6 +160,10 @@ public final class LspTransport {
             }
 
             if (id != null && !id.isNull()) {
+                if (methodStr.isEmpty()) {
+                    // Client response to a server-initiated request — ignore
+                    continue;
+                }
                 final var methodOpt = LspRequestMethod.from(methodStr);
                 if (methodOpt.isEmpty()) {
                     sendErrorResponse(mapper, out, lock, id, -32601, "Method not found");
@@ -178,7 +177,7 @@ public final class LspTransport {
                             sendErrorResponse(mapper, out, lock, id, -32601, "Method not found");
                     }
                 } catch (final Exception e) {
-                    sendResponse(mapper, out, lock, id, mapper.nullNode());
+                    sendErrorResponse(mapper, out, lock, id, -32603, "Internal error");
                 }
             } else {
                 final var methodOpt = LspNotificationMethod.from(methodStr);
@@ -193,15 +192,22 @@ public final class LspTransport {
         }
     }
 
-    private static int readContentLength(final BufferedReader reader) throws IOException {
+    private static int readContentLength(final InputStream in) throws IOException {
         var contentLength = -1;
-        String line;
-        while ((line = reader.readLine()) != null) {
-            if (line.isEmpty()) {
-                break;
-            }
-            if (line.startsWith("Content-Length: ")) {
-                contentLength = Integer.parseInt(line.substring("Content-Length: ".length()).trim());
+        final var lineBuffer = new ByteArrayOutputStream();
+        int b;
+        while ((b = in.read()) >= 0) {
+            if (b == '\n') {
+                final var line = lineBuffer.toString(StandardCharsets.US_ASCII).strip();
+                lineBuffer.reset();
+                if (line.isEmpty()) {
+                    break;
+                }
+                if (line.startsWith("Content-Length: ")) {
+                    contentLength = Integer.parseInt(line.substring("Content-Length: ".length()).trim());
+                }
+            } else if (b != '\r') {
+                lineBuffer.write(b);
             }
         }
         return contentLength;
@@ -244,6 +250,17 @@ public final class LspTransport {
         notification.put("method", method.methodName);
         notification.set("params", params);
         writeMessage(mapper, out, lock, notification);
+    }
+
+    private static void sendOutboundRequest(final ObjectMapper mapper, final OutputStream out,
+                                            final Object lock, final int id, final String method,
+                                            final ObjectNode params) {
+        final var request = mapper.createObjectNode();
+        request.put("jsonrpc", "2.0");
+        request.put("id", id);
+        request.put("method", method);
+        request.set("params", params);
+        writeMessage(mapper, out, lock, request);
     }
 
     private static void writeMessage(final ObjectMapper mapper, final OutputStream out,

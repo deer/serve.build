@@ -19,6 +19,8 @@
  */
 package build.serve.lsp.params;
 
+import build.serve.lsp.types.ClientCapabilities;
+
 /**
  * Parameters for the initialize request.
  *
@@ -26,5 +28,5 @@ package build.serve.lsp.params;
  * @since Mar-2026
  */
 public record InitializeParams(String rootUri,
-                               Object capabilities) implements LspParams {
+                               ClientCapabilities capabilities) implements LspParams {
 }

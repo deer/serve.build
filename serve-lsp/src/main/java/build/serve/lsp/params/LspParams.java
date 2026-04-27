@@ -27,9 +27,9 @@ package build.serve.lsp.params;
  */
 public sealed interface LspParams
     permits CodeActionParams, DidChangeParams, DidCloseParams, DidOpenParams,
-            DidSaveParams, DocumentSymbolParams, ExecuteCommandParams,
-            FoldingRangeParams, FormattingParams, InitializeParams,
-            InlayHintParams, RangeFormattingParams, ReferenceParams,
-            RenameParams, SelectionRangeParams, TextDocumentPositionParams,
-            WorkspaceSymbolParams {
+    DidSaveParams, DocumentSymbolParams, ExecuteCommandParams,
+    FoldingRangeParams, FormattingParams, InitializeParams,
+    InlayHintParams, RangeFormattingParams, ReferenceParams,
+    RenameParams, SelectionRangeParams, TextDocumentPositionParams,
+    WorkspaceSymbolParams {
 }

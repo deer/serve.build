@@ -27,7 +27,9 @@ package build.serve.lsp;
  */
 public sealed interface LspResponse {
 
-    record Ok(Object value) implements LspResponse {}
+    record Ok(Object value) implements LspResponse {
+    }
 
-    record MethodNotFound() implements LspResponse {}
+    record MethodNotFound() implements LspResponse {
+    }
 }
