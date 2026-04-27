@@ -25,5 +25,6 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record TextEdit(Range range, String newText) {
+public record TextEdit(Range range,
+                       String newText) implements LspType {
 }

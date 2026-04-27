@@ -19,6 +19,23 @@
  */
 package build.serve.lsp;
 
+import build.serve.lsp.params.CodeActionParams;
+import build.serve.lsp.params.DidChangeParams;
+import build.serve.lsp.params.DidCloseParams;
+import build.serve.lsp.params.DidOpenParams;
+import build.serve.lsp.params.DidSaveParams;
+import build.serve.lsp.params.DocumentSymbolParams;
+import build.serve.lsp.params.ExecuteCommandParams;
+import build.serve.lsp.params.FoldingRangeParams;
+import build.serve.lsp.params.FormattingParams;
+import build.serve.lsp.params.InitializeParams;
+import build.serve.lsp.params.InlayHintParams;
+import build.serve.lsp.params.RangeFormattingParams;
+import build.serve.lsp.params.ReferenceParams;
+import build.serve.lsp.params.RenameParams;
+import build.serve.lsp.params.SelectionRangeParams;
+import build.serve.lsp.params.TextDocumentPositionParams;
+import build.serve.lsp.params.WorkspaceSymbolParams;
 import build.serve.lsp.types.CodeAction;
 import build.serve.lsp.types.CompletionItem;
 import build.serve.lsp.types.DocumentHighlight;
@@ -34,243 +51,216 @@ import build.serve.lsp.types.SymbolInformation;
 import build.serve.lsp.types.TextEdit;
 import build.serve.lsp.types.WorkspaceEdit;
 
+import java.util.EnumMap;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
 /**
- * An LSP (Language Server Protocol) server with typed handler registration.
+ * An LSP server. Implement directly or use {@link #builder()} to register handlers via lambdas.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public final class LspServer {
+public interface LspServer {
 
-    final Function<InitializeParams, ServerCapabilities> onInitialize;
-    final BiConsumer<DidOpenParams, LspContext> onDidOpen;
-    final BiConsumer<DidChangeParams, LspContext> onDidChange;
-    final BiConsumer<DidCloseParams, LspContext> onDidClose;
-    final BiConsumer<DidSaveParams, LspContext> onDidSave;
-    final BiFunction<TextDocumentPositionParams, LspContext, Hover> onHover;
-    final BiFunction<TextDocumentPositionParams, LspContext, List<CompletionItem>> onCompletion;
-    final BiFunction<TextDocumentPositionParams, LspContext, Location> onDefinition;
-    final BiFunction<TextDocumentPositionParams, LspContext, Location> onDeclaration;
-    final BiFunction<TextDocumentPositionParams, LspContext, Location> onTypeDefinition;
-    final BiFunction<TextDocumentPositionParams, LspContext, Location> onImplementation;
-    final BiFunction<ReferenceParams, LspContext, List<Location>> onReferences;
-    final BiFunction<TextDocumentPositionParams, LspContext, List<DocumentHighlight>> onDocumentHighlight;
-    final BiFunction<DocumentSymbolParams, LspContext, List<DocumentSymbol>> onDocumentSymbol;
-    final BiFunction<WorkspaceSymbolParams, LspContext, List<SymbolInformation>> onWorkspaceSymbol;
-    final BiFunction<CodeActionParams, LspContext, List<CodeAction>> onCodeAction;
-    final BiFunction<TextDocumentPositionParams, LspContext, SignatureHelp> onSignatureHelp;
-    final BiFunction<RenameParams, LspContext, WorkspaceEdit> onRename;
-    final BiFunction<FormattingParams, LspContext, List<TextEdit>> onFormatting;
-    final BiFunction<RangeFormattingParams, LspContext, List<TextEdit>> onRangeFormatting;
-    final BiFunction<FoldingRangeParams, LspContext, List<FoldingRange>> onFoldingRange;
-    final BiFunction<SelectionRangeParams, LspContext, List<SelectionRange>> onSelectionRange;
-    final BiFunction<InlayHintParams, LspContext, List<InlayHint>> onInlayHint;
-    final BiFunction<ExecuteCommandParams, LspContext, Object> onExecuteCommand;
+    LspResponse handle(LspRequest request, LspContext ctx);
 
-    private LspServer(final Builder builder) {
-        this.onInitialize = builder.onInitialize;
-        this.onDidOpen = builder.onDidOpen;
-        this.onDidChange = builder.onDidChange;
-        this.onDidClose = builder.onDidClose;
-        this.onDidSave = builder.onDidSave;
-        this.onHover = builder.onHover;
-        this.onCompletion = builder.onCompletion;
-        this.onDefinition = builder.onDefinition;
-        this.onDeclaration = builder.onDeclaration;
-        this.onTypeDefinition = builder.onTypeDefinition;
-        this.onImplementation = builder.onImplementation;
-        this.onReferences = builder.onReferences;
-        this.onDocumentHighlight = builder.onDocumentHighlight;
-        this.onDocumentSymbol = builder.onDocumentSymbol;
-        this.onWorkspaceSymbol = builder.onWorkspaceSymbol;
-        this.onCodeAction = builder.onCodeAction;
-        this.onSignatureHelp = builder.onSignatureHelp;
-        this.onRename = builder.onRename;
-        this.onFormatting = builder.onFormatting;
-        this.onRangeFormatting = builder.onRangeFormatting;
-        this.onFoldingRange = builder.onFoldingRange;
-        this.onSelectionRange = builder.onSelectionRange;
-        this.onInlayHint = builder.onInlayHint;
-        this.onExecuteCommand = builder.onExecuteCommand;
-    }
+    void handle(LspNotification notification, LspContext ctx);
 
-    /**
-     * Creates a new {@link Builder}.
-     *
-     * @return the builder
-     */
-    public static Builder builder() {
+    static Builder builder() {
         return new Builder();
     }
 
     /**
-     * A builder for {@link LspServer}.
+     * Builds an {@link LspServer} from registered lambda handlers.
      *
      * @author reed.vonredwitz
      * @since Mar-2026
      */
-    public static final class Builder {
+    final class Builder {
 
-        private Function<InitializeParams, ServerCapabilities> onInitialize;
-        private BiConsumer<DidOpenParams, LspContext> onDidOpen;
-        private BiConsumer<DidChangeParams, LspContext> onDidChange;
-        private BiConsumer<DidCloseParams, LspContext> onDidClose;
-        private BiConsumer<DidSaveParams, LspContext> onDidSave;
-        private BiFunction<TextDocumentPositionParams, LspContext, Hover> onHover;
-        private BiFunction<TextDocumentPositionParams, LspContext, List<CompletionItem>> onCompletion;
-        private BiFunction<TextDocumentPositionParams, LspContext, Location> onDefinition;
-        private BiFunction<TextDocumentPositionParams, LspContext, Location> onDeclaration;
-        private BiFunction<TextDocumentPositionParams, LspContext, Location> onTypeDefinition;
-        private BiFunction<TextDocumentPositionParams, LspContext, Location> onImplementation;
-        private BiFunction<ReferenceParams, LspContext, List<Location>> onReferences;
-        private BiFunction<TextDocumentPositionParams, LspContext, List<DocumentHighlight>> onDocumentHighlight;
-        private BiFunction<DocumentSymbolParams, LspContext, List<DocumentSymbol>> onDocumentSymbol;
-        private BiFunction<WorkspaceSymbolParams, LspContext, List<SymbolInformation>> onWorkspaceSymbol;
-        private BiFunction<CodeActionParams, LspContext, List<CodeAction>> onCodeAction;
-        private BiFunction<TextDocumentPositionParams, LspContext, SignatureHelp> onSignatureHelp;
-        private BiFunction<RenameParams, LspContext, WorkspaceEdit> onRename;
-        private BiFunction<FormattingParams, LspContext, List<TextEdit>> onFormatting;
-        private BiFunction<RangeFormattingParams, LspContext, List<TextEdit>> onRangeFormatting;
-        private BiFunction<FoldingRangeParams, LspContext, List<FoldingRange>> onFoldingRange;
-        private BiFunction<SelectionRangeParams, LspContext, List<SelectionRange>> onSelectionRange;
-        private BiFunction<InlayHintParams, LspContext, List<InlayHint>> onInlayHint;
-        private BiFunction<ExecuteCommandParams, LspContext, Object> onExecuteCommand;
+        private final EnumMap<LspRequestMethod, BiFunction<LspRequest, LspContext, Object>> requestHandlers =
+            new EnumMap<>(LspRequestMethod.class);
+        private final EnumMap<LspNotificationMethod, BiConsumer<LspNotification, LspContext>> notificationHandlers =
+            new EnumMap<>(LspNotificationMethod.class);
 
         private Builder() {
         }
 
-        public Builder onInitialize(final Function<InitializeParams, ServerCapabilities> handler) {
-            this.onInitialize = handler;
+        public Builder onInitialize(final Function<InitializeParams, ServerCapabilities> h) {
+            requestHandlers.put(LspRequestMethod.INITIALIZE,
+                (r, ctx) -> h.apply(((LspRequest.Initialize) r).params()));
             return this;
         }
 
-        public Builder onDidOpen(final BiConsumer<DidOpenParams, LspContext> handler) {
-            this.onDidOpen = handler;
+        public Builder onDidOpen(final BiConsumer<DidOpenParams, LspContext> h) {
+            notificationHandlers.put(LspNotificationMethod.DID_OPEN,
+                (n, ctx) -> h.accept(((LspNotification.DidOpen) n).params(), ctx));
             return this;
         }
 
-        public Builder onDidChange(final BiConsumer<DidChangeParams, LspContext> handler) {
-            this.onDidChange = handler;
+        public Builder onDidChange(final BiConsumer<DidChangeParams, LspContext> h) {
+            notificationHandlers.put(LspNotificationMethod.DID_CHANGE,
+                (n, ctx) -> h.accept(((LspNotification.DidChange) n).params(), ctx));
             return this;
         }
 
-        public Builder onDidClose(final BiConsumer<DidCloseParams, LspContext> handler) {
-            this.onDidClose = handler;
+        public Builder onDidClose(final BiConsumer<DidCloseParams, LspContext> h) {
+            notificationHandlers.put(LspNotificationMethod.DID_CLOSE,
+                (n, ctx) -> h.accept(((LspNotification.DidClose) n).params(), ctx));
             return this;
         }
 
-        public Builder onDidSave(final BiConsumer<DidSaveParams, LspContext> handler) {
-            this.onDidSave = handler;
+        public Builder onDidSave(final BiConsumer<DidSaveParams, LspContext> h) {
+            notificationHandlers.put(LspNotificationMethod.DID_SAVE,
+                (n, ctx) -> h.accept(((LspNotification.DidSave) n).params(), ctx));
             return this;
         }
 
-        public Builder onHover(final BiFunction<TextDocumentPositionParams, LspContext, Hover> handler) {
-            this.onHover = handler;
+        public Builder onHover(final BiFunction<TextDocumentPositionParams, LspContext, Hover> h) {
+            requestHandlers.put(LspRequestMethod.HOVER,
+                (r, ctx) -> h.apply(((LspRequest.Hover) r).params(), ctx));
             return this;
         }
 
-        public Builder onCompletion(final BiFunction<TextDocumentPositionParams, LspContext, List<CompletionItem>> handler) {
-            this.onCompletion = handler;
+        public Builder onCompletion(final BiFunction<TextDocumentPositionParams, LspContext, List<CompletionItem>> h) {
+            requestHandlers.put(LspRequestMethod.COMPLETION,
+                (r, ctx) -> h.apply(((LspRequest.Completion) r).params(), ctx));
             return this;
         }
 
-        public Builder onDefinition(final BiFunction<TextDocumentPositionParams, LspContext, Location> handler) {
-            this.onDefinition = handler;
+        public Builder onDefinition(final BiFunction<TextDocumentPositionParams, LspContext, Location> h) {
+            requestHandlers.put(LspRequestMethod.DEFINITION,
+                (r, ctx) -> h.apply(((LspRequest.Definition) r).params(), ctx));
             return this;
         }
 
-        public Builder onDeclaration(final BiFunction<TextDocumentPositionParams, LspContext, Location> handler) {
-            this.onDeclaration = handler;
+        public Builder onDeclaration(final BiFunction<TextDocumentPositionParams, LspContext, Location> h) {
+            requestHandlers.put(LspRequestMethod.DECLARATION,
+                (r, ctx) -> h.apply(((LspRequest.Declaration) r).params(), ctx));
             return this;
         }
 
-        public Builder onTypeDefinition(final BiFunction<TextDocumentPositionParams, LspContext, Location> handler) {
-            this.onTypeDefinition = handler;
+        public Builder onTypeDefinition(final BiFunction<TextDocumentPositionParams, LspContext, Location> h) {
+            requestHandlers.put(LspRequestMethod.TYPE_DEFINITION,
+                (r, ctx) -> h.apply(((LspRequest.TypeDefinition) r).params(), ctx));
             return this;
         }
 
-        public Builder onImplementation(final BiFunction<TextDocumentPositionParams, LspContext, Location> handler) {
-            this.onImplementation = handler;
+        public Builder onImplementation(final BiFunction<TextDocumentPositionParams, LspContext, Location> h) {
+            requestHandlers.put(LspRequestMethod.IMPLEMENTATION,
+                (r, ctx) -> h.apply(((LspRequest.Implementation) r).params(), ctx));
             return this;
         }
 
-        public Builder onReferences(final BiFunction<ReferenceParams, LspContext, List<Location>> handler) {
-            this.onReferences = handler;
+        public Builder onReferences(final BiFunction<ReferenceParams, LspContext, List<Location>> h) {
+            requestHandlers.put(LspRequestMethod.REFERENCES,
+                (r, ctx) -> h.apply(((LspRequest.References) r).params(), ctx));
             return this;
         }
 
-        public Builder onDocumentHighlight(final BiFunction<TextDocumentPositionParams, LspContext, List<DocumentHighlight>> handler) {
-            this.onDocumentHighlight = handler;
+        public Builder onDocumentHighlight(final BiFunction<TextDocumentPositionParams, LspContext, List<DocumentHighlight>> h) {
+            requestHandlers.put(LspRequestMethod.DOCUMENT_HIGHLIGHT,
+                (r, ctx) -> h.apply(((LspRequest.DocumentHighlight) r).params(), ctx));
             return this;
         }
 
-        public Builder onDocumentSymbol(final BiFunction<DocumentSymbolParams, LspContext, List<DocumentSymbol>> handler) {
-            this.onDocumentSymbol = handler;
+        public Builder onDocumentSymbol(final BiFunction<DocumentSymbolParams, LspContext, List<DocumentSymbol>> h) {
+            requestHandlers.put(LspRequestMethod.DOCUMENT_SYMBOL,
+                (r, ctx) -> h.apply(((LspRequest.DocumentSymbol) r).params(), ctx));
             return this;
         }
 
-        public Builder onWorkspaceSymbol(final BiFunction<WorkspaceSymbolParams, LspContext, List<SymbolInformation>> handler) {
-            this.onWorkspaceSymbol = handler;
+        public Builder onWorkspaceSymbol(final BiFunction<WorkspaceSymbolParams, LspContext, List<SymbolInformation>> h) {
+            requestHandlers.put(LspRequestMethod.WORKSPACE_SYMBOL,
+                (r, ctx) -> h.apply(((LspRequest.WorkspaceSymbol) r).params(), ctx));
             return this;
         }
 
-        public Builder onCodeAction(final BiFunction<CodeActionParams, LspContext, List<CodeAction>> handler) {
-            this.onCodeAction = handler;
+        public Builder onCodeAction(final BiFunction<CodeActionParams, LspContext, List<CodeAction>> h) {
+            requestHandlers.put(LspRequestMethod.CODE_ACTION,
+                (r, ctx) -> h.apply(((LspRequest.CodeAction) r).params(), ctx));
             return this;
         }
 
-        public Builder onSignatureHelp(final BiFunction<TextDocumentPositionParams, LspContext, SignatureHelp> handler) {
-            this.onSignatureHelp = handler;
+        public Builder onSignatureHelp(final BiFunction<TextDocumentPositionParams, LspContext, SignatureHelp> h) {
+            requestHandlers.put(LspRequestMethod.SIGNATURE_HELP,
+                (r, ctx) -> h.apply(((LspRequest.SignatureHelp) r).params(), ctx));
             return this;
         }
 
-        public Builder onRename(final BiFunction<RenameParams, LspContext, WorkspaceEdit> handler) {
-            this.onRename = handler;
+        public Builder onRename(final BiFunction<RenameParams, LspContext, WorkspaceEdit> h) {
+            requestHandlers.put(LspRequestMethod.RENAME,
+                (r, ctx) -> h.apply(((LspRequest.Rename) r).params(), ctx));
             return this;
         }
 
-        public Builder onFormatting(final BiFunction<FormattingParams, LspContext, List<TextEdit>> handler) {
-            this.onFormatting = handler;
+        public Builder onFormatting(final BiFunction<FormattingParams, LspContext, List<TextEdit>> h) {
+            requestHandlers.put(LspRequestMethod.FORMATTING,
+                (r, ctx) -> h.apply(((LspRequest.Formatting) r).params(), ctx));
             return this;
         }
 
-        public Builder onRangeFormatting(final BiFunction<RangeFormattingParams, LspContext, List<TextEdit>> handler) {
-            this.onRangeFormatting = handler;
+        public Builder onRangeFormatting(final BiFunction<RangeFormattingParams, LspContext, List<TextEdit>> h) {
+            requestHandlers.put(LspRequestMethod.RANGE_FORMATTING,
+                (r, ctx) -> h.apply(((LspRequest.RangeFormatting) r).params(), ctx));
             return this;
         }
 
-        public Builder onFoldingRange(final BiFunction<FoldingRangeParams, LspContext, List<FoldingRange>> handler) {
-            this.onFoldingRange = handler;
+        public Builder onFoldingRange(final BiFunction<FoldingRangeParams, LspContext, List<FoldingRange>> h) {
+            requestHandlers.put(LspRequestMethod.FOLDING_RANGE,
+                (r, ctx) -> h.apply(((LspRequest.FoldingRange) r).params(), ctx));
             return this;
         }
 
-        public Builder onSelectionRange(final BiFunction<SelectionRangeParams, LspContext, List<SelectionRange>> handler) {
-            this.onSelectionRange = handler;
+        public Builder onSelectionRange(final BiFunction<SelectionRangeParams, LspContext, List<SelectionRange>> h) {
+            requestHandlers.put(LspRequestMethod.SELECTION_RANGE,
+                (r, ctx) -> h.apply(((LspRequest.SelectionRange) r).params(), ctx));
             return this;
         }
 
-        public Builder onInlayHint(final BiFunction<InlayHintParams, LspContext, List<InlayHint>> handler) {
-            this.onInlayHint = handler;
+        public Builder onInlayHint(final BiFunction<InlayHintParams, LspContext, List<InlayHint>> h) {
+            requestHandlers.put(LspRequestMethod.INLAY_HINT,
+                (r, ctx) -> h.apply(((LspRequest.InlayHint) r).params(), ctx));
             return this;
         }
 
-        public Builder onExecuteCommand(final BiFunction<ExecuteCommandParams, LspContext, Object> handler) {
-            this.onExecuteCommand = handler;
+        public Builder onExecuteCommand(final BiFunction<ExecuteCommandParams, LspContext, Object> h) {
+            requestHandlers.put(LspRequestMethod.EXECUTE_COMMAND,
+                (r, ctx) -> h.apply(((LspRequest.ExecuteCommand) r).params(), ctx));
             return this;
         }
 
-        /**
-         * Builds the {@link LspServer}.
-         *
-         * @return the server
-         */
         public LspServer build() {
-            return new LspServer(this);
+            return new Dispatcher(
+                new EnumMap<>(requestHandlers),
+                new EnumMap<>(notificationHandlers));
+        }
+
+        // LspResponse.MethodNotFound is intentionally never returned by Dispatcher — unregistered methods
+        // return Ok(null), which the LSP spec treats as a valid "no result" response.
+        private record Dispatcher(EnumMap<LspRequestMethod, BiFunction<LspRequest, LspContext, Object>> requestHandlers,
+                                  EnumMap<LspNotificationMethod, BiConsumer<LspNotification, LspContext>> notificationHandlers) implements LspServer {
+
+            @Override
+            public LspResponse handle(final LspRequest request, final LspContext ctx) {
+                final var handler = requestHandlers.get(request.method());
+                return new LspResponse.Ok(handler != null ? handler.apply(request, ctx) : null);
+            }
+
+            @Override
+            public void handle(final LspNotification notification, final LspContext ctx) {
+                try {
+                    final var handler = notificationHandlers.get(notification.method());
+                    if (handler != null) {
+                        handler.accept(notification, ctx);
+                    }
+                } catch (final Exception e) {
+                    // silently ignore notification errors
+                }
+            }
         }
     }
 }

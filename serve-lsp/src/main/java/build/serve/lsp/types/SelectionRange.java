@@ -25,5 +25,6 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record SelectionRange(Range range, SelectionRange parent) {
+public record SelectionRange(Range range,
+                             SelectionRange parent) implements LspType {
 }

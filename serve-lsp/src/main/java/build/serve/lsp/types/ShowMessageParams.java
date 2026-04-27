@@ -25,7 +25,8 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record ShowMessageParams(int type, String message) {
+public record ShowMessageParams(int type,
+                                String message) implements LspType {
 
     public static ShowMessageParams error(final String message) {
         return new ShowMessageParams(1, message);

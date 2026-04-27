@@ -27,5 +27,7 @@ import java.util.List;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record SignatureInformation(String label, MarkupContent documentation, List<ParameterInformation> parameters) {
+public record SignatureInformation(String label,
+                                   MarkupContent documentation,
+                                   List<ParameterInformation> parameters) implements LspType {
 }

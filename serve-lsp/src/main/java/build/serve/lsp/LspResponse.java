@@ -19,14 +19,17 @@
  */
 package build.serve.lsp;
 
-import build.serve.lsp.types.Position;
-import build.serve.lsp.types.TextDocumentIdentifier;
-
 /**
- * Parameters for the textDocument/references request.
+ * Sealed result type for LSP request dispatch — either a successful result or an unrecognised method.
  *
  * @author reed.vonredwitz
- * @since Mar-2026
+ * @since Apr-2026
  */
-public record ReferenceParams(TextDocumentIdentifier textDocument, Position position, boolean includeDeclaration) {
+public sealed interface LspResponse {
+
+    record Ok(Object value) implements LspResponse {
+    }
+
+    record MethodNotFound() implements LspResponse {
+    }
 }

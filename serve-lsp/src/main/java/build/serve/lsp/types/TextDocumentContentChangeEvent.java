@@ -25,5 +25,6 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record TextDocumentContentChangeEvent(Range range, String text) {
+public record TextDocumentContentChangeEvent(Range range,
+                                             String text) implements LspType {
 }

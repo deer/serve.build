@@ -25,5 +25,6 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record Location(String uri, Range range) {
+public record Location(String uri,
+                       Range range) implements LspType {
 }

@@ -25,14 +25,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
-import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * LSP transport with Content-Length framing over stdio or custom streams.
@@ -94,6 +94,7 @@ public final class LspTransport {
     public static void run(final LspServer server, final InputStream in, final OutputStream out) throws Exception {
         final var mapper = new ObjectMapper();
         final var shutdownRequested = new AtomicBoolean(false);
+        final var outboundId = new AtomicInteger(0);
         final var lock = new Object();
 
         final LspContext ctx = new LspContext() {
@@ -102,7 +103,7 @@ public final class LspTransport {
                 final var params = mapper.createObjectNode();
                 params.put("uri", uri);
                 params.set("diagnostics", mapper.valueToTree(diagnostics));
-                sendNotification(mapper, out, lock, "textDocument/publishDiagnostics", params);
+                sendNotification(mapper, out, lock, LspServerPushMethod.PUBLISH_DIAGNOSTICS, params);
             }
 
             @Override
@@ -110,7 +111,7 @@ public final class LspTransport {
                 final var node = mapper.createObjectNode();
                 node.put("type", params.type());
                 node.put("message", params.message());
-                sendNotification(mapper, out, lock, "window/showMessage", node);
+                sendNotification(mapper, out, lock, LspServerPushMethod.SHOW_MESSAGE, node);
             }
 
             @Override
@@ -118,7 +119,7 @@ public final class LspTransport {
                 final var node = mapper.createObjectNode();
                 node.put("type", params.type());
                 node.put("message", params.message());
-                sendNotification(mapper, out, lock, "window/logMessage", node);
+                sendNotification(mapper, out, lock, LspServerPushMethod.LOG_MESSAGE, node);
             }
 
             @Override
@@ -126,258 +127,87 @@ public final class LspTransport {
                 final var node = mapper.createObjectNode();
                 node.put("type", params.type());
                 node.put("message", params.message());
-                sendNotification(mapper, out, lock, "window/showMessageRequest", node);
+                sendOutboundRequest(mapper, out, lock, outboundId.incrementAndGet(),
+                    "window/showMessageRequest", node);
             }
         };
 
-        final var reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
-
         while (true) {
-            final var contentLength = readContentLength(reader);
+            final var contentLength = readContentLength(in);
             if (contentLength < 0) {
                 break;
             }
 
-            final var body = new char[contentLength];
-            var read = 0;
-            while (read < contentLength) {
-                final var n = reader.read(body, read, contentLength - read);
-                if (n < 0) {
-                    return;
-                }
-                read += n;
-            }
-
-            final var message = mapper.readTree(new String(body));
-            final var method = message.path("method").asText("");
-            final var id = message.get("id");
-            final var params = message.get("params");
-
-            if ("exit".equals(method)) {
-                final var code = shutdownRequested.get() ? 0 : 1;
-                Runtime.getRuntime().halt(code);
+            final var body = in.readNBytes(contentLength);
+            if (body.length < contentLength) {
                 return;
             }
 
-            if ("shutdown".equals(method)) {
+            final var message = mapper.readTree(body);
+            final var methodStr = message.path("method").asText("");
+            final var id = message.get("id");
+            final var params = message.get("params");
+
+            // Transport lifecycle — handled before typed dispatch
+            if ("exit".equals(methodStr)) {
+                Runtime.getRuntime().halt(shutdownRequested.get() ? 0 : 1);
+                return;
+            }
+            if ("shutdown".equals(methodStr)) {
                 shutdownRequested.set(true);
                 sendResponse(mapper, out, lock, id, mapper.nullNode());
                 continue;
             }
 
             if (id != null && !id.isNull()) {
-                // Request
-                final var result = dispatchRequest(server, mapper, method, params, ctx);
-                if ("METHOD_NOT_FOUND".equals(result)) {
+                if (methodStr.isEmpty()) {
+                    // Client response to a server-initiated request — ignore
+                    continue;
+                }
+                final var methodOpt = LspRequestMethod.from(methodStr);
+                if (methodOpt.isEmpty()) {
                     sendErrorResponse(mapper, out, lock, id, -32601, "Method not found");
-                } else if (result != null) {
-                    sendResponse(mapper, out, lock, id, mapper.valueToTree(result));
-                } else {
-                    sendResponse(mapper, out, lock, id, mapper.nullNode());
+                    continue;
+                }
+                try {
+                    final var request = LspRequest.parse(methodOpt.get(), mapper, params);
+                    switch (server.handle(request, ctx)) {
+                        case LspResponse.Ok ok -> sendResponse(mapper, out, lock, id, mapper.valueToTree(ok.value()));
+                        case LspResponse.MethodNotFound __ ->
+                            sendErrorResponse(mapper, out, lock, id, -32601, "Method not found");
+                    }
+                } catch (final Exception e) {
+                    sendErrorResponse(mapper, out, lock, id, -32603, "Internal error");
                 }
             } else {
-                // Notification
-                dispatchNotification(server, mapper, method, params, ctx);
+                final var methodOpt = LspNotificationMethod.from(methodStr);
+                if (methodOpt.isPresent()) {
+                    try {
+                        server.handle(LspNotification.parse(methodOpt.get(), mapper, params), ctx);
+                    } catch (final Exception e) {
+                        // silently ignore notification errors
+                    }
+                }
             }
         }
     }
 
-    private static Object dispatchRequest(final LspServer server, final ObjectMapper mapper,
-                                          final String method, final JsonNode params, final LspContext ctx) {
-        try {
-            return switch (method) {
-                case "initialize" -> {
-                    if (server.onInitialize != null) {
-                        final var p = mapper.treeToValue(params, InitializeParams.class);
-                        yield server.onInitialize.apply(p);
-                    }
-                    yield null;
-                }
-                case "textDocument/hover" -> {
-                    if (server.onHover != null) {
-                        final var p = mapper.treeToValue(params, TextDocumentPositionParams.class);
-                        yield server.onHover.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                case "textDocument/completion" -> {
-                    if (server.onCompletion != null) {
-                        final var p = mapper.treeToValue(params, TextDocumentPositionParams.class);
-                        yield server.onCompletion.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                case "textDocument/definition" -> {
-                    if (server.onDefinition != null) {
-                        final var p = mapper.treeToValue(params, TextDocumentPositionParams.class);
-                        yield server.onDefinition.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                case "textDocument/declaration" -> {
-                    if (server.onDeclaration != null) {
-                        final var p = mapper.treeToValue(params, TextDocumentPositionParams.class);
-                        yield server.onDeclaration.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                case "textDocument/typeDefinition" -> {
-                    if (server.onTypeDefinition != null) {
-                        final var p = mapper.treeToValue(params, TextDocumentPositionParams.class);
-                        yield server.onTypeDefinition.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                case "textDocument/implementation" -> {
-                    if (server.onImplementation != null) {
-                        final var p = mapper.treeToValue(params, TextDocumentPositionParams.class);
-                        yield server.onImplementation.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                case "textDocument/references" -> {
-                    if (server.onReferences != null) {
-                        final var p = mapper.treeToValue(params, ReferenceParams.class);
-                        yield server.onReferences.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                case "textDocument/documentHighlight" -> {
-                    if (server.onDocumentHighlight != null) {
-                        final var p = mapper.treeToValue(params, TextDocumentPositionParams.class);
-                        yield server.onDocumentHighlight.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                case "textDocument/documentSymbol" -> {
-                    if (server.onDocumentSymbol != null) {
-                        final var p = mapper.treeToValue(params, DocumentSymbolParams.class);
-                        yield server.onDocumentSymbol.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                case "textDocument/codeAction" -> {
-                    if (server.onCodeAction != null) {
-                        final var p = mapper.treeToValue(params, CodeActionParams.class);
-                        yield server.onCodeAction.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                case "textDocument/signatureHelp" -> {
-                    if (server.onSignatureHelp != null) {
-                        final var p = mapper.treeToValue(params, TextDocumentPositionParams.class);
-                        yield server.onSignatureHelp.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                case "textDocument/rename" -> {
-                    if (server.onRename != null) {
-                        final var p = mapper.treeToValue(params, RenameParams.class);
-                        yield server.onRename.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                case "textDocument/formatting" -> {
-                    if (server.onFormatting != null) {
-                        final var p = mapper.treeToValue(params, FormattingParams.class);
-                        yield server.onFormatting.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                case "textDocument/rangeFormatting" -> {
-                    if (server.onRangeFormatting != null) {
-                        final var p = mapper.treeToValue(params, RangeFormattingParams.class);
-                        yield server.onRangeFormatting.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                case "textDocument/foldingRange" -> {
-                    if (server.onFoldingRange != null) {
-                        final var p = mapper.treeToValue(params, FoldingRangeParams.class);
-                        yield server.onFoldingRange.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                case "textDocument/selectionRange" -> {
-                    if (server.onSelectionRange != null) {
-                        final var p = mapper.treeToValue(params, SelectionRangeParams.class);
-                        yield server.onSelectionRange.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                case "textDocument/inlayHint" -> {
-                    if (server.onInlayHint != null) {
-                        final var p = mapper.treeToValue(params, InlayHintParams.class);
-                        yield server.onInlayHint.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                case "workspace/symbol" -> {
-                    if (server.onWorkspaceSymbol != null) {
-                        final var p = mapper.treeToValue(params, WorkspaceSymbolParams.class);
-                        yield server.onWorkspaceSymbol.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                case "workspace/executeCommand" -> {
-                    if (server.onExecuteCommand != null) {
-                        final var p = mapper.treeToValue(params, ExecuteCommandParams.class);
-                        yield server.onExecuteCommand.apply(p, ctx);
-                    }
-                    yield null;
-                }
-                default -> "METHOD_NOT_FOUND";
-            };
-        } catch (final Exception e) {
-            return null;
-        }
-    }
-
-    private static void dispatchNotification(final LspServer server, final ObjectMapper mapper,
-                                             final String method, final JsonNode params, final LspContext ctx) {
-        try {
-            switch (method) {
-                case "initialized" -> { /* no-op */ }
-                case "textDocument/didOpen" -> {
-                    if (server.onDidOpen != null) {
-                        final var p = mapper.treeToValue(params, DidOpenParams.class);
-                        server.onDidOpen.accept(p, ctx);
-                    }
-                }
-                case "textDocument/didChange" -> {
-                    if (server.onDidChange != null) {
-                        final var p = mapper.treeToValue(params, DidChangeParams.class);
-                        server.onDidChange.accept(p, ctx);
-                    }
-                }
-                case "textDocument/didClose" -> {
-                    if (server.onDidClose != null) {
-                        final var p = mapper.treeToValue(params, DidCloseParams.class);
-                        server.onDidClose.accept(p, ctx);
-                    }
-                }
-                case "textDocument/didSave" -> {
-                    if (server.onDidSave != null) {
-                        final var p = mapper.treeToValue(params, DidSaveParams.class);
-                        server.onDidSave.accept(p, ctx);
-                    }
-                }
-                default -> { /* silently ignore unknown notifications */ }
-            }
-        } catch (final Exception e) {
-            // Silently ignore notification errors
-        }
-    }
-
-    private static int readContentLength(final BufferedReader reader) throws IOException {
+    private static int readContentLength(final InputStream in) throws IOException {
         var contentLength = -1;
-        String line;
-        while ((line = reader.readLine()) != null) {
-            if (line.isEmpty()) {
-                break;
-            }
-            if (line.startsWith("Content-Length: ")) {
-                contentLength = Integer.parseInt(line.substring("Content-Length: ".length()).trim());
+        final var lineBuffer = new ByteArrayOutputStream();
+        int b;
+        while ((b = in.read()) >= 0) {
+            if (b == '\n') {
+                final var line = lineBuffer.toString(StandardCharsets.US_ASCII).strip();
+                lineBuffer.reset();
+                if (line.isEmpty()) {
+                    break;
+                }
+                if (line.startsWith("Content-Length: ")) {
+                    contentLength = Integer.parseInt(line.substring("Content-Length: ".length()).trim());
+                }
+            } else if (b != '\r') {
+                lineBuffer.write(b);
             }
         }
         return contentLength;
@@ -413,12 +243,24 @@ public final class LspTransport {
     }
 
     private static void sendNotification(final ObjectMapper mapper, final OutputStream out,
-                                         final Object lock, final String method, final ObjectNode params) {
+                                         final Object lock, final LspServerPushMethod method,
+                                         final ObjectNode params) {
         final var notification = mapper.createObjectNode();
         notification.put("jsonrpc", "2.0");
-        notification.put("method", method);
+        notification.put("method", method.methodName);
         notification.set("params", params);
         writeMessage(mapper, out, lock, notification);
+    }
+
+    private static void sendOutboundRequest(final ObjectMapper mapper, final OutputStream out,
+                                            final Object lock, final int id, final String method,
+                                            final ObjectNode params) {
+        final var request = mapper.createObjectNode();
+        request.put("jsonrpc", "2.0");
+        request.put("id", id);
+        request.put("method", method);
+        request.set("params", params);
+        writeMessage(mapper, out, lock, request);
     }
 
     private static void writeMessage(final ObjectMapper mapper, final OutputStream out,

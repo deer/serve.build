@@ -17,15 +17,15 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp;
+package build.serve.lsp.params;
 
-import java.util.List;
+import build.serve.lsp.types.TextDocumentIdentifier;
 
 /**
- * Parameters for the workspace/executeCommand request.
+ * Parameters for the textDocument/documentSymbol request.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record ExecuteCommandParams(String command, List<Object> arguments) {
+public record DocumentSymbolParams(TextDocumentIdentifier textDocument) implements LspParams {
 }

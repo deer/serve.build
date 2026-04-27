@@ -17,15 +17,19 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp;
-
-import build.serve.lsp.types.TextDocumentItem;
+package build.serve.lsp.types;
 
 /**
- * Parameters for the textDocument/didOpen notification.
+ * Sealed marker interface for all LSP domain types.
  *
  * @author reed.vonredwitz
- * @since Mar-2026
+ * @since Apr-2026
  */
-public record DidOpenParams(TextDocumentItem textDocument) {
+public sealed interface LspType
+    permits ClientCapabilities, CodeAction, Command, CompletionItem, Diagnostic, DocumentHighlight,
+    DocumentSymbol, FoldingRange, Hover, InlayHint, Location,
+    MarkupContent, ParameterInformation, Position, Range, SelectionRange,
+    ServerCapabilities, ShowMessageParams, SignatureHelp, SignatureInformation,
+    SymbolInformation, TextDocumentContentChangeEvent, TextDocumentIdentifier,
+    TextDocumentItem, TextEdit, VersionedTextDocumentIdentifier, WorkspaceEdit {
 }

@@ -25,5 +25,8 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record TextDocumentItem(String uri, String languageId, int version, String text) {
+public record TextDocumentItem(String uri,
+                               String languageId,
+                               int version,
+                               String text) implements LspType {
 }

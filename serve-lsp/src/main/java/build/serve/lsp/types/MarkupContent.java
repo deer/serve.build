@@ -25,7 +25,8 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record MarkupContent(String kind, String value) {
+public record MarkupContent(String kind,
+                            String value) implements LspType {
 
     /**
      * Creates plaintext markup content.

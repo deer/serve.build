@@ -17,18 +17,15 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp;
+package build.serve.lsp.params;
 
-import build.serve.lsp.types.Position;
 import build.serve.lsp.types.TextDocumentIdentifier;
 
-import java.util.List;
-
 /**
- * Parameters for the textDocument/selectionRange request.
+ * Parameters for the textDocument/didClose notification.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record SelectionRangeParams(TextDocumentIdentifier textDocument, List<Position> positions) {
+public record DidCloseParams(TextDocumentIdentifier textDocument) implements LspParams {
 }

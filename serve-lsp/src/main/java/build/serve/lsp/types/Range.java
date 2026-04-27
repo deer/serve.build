@@ -25,7 +25,8 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record Range(Position start, Position end) {
+public record Range(Position start,
+                    Position end) implements LspType {
 
     /**
      * Creates a range from line/character coordinates.

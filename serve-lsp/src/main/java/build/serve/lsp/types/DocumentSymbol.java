@@ -27,6 +27,9 @@ import java.util.List;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record DocumentSymbol(String name, SymbolKind kind, Range range, Range selectionRange,
-                             List<DocumentSymbol> children) {
+public record DocumentSymbol(String name,
+                             SymbolKind kind,
+                             Range range,
+                             Range selectionRange,
+                             List<DocumentSymbol> children) implements LspType {
 }

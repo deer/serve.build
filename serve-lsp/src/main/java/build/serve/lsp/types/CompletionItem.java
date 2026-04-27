@@ -25,13 +25,11 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record CompletionItem(
-    String label,
-    CompletionItemKind kind,
-    String detail,
-    MarkupContent documentation,
-    String insertText
-) {
+public record CompletionItem(String label,
+                             CompletionItemKind kind,
+                             String detail,
+                             MarkupContent documentation,
+                             String insertText) implements LspType {
 
     /**
      * Creates a completion item with just a label.

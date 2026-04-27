@@ -27,5 +27,7 @@ import java.util.List;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record SignatureHelp(List<SignatureInformation> signatures, int activeSignature, int activeParameter) {
+public record SignatureHelp(List<SignatureInformation> signatures,
+                            int activeSignature,
+                            int activeParameter) implements LspType {
 }

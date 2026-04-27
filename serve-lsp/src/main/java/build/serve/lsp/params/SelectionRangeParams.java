@@ -17,17 +17,19 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp.types;
+package build.serve.lsp.params;
+
+import build.serve.lsp.types.Position;
+import build.serve.lsp.types.TextDocumentIdentifier;
 
 import java.util.List;
 
 /**
- * Represents a reference to a command.
+ * Parameters for the textDocument/selectionRange request.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record Command(String title,
-                      String command,
-                      List<Object> arguments) implements LspType {
+public record SelectionRangeParams(TextDocumentIdentifier textDocument,
+                                   List<Position> positions) implements LspParams {
 }

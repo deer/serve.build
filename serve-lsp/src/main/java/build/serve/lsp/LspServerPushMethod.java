@@ -19,13 +19,21 @@
  */
 package build.serve.lsp;
 
-import build.serve.lsp.types.TextDocumentIdentifier;
-
 /**
- * Parameters for the textDocument/foldingRange request.
+ * Server-initiated push methods — notifications sent from the LSP server to the client.
  *
  * @author reed.vonredwitz
- * @since Mar-2026
+ * @since Apr-2026
  */
-public record FoldingRangeParams(TextDocumentIdentifier textDocument) {
+public enum LspServerPushMethod {
+
+    LOG_MESSAGE("window/logMessage"),
+    PUBLISH_DIAGNOSTICS("textDocument/publishDiagnostics"),
+    SHOW_MESSAGE("window/showMessage");
+
+    public final String methodName;
+
+    LspServerPushMethod(final String methodName) {
+        this.methodName = methodName;
+    }
 }

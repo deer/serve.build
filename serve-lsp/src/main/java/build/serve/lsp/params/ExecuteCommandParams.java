@@ -17,19 +17,16 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp;
-
-import build.serve.lsp.types.Diagnostic;
-import build.serve.lsp.types.Range;
-import build.serve.lsp.types.TextDocumentIdentifier;
+package build.serve.lsp.params;
 
 import java.util.List;
 
 /**
- * Parameters for the textDocument/codeAction request.
+ * Parameters for the workspace/executeCommand request.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record CodeActionParams(TextDocumentIdentifier textDocument, Range range, List<Diagnostic> context) {
+public record ExecuteCommandParams(String command,
+                                   List<Object> arguments) implements LspParams {
 }

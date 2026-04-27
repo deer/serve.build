@@ -25,5 +25,7 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record FoldingRange(int startLine, int endLine, String kind) {
+public record FoldingRange(int startLine,
+                           int endLine,
+                           String kind) implements LspType {
 }

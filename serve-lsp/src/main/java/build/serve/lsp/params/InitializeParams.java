@@ -17,17 +17,16 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp.types;
+package build.serve.lsp.params;
 
-import java.util.List;
+import build.serve.lsp.types.ClientCapabilities;
 
 /**
- * Represents a reference to a command.
+ * Parameters for the initialize request.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record Command(String title,
-                      String command,
-                      List<Object> arguments) implements LspType {
+public record InitializeParams(String rootUri,
+                               ClientCapabilities capabilities) implements LspParams {
 }

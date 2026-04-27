@@ -17,13 +17,16 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp;
+package build.serve.lsp.types;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 /**
- * Parameters for the initialize request.
+ * Client capabilities sent in the initialize request.
  *
  * @author reed.vonredwitz
- * @since Mar-2026
+ * @since Apr-2026
  */
-public record InitializeParams(String rootUri, Object capabilities) {
+@JsonIgnoreProperties(ignoreUnknown = true)
+public record ClientCapabilities() implements LspType {
 }

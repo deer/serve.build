@@ -25,5 +25,6 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record DocumentHighlight(Range range, int kind) {
+public record DocumentHighlight(Range range,
+                                int kind) implements LspType {
 }

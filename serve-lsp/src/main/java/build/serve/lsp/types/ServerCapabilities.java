@@ -19,190 +19,47 @@
  */
 package build.serve.lsp.types;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
+
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 /**
- * Server capabilities.
+ * Server capabilities declared in the initialize response.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record ServerCapabilities(
-    Object textDocumentSync,
-    boolean hoverProvider,
-    boolean completionProvider,
-    boolean definitionProvider,
-    boolean declarationProvider,
-    boolean typeDefinitionProvider,
-    boolean implementationProvider,
-    boolean referencesProvider,
-    boolean documentHighlightProvider,
-    boolean documentSymbolProvider,
-    boolean codeActionProvider,
-    boolean codeLensProvider,
-    boolean documentFormattingProvider,
-    boolean documentRangeFormattingProvider,
-    boolean renameProvider,
-    boolean foldingRangeProvider,
-    boolean selectionRangeProvider,
-    boolean signatureHelpProvider,
-    boolean workspaceSymbolProvider,
-    boolean inlayHintProvider
-) {
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public record ServerCapabilities(Object textDocumentSync,
+                                 @JsonIgnore Set<ServerCapability> providers) implements LspType {
 
-    /**
-     * Creates a new builder.
-     *
-     * @return the builder
-     */
-    public static Builder builder() {
-        return new Builder();
+    public static ServerCapabilities of(final ServerCapability... providers) {
+        return new ServerCapabilities(null, toSet(providers));
     }
 
-    /**
-     * A builder for {@link ServerCapabilities}.
-     *
-     * @author reed.vonredwitz
-     * @since Mar-2026
-     */
-    public static final class Builder {
+    public static ServerCapabilities of(final Object textDocumentSync, final ServerCapability... providers) {
+        return new ServerCapabilities(textDocumentSync, toSet(providers));
+    }
 
-        private Object textDocumentSync;
-        private boolean hoverProvider;
-        private boolean completionProvider;
-        private boolean definitionProvider;
-        private boolean declarationProvider;
-        private boolean typeDefinitionProvider;
-        private boolean implementationProvider;
-        private boolean referencesProvider;
-        private boolean documentHighlightProvider;
-        private boolean documentSymbolProvider;
-        private boolean codeActionProvider;
-        private boolean codeLensProvider;
-        private boolean documentFormattingProvider;
-        private boolean documentRangeFormattingProvider;
-        private boolean renameProvider;
-        private boolean foldingRangeProvider;
-        private boolean selectionRangeProvider;
-        private boolean signatureHelpProvider;
-        private boolean workspaceSymbolProvider;
-        private boolean inlayHintProvider;
+    private static Set<ServerCapability> toSet(final ServerCapability[] providers) {
+        return providers.length > 0
+            ? Collections.unmodifiableSet(EnumSet.copyOf(List.of(providers)))
+            : Collections.unmodifiableSet(EnumSet.noneOf(ServerCapability.class));
+    }
 
-        private Builder() {
+    @JsonAnyGetter
+    public Map<String, Boolean> capabilityFields() {
+        final Map<String, Boolean> fields = new LinkedHashMap<>();
+        for (final ServerCapability cap : providers) {
+            fields.put(cap.fieldName, Boolean.TRUE);
         }
-
-        public Builder textDocumentSync(final Object textDocumentSync) {
-            this.textDocumentSync = textDocumentSync;
-            return this;
-        }
-
-        public Builder hoverProvider(final boolean hoverProvider) {
-            this.hoverProvider = hoverProvider;
-            return this;
-        }
-
-        public Builder completionProvider(final boolean completionProvider) {
-            this.completionProvider = completionProvider;
-            return this;
-        }
-
-        public Builder definitionProvider(final boolean definitionProvider) {
-            this.definitionProvider = definitionProvider;
-            return this;
-        }
-
-        public Builder declarationProvider(final boolean declarationProvider) {
-            this.declarationProvider = declarationProvider;
-            return this;
-        }
-
-        public Builder typeDefinitionProvider(final boolean typeDefinitionProvider) {
-            this.typeDefinitionProvider = typeDefinitionProvider;
-            return this;
-        }
-
-        public Builder implementationProvider(final boolean implementationProvider) {
-            this.implementationProvider = implementationProvider;
-            return this;
-        }
-
-        public Builder referencesProvider(final boolean referencesProvider) {
-            this.referencesProvider = referencesProvider;
-            return this;
-        }
-
-        public Builder documentHighlightProvider(final boolean documentHighlightProvider) {
-            this.documentHighlightProvider = documentHighlightProvider;
-            return this;
-        }
-
-        public Builder documentSymbolProvider(final boolean documentSymbolProvider) {
-            this.documentSymbolProvider = documentSymbolProvider;
-            return this;
-        }
-
-        public Builder codeActionProvider(final boolean codeActionProvider) {
-            this.codeActionProvider = codeActionProvider;
-            return this;
-        }
-
-        public Builder codeLensProvider(final boolean codeLensProvider) {
-            this.codeLensProvider = codeLensProvider;
-            return this;
-        }
-
-        public Builder documentFormattingProvider(final boolean documentFormattingProvider) {
-            this.documentFormattingProvider = documentFormattingProvider;
-            return this;
-        }
-
-        public Builder documentRangeFormattingProvider(final boolean documentRangeFormattingProvider) {
-            this.documentRangeFormattingProvider = documentRangeFormattingProvider;
-            return this;
-        }
-
-        public Builder renameProvider(final boolean renameProvider) {
-            this.renameProvider = renameProvider;
-            return this;
-        }
-
-        public Builder foldingRangeProvider(final boolean foldingRangeProvider) {
-            this.foldingRangeProvider = foldingRangeProvider;
-            return this;
-        }
-
-        public Builder selectionRangeProvider(final boolean selectionRangeProvider) {
-            this.selectionRangeProvider = selectionRangeProvider;
-            return this;
-        }
-
-        public Builder signatureHelpProvider(final boolean signatureHelpProvider) {
-            this.signatureHelpProvider = signatureHelpProvider;
-            return this;
-        }
-
-        public Builder workspaceSymbolProvider(final boolean workspaceSymbolProvider) {
-            this.workspaceSymbolProvider = workspaceSymbolProvider;
-            return this;
-        }
-
-        public Builder inlayHintProvider(final boolean inlayHintProvider) {
-            this.inlayHintProvider = inlayHintProvider;
-            return this;
-        }
-
-        /**
-         * Builds the {@link ServerCapabilities}.
-         *
-         * @return the capabilities
-         */
-        public ServerCapabilities build() {
-            return new ServerCapabilities(
-                textDocumentSync, hoverProvider, completionProvider, definitionProvider,
-                declarationProvider, typeDefinitionProvider, implementationProvider, referencesProvider,
-                documentHighlightProvider, documentSymbolProvider, codeActionProvider, codeLensProvider,
-                documentFormattingProvider, documentRangeFormattingProvider, renameProvider,
-                foldingRangeProvider, selectionRangeProvider, signatureHelpProvider,
-                workspaceSymbolProvider, inlayHintProvider
-            );
-        }
+        return fields;
     }
 }

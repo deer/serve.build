@@ -17,16 +17,19 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp;
-
-import build.serve.lsp.types.Position;
-import build.serve.lsp.types.TextDocumentIdentifier;
+package build.serve.lsp.params;
 
 /**
- * Parameters for the textDocument/rename request.
+ * Sealed marker interface for all LSP request and notification parameter types.
  *
  * @author reed.vonredwitz
- * @since Mar-2026
+ * @since Apr-2026
  */
-public record RenameParams(TextDocumentIdentifier textDocument, Position position, String newName) {
+public sealed interface LspParams
+    permits CodeActionParams, DidChangeParams, DidCloseParams, DidOpenParams,
+    DidSaveParams, DocumentSymbolParams, ExecuteCommandParams,
+    FoldingRangeParams, FormattingParams, InitializeParams,
+    InlayHintParams, RangeFormattingParams, ReferenceParams,
+    RenameParams, SelectionRangeParams, TextDocumentPositionParams,
+    WorkspaceSymbolParams {
 }

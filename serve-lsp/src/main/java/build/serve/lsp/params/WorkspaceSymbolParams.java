@@ -17,17 +17,13 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp.types;
-
-import java.util.List;
+package build.serve.lsp.params;
 
 /**
- * Represents a reference to a command.
+ * Parameters for the workspace/symbol request.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record Command(String title,
-                      String command,
-                      List<Object> arguments) implements LspType {
+public record WorkspaceSymbolParams(String query) implements LspParams {
 }

@@ -17,13 +17,18 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp;
+package build.serve.lsp.params;
+
+import build.serve.lsp.types.Position;
+import build.serve.lsp.types.TextDocumentIdentifier;
 
 /**
- * Parameters for the workspace/symbol request.
+ * Parameters for the textDocument/references request.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record WorkspaceSymbolParams(String query) {
+public record ReferenceParams(TextDocumentIdentifier textDocument,
+                              Position position,
+                              boolean includeDeclaration) implements LspParams {
 }

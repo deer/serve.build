@@ -17,7 +17,7 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp;
+package build.serve.lsp.params;
 
 import build.serve.lsp.types.TextDocumentIdentifier;
 
@@ -27,5 +27,6 @@ import build.serve.lsp.types.TextDocumentIdentifier;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record DidSaveParams(TextDocumentIdentifier textDocument, String text) {
+public record DidSaveParams(TextDocumentIdentifier textDocument,
+                            String text) implements LspParams {
 }
