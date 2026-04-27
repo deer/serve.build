@@ -32,6 +32,8 @@ import build.serve.lsp.params.RenameParams;
 import build.serve.lsp.params.SelectionRangeParams;
 import build.serve.lsp.params.TextDocumentPositionParams;
 import build.serve.lsp.params.WorkspaceSymbolParams;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Sealed hierarchy of all typed LSP requests (messages with an id that expect a response).
@@ -41,43 +43,172 @@ import build.serve.lsp.params.WorkspaceSymbolParams;
  */
 public sealed interface LspRequest {
 
-    record CodeAction(CodeActionParams params) implements LspRequest {}
+    LspRequestMethod method();
 
-    record Completion(TextDocumentPositionParams params) implements LspRequest {}
+    record CodeAction(CodeActionParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.CODE_ACTION;
+        }
+    }
 
-    record Declaration(TextDocumentPositionParams params) implements LspRequest {}
+    record Completion(TextDocumentPositionParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.COMPLETION;
+        }
+    }
 
-    record Definition(TextDocumentPositionParams params) implements LspRequest {}
+    record Declaration(TextDocumentPositionParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.DECLARATION;
+        }
+    }
 
-    record DocumentHighlight(TextDocumentPositionParams params) implements LspRequest {}
+    record Definition(TextDocumentPositionParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.DEFINITION;
+        }
+    }
 
-    record DocumentSymbol(DocumentSymbolParams params) implements LspRequest {}
+    record DocumentHighlight(TextDocumentPositionParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.DOCUMENT_HIGHLIGHT;
+        }
+    }
 
-    record ExecuteCommand(ExecuteCommandParams params) implements LspRequest {}
+    record DocumentSymbol(DocumentSymbolParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.DOCUMENT_SYMBOL;
+        }
+    }
 
-    record FoldingRange(FoldingRangeParams params) implements LspRequest {}
+    record ExecuteCommand(ExecuteCommandParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.EXECUTE_COMMAND;
+        }
+    }
 
-    record Formatting(FormattingParams params) implements LspRequest {}
+    record FoldingRange(FoldingRangeParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.FOLDING_RANGE;
+        }
+    }
 
-    record Hover(TextDocumentPositionParams params) implements LspRequest {}
+    record Formatting(FormattingParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.FORMATTING;
+        }
+    }
 
-    record Implementation(TextDocumentPositionParams params) implements LspRequest {}
+    record Hover(TextDocumentPositionParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.HOVER;
+        }
+    }
 
-    record Initialize(InitializeParams params) implements LspRequest {}
+    record Implementation(TextDocumentPositionParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.IMPLEMENTATION;
+        }
+    }
 
-    record InlayHint(InlayHintParams params) implements LspRequest {}
+    record Initialize(InitializeParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.INITIALIZE;
+        }
+    }
 
-    record RangeFormatting(RangeFormattingParams params) implements LspRequest {}
+    record InlayHint(InlayHintParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.INLAY_HINT;
+        }
+    }
 
-    record References(ReferenceParams params) implements LspRequest {}
+    record RangeFormatting(RangeFormattingParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.RANGE_FORMATTING;
+        }
+    }
 
-    record Rename(RenameParams params) implements LspRequest {}
+    record References(ReferenceParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.REFERENCES;
+        }
+    }
 
-    record SelectionRange(SelectionRangeParams params) implements LspRequest {}
+    record Rename(RenameParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.RENAME;
+        }
+    }
 
-    record SignatureHelp(TextDocumentPositionParams params) implements LspRequest {}
+    record SelectionRange(SelectionRangeParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.SELECTION_RANGE;
+        }
+    }
 
-    record TypeDefinition(TextDocumentPositionParams params) implements LspRequest {}
+    record SignatureHelp(TextDocumentPositionParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.SIGNATURE_HELP;
+        }
+    }
 
-    record WorkspaceSymbol(WorkspaceSymbolParams params) implements LspRequest {}
+    record TypeDefinition(TextDocumentPositionParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.TYPE_DEFINITION;
+        }
+    }
+
+    record WorkspaceSymbol(WorkspaceSymbolParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.WORKSPACE_SYMBOL;
+        }
+    }
+
+    static LspRequest parse(final LspRequestMethod method,
+                            final ObjectMapper mapper,
+                            final JsonNode params) throws Exception {
+        return switch (method) {
+            case CODE_ACTION -> new CodeAction(mapper.treeToValue(params, CodeActionParams.class));
+            case COMPLETION -> new Completion(mapper.treeToValue(params, TextDocumentPositionParams.class));
+            case DECLARATION -> new Declaration(mapper.treeToValue(params, TextDocumentPositionParams.class));
+            case DEFINITION -> new Definition(mapper.treeToValue(params, TextDocumentPositionParams.class));
+            case DOCUMENT_HIGHLIGHT -> new DocumentHighlight(mapper.treeToValue(params, TextDocumentPositionParams.class));
+            case DOCUMENT_SYMBOL -> new DocumentSymbol(mapper.treeToValue(params, DocumentSymbolParams.class));
+            case EXECUTE_COMMAND -> new ExecuteCommand(mapper.treeToValue(params, ExecuteCommandParams.class));
+            case FOLDING_RANGE -> new FoldingRange(mapper.treeToValue(params, FoldingRangeParams.class));
+            case FORMATTING -> new Formatting(mapper.treeToValue(params, FormattingParams.class));
+            case HOVER -> new Hover(mapper.treeToValue(params, TextDocumentPositionParams.class));
+            case IMPLEMENTATION -> new Implementation(mapper.treeToValue(params, TextDocumentPositionParams.class));
+            case INITIALIZE -> new Initialize(mapper.treeToValue(params, InitializeParams.class));
+            case INLAY_HINT -> new InlayHint(mapper.treeToValue(params, InlayHintParams.class));
+            case RANGE_FORMATTING -> new RangeFormatting(mapper.treeToValue(params, RangeFormattingParams.class));
+            case REFERENCES -> new References(mapper.treeToValue(params, ReferenceParams.class));
+            case RENAME -> new Rename(mapper.treeToValue(params, RenameParams.class));
+            case SELECTION_RANGE -> new SelectionRange(mapper.treeToValue(params, SelectionRangeParams.class));
+            case SIGNATURE_HELP -> new SignatureHelp(mapper.treeToValue(params, TextDocumentPositionParams.class));
+            case TYPE_DEFINITION -> new TypeDefinition(mapper.treeToValue(params, TextDocumentPositionParams.class));
+            case WORKSPACE_SYMBOL -> new WorkspaceSymbol(mapper.treeToValue(params, WorkspaceSymbolParams.class));
+        };
+    }
 }
