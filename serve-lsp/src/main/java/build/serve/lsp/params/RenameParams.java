@@ -17,16 +17,18 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp;
+package build.serve.lsp.params;
 
 import build.serve.lsp.types.Position;
 import build.serve.lsp.types.TextDocumentIdentifier;
 
 /**
- * A parameter literal used in requests to pass a text document and a position inside that document.
+ * Parameters for the textDocument/rename request.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record TextDocumentPositionParams(TextDocumentIdentifier textDocument, Position position) {
+public record RenameParams(TextDocumentIdentifier textDocument,
+                           Position position,
+                           String newName) implements LspParams {
 }

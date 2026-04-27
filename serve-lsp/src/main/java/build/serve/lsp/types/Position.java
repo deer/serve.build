@@ -25,5 +25,6 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record Position(int line, int character) {
+public record Position(int line,
+                       int character) implements LspType {
 }

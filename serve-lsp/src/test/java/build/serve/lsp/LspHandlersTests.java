@@ -19,6 +19,13 @@
  */
 package build.serve.lsp;
 
+import build.serve.lsp.params.DidChangeParams;
+import build.serve.lsp.params.DidCloseParams;
+import build.serve.lsp.params.DidOpenParams;
+import build.serve.lsp.params.DidSaveParams;
+import build.serve.lsp.params.ReferenceParams;
+import build.serve.lsp.params.RenameParams;
+import build.serve.lsp.params.TextDocumentPositionParams;
 import build.serve.lsp.types.Diagnostic;
 import build.serve.lsp.types.Location;
 import build.serve.lsp.types.Range;

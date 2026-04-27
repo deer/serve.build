@@ -25,13 +25,11 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record Diagnostic(
-    Range range,
-    DiagnosticSeverity severity,
-    String code,
-    String source,
-    String message
-) {
+public record Diagnostic(Range range,
+                         DiagnosticSeverity severity,
+                         String code,
+                         String source,
+                         String message) implements LspType {
 
     /**
      * Creates an error diagnostic.

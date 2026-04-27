@@ -17,15 +17,15 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp;
+package build.serve.lsp.params;
 
-import build.serve.lsp.types.TextDocumentIdentifier;
+import build.serve.lsp.types.TextDocumentItem;
 
 /**
- * Parameters for the textDocument/didClose notification.
+ * Parameters for the textDocument/didOpen notification.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record DidCloseParams(TextDocumentIdentifier textDocument) {
+public record DidOpenParams(TextDocumentItem textDocument) implements LspParams {
 }

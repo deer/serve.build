@@ -17,15 +17,15 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp;
+package build.serve.lsp.params;
 
 import build.serve.lsp.types.TextDocumentIdentifier;
 
 /**
- * Parameters for the textDocument/formatting request.
+ * Parameters for the textDocument/foldingRange request.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record FormattingParams(TextDocumentIdentifier textDocument) {
+public record FoldingRangeParams(TextDocumentIdentifier textDocument) implements LspParams {
 }

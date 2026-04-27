@@ -25,5 +25,6 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record ParameterInformation(String label, MarkupContent documentation) {
+public record ParameterInformation(String label,
+                                   MarkupContent documentation) implements LspType {
 }

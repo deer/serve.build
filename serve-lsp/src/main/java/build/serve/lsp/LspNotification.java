@@ -19,14 +19,26 @@
  */
 package build.serve.lsp;
 
-import build.serve.lsp.types.Position;
-import build.serve.lsp.types.TextDocumentIdentifier;
+import build.serve.lsp.params.DidChangeParams;
+import build.serve.lsp.params.DidCloseParams;
+import build.serve.lsp.params.DidOpenParams;
+import build.serve.lsp.params.DidSaveParams;
 
 /**
- * Parameters for the textDocument/references request.
+ * Sealed hierarchy of all typed LSP notifications (fire-and-forget messages with no id).
  *
  * @author reed.vonredwitz
- * @since Mar-2026
+ * @since Apr-2026
  */
-public record ReferenceParams(TextDocumentIdentifier textDocument, Position position, boolean includeDeclaration) {
+public sealed interface LspNotification {
+
+    record DidChange(DidChangeParams params) implements LspNotification {}
+
+    record DidClose(DidCloseParams params) implements LspNotification {}
+
+    record DidOpen(DidOpenParams params) implements LspNotification {}
+
+    record DidSave(DidSaveParams params) implements LspNotification {}
+
+    record Initialized() implements LspNotification {}
 }

@@ -25,7 +25,8 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record Hover(MarkupContent contents, Range range) {
+public record Hover(MarkupContent contents,
+                    Range range) implements LspType {
 
     /**
      * Creates a hover with no range.

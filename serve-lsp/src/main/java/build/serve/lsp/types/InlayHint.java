@@ -25,5 +25,7 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record InlayHint(Position position, String label, int kind) {
+public record InlayHint(Position position,
+                        String label,
+                        int kind) implements LspType {
 }

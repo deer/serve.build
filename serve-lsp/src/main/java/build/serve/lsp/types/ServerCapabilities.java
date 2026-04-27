@@ -25,28 +25,26 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record ServerCapabilities(
-    Object textDocumentSync,
-    boolean hoverProvider,
-    boolean completionProvider,
-    boolean definitionProvider,
-    boolean declarationProvider,
-    boolean typeDefinitionProvider,
-    boolean implementationProvider,
-    boolean referencesProvider,
-    boolean documentHighlightProvider,
-    boolean documentSymbolProvider,
-    boolean codeActionProvider,
-    boolean codeLensProvider,
-    boolean documentFormattingProvider,
-    boolean documentRangeFormattingProvider,
-    boolean renameProvider,
-    boolean foldingRangeProvider,
-    boolean selectionRangeProvider,
-    boolean signatureHelpProvider,
-    boolean workspaceSymbolProvider,
-    boolean inlayHintProvider
-) {
+public record ServerCapabilities(Object textDocumentSync,
+                                  boolean hoverProvider,
+                                  boolean completionProvider,
+                                  boolean definitionProvider,
+                                  boolean declarationProvider,
+                                  boolean typeDefinitionProvider,
+                                  boolean implementationProvider,
+                                  boolean referencesProvider,
+                                  boolean documentHighlightProvider,
+                                  boolean documentSymbolProvider,
+                                  boolean codeActionProvider,
+                                  boolean codeLensProvider,
+                                  boolean documentFormattingProvider,
+                                  boolean documentRangeFormattingProvider,
+                                  boolean renameProvider,
+                                  boolean foldingRangeProvider,
+                                  boolean selectionRangeProvider,
+                                  boolean signatureHelpProvider,
+                                  boolean workspaceSymbolProvider,
+                                  boolean inlayHintProvider) implements LspType {
 
     /**
      * Creates a new builder.

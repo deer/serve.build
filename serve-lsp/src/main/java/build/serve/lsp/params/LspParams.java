@@ -17,13 +17,19 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp;
+package build.serve.lsp.params;
 
 /**
- * Parameters for the workspace/symbol request.
+ * Sealed marker interface for all LSP request and notification parameter types.
  *
  * @author reed.vonredwitz
- * @since Mar-2026
+ * @since Apr-2026
  */
-public record WorkspaceSymbolParams(String query) {
+public sealed interface LspParams
+    permits CodeActionParams, DidChangeParams, DidCloseParams, DidOpenParams,
+            DidSaveParams, DocumentSymbolParams, ExecuteCommandParams,
+            FoldingRangeParams, FormattingParams, InitializeParams,
+            InlayHintParams, RangeFormattingParams, ReferenceParams,
+            RenameParams, SelectionRangeParams, TextDocumentPositionParams,
+            WorkspaceSymbolParams {
 }

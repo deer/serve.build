@@ -25,5 +25,8 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record SymbolInformation(String name, SymbolKind kind, Location location, String containerName) {
+public record SymbolInformation(String name,
+                                SymbolKind kind,
+                                Location location,
+                                String containerName) implements LspType {
 }

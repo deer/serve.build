@@ -25,5 +25,5 @@ package build.serve.lsp.types;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record TextDocumentIdentifier(String uri) {
+public record TextDocumentIdentifier(String uri) implements LspType {
 }

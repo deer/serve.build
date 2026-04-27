@@ -20,7 +20,9 @@
 module build.serve.lsp {
     requires build.serve.foundation;
     requires com.fasterxml.jackson.databind;
+    requires com.fasterxml.jackson.annotation;
 
     exports build.serve.lsp;
+    exports build.serve.lsp.params;
     exports build.serve.lsp.types;
 }

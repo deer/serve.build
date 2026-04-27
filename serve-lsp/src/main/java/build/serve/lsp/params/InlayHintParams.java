@@ -17,7 +17,7 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp;
+package build.serve.lsp.params;
 
 import build.serve.lsp.types.Range;
 import build.serve.lsp.types.TextDocumentIdentifier;
@@ -28,5 +28,6 @@ import build.serve.lsp.types.TextDocumentIdentifier;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record InlayHintParams(TextDocumentIdentifier textDocument, Range range) {
+public record InlayHintParams(TextDocumentIdentifier textDocument,
+                              Range range) implements LspParams {
 }

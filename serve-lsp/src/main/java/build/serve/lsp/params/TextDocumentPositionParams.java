@@ -17,17 +17,17 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp.types;
+package build.serve.lsp.params;
 
-import java.util.List;
+import build.serve.lsp.types.Position;
+import build.serve.lsp.types.TextDocumentIdentifier;
 
 /**
- * Represents a reference to a command.
+ * A parameter literal used in requests to pass a text document and a position inside that document.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record Command(String title,
-                      String command,
-                      List<Object> arguments) implements LspType {
+public record TextDocumentPositionParams(TextDocumentIdentifier textDocument,
+                                         Position position) implements LspParams {
 }

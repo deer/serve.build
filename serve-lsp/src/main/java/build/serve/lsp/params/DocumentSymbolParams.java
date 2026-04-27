@@ -17,13 +17,15 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp;
+package build.serve.lsp.params;
+
+import build.serve.lsp.types.TextDocumentIdentifier;
 
 /**
- * Parameters for the initialize request.
+ * Parameters for the textDocument/documentSymbol request.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record InitializeParams(String rootUri, Object capabilities) {
+public record DocumentSymbolParams(TextDocumentIdentifier textDocument) implements LspParams {
 }

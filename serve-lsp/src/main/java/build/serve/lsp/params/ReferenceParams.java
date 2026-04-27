@@ -17,15 +17,18 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp;
+package build.serve.lsp.params;
 
-import build.serve.lsp.types.TextDocumentItem;
+import build.serve.lsp.types.Position;
+import build.serve.lsp.types.TextDocumentIdentifier;
 
 /**
- * Parameters for the textDocument/didOpen notification.
+ * Parameters for the textDocument/references request.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record DidOpenParams(TextDocumentItem textDocument) {
+public record ReferenceParams(TextDocumentIdentifier textDocument,
+                              Position position,
+                              boolean includeDeclaration) implements LspParams {
 }

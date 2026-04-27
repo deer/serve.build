@@ -28,5 +28,5 @@ import java.util.Map;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record WorkspaceEdit(Map<String, List<TextEdit>> changes) {
+public record WorkspaceEdit(Map<String, List<TextEdit>> changes) implements LspType {
 }

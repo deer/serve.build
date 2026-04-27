@@ -27,5 +27,9 @@ import java.util.List;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record CodeAction(String title, String kind, List<Diagnostic> diagnostics, WorkspaceEdit edit, Command command) {
+public record CodeAction(String title,
+                         String kind,
+                         List<Diagnostic> diagnostics,
+                         WorkspaceEdit edit,
+                         Command command) implements LspType {
 }

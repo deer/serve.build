@@ -17,15 +17,14 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp;
-
-import build.serve.lsp.types.TextDocumentIdentifier;
+package build.serve.lsp.params;
 
 /**
- * Parameters for the textDocument/didSave notification.
+ * Parameters for the initialize request.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record DidSaveParams(TextDocumentIdentifier textDocument, String text) {
+public record InitializeParams(String rootUri,
+                               Object capabilities) implements LspParams {
 }

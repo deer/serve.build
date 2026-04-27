@@ -17,19 +17,15 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp;
+package build.serve.lsp.params;
 
-import build.serve.lsp.types.TextDocumentContentChangeEvent;
-import build.serve.lsp.types.VersionedTextDocumentIdentifier;
-
-import java.util.List;
+import build.serve.lsp.types.TextDocumentIdentifier;
 
 /**
- * Parameters for the textDocument/didChange notification.
+ * Parameters for the textDocument/formatting request.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record DidChangeParams(VersionedTextDocumentIdentifier textDocument,
-                              List<TextDocumentContentChangeEvent> contentChanges) {
+public record FormattingParams(TextDocumentIdentifier textDocument) implements LspParams {
 }
