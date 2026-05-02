@@ -1,7 +1,10 @@
 package build.serve.mcp;
 
 import build.base.json.Json;
+import build.base.json.JsonArray;
+import build.base.json.JsonNull;
 import build.base.json.JsonObject;
+import build.base.json.JsonString;
 import build.base.json.JsonValue;
 import build.serve.foundation.routing.RouterBuilder;
 import build.serve.testing.TestServer;
@@ -97,8 +100,8 @@ class McpServerToolCallEventsTest {
 
         final var json = Json.parse(response.body()).asObject();
         assertThat(json.get("result").asObject().get("isError").asBoolean().value()).isFalse();
-        assertThat(((build.base.json.JsonArray) json.get("result").asObject().get("content"))
-            .values().get(0).asObject().getString("text")).isEqualTo("echo: world");
+        assertThat(((JsonArray) json.get("result").asObject().get("content"))
+            .values().getFirst().asObject().getString("text")).isEqualTo("echo: world");
     }
 
     @Test
@@ -201,8 +204,8 @@ class McpServerToolCallEventsTest {
         @Override
         public McpToolResult call(final JsonValue arguments) {
             final var text = arguments.asObject().members().getOrDefault("text",
-                build.base.json.JsonNull.INSTANCE);
-            final var textStr = text instanceof build.base.json.JsonString s ? s.value() : "";
+                JsonNull.INSTANCE);
+            final var textStr = text instanceof JsonString s ? s.value() : "";
             return McpToolResult.text("echo: " + textStr);
         }
     }

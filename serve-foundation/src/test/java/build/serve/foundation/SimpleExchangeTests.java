@@ -1,5 +1,6 @@
 package build.serve.foundation;
 
+import build.base.json.JsonValue;
 import build.base.network.option.Port;
 import org.junit.jupiter.api.Test;
 
@@ -99,7 +100,7 @@ class SimpleExchangeTests {
         }
 
         @Override
-        public <T> T body(Class<T> t) {
+        public JsonValue bodyAsJson() {
             throw new UnsupportedOperationException();
         }
     }

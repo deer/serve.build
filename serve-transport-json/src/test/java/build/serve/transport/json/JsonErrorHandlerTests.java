@@ -123,7 +123,7 @@ class JsonErrorHandlerTests {
         }
 
         @Override
-        public <T> T body(Class<T> type) {
+        public build.base.json.JsonValue bodyAsJson() {
             throw new UnsupportedOperationException();
         }
     }

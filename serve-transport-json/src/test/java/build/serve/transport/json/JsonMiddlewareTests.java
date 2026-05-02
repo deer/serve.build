@@ -32,7 +32,7 @@ class JsonMiddlewareTests {
         var router = RouterBuilder.create()
             .middleware(new JsonMiddleware())
             .post("/echo", exchange -> {
-                var input = exchange.bodyAs(JsonValue.class).asObject();
+                var input = exchange.bodyAsJson().asObject();
                 var text = input.getString("text").toUpperCase();
                 exchange.sendBody(JsonObject.builder().put("text", text).build());
             })
@@ -69,7 +69,7 @@ class JsonMiddlewareTests {
             .middleware(new JsonMiddleware())
             .post("/parse", exchange -> {
                 try {
-                    exchange.bodyAs(JsonValue.class);
+                    exchange.bodyAsJson();
                     exchange.response().send("ok");
                 } catch (RuntimeException e) {
                     exchange.response().status(400).send("Bad JSON");

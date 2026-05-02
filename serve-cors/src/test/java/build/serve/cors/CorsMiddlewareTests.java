@@ -254,7 +254,7 @@ class CorsMiddlewareTests {
         }
 
         @Override
-        public <T> T body(final Class<T> type) {
+        public build.base.json.JsonValue bodyAsJson() {
             throw new UnsupportedOperationException();
         }
     }

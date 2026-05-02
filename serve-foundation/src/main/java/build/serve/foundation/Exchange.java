@@ -20,10 +20,11 @@
 package build.serve.foundation;
 
 import build.base.configuration.Option;
+import build.base.json.JsonValue;
 
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.BiFunction;
+import java.util.function.Function;
 
 /**
  * Represents an HTTP exchange — a paired {@link Request} and {@link Response}.
@@ -41,9 +42,9 @@ public interface Exchange {
     String PATH_PARAMS_ATTRIBUTE = "_pathParams";
 
     /**
-     * The attribute key used to store a {@link BiFunction} that deserializes the request body.
+     * The attribute key used to store a {@link java.util.function.Function} that parses the request body.
      * <p>
-     * The function accepts a {@link Request} and a {@link Class} and returns the deserialized object.
+     * The function accepts a {@link Request} and returns a {@link build.base.json.JsonValue}.
      * Registered by transport modules such as the JSON middleware.
      */
     String BODY_READER_ATTRIBUTE = "_bodyReader";
@@ -135,25 +136,23 @@ public interface Exchange {
     }
 
     /**
-     * Deserializes the request body as the specified type using the registered body reader.
+     * Parses the request body as a {@link JsonValue} using the registered body reader.
      * <p>
      * Requires a body reader to be registered on this exchange (e.g., via the JSON middleware).
      *
-     * @param <T>  the target type
-     * @param type the {@link Class} of the target type
-     * @return the deserialized body
+     * @return the parsed {@link JsonValue}
      * @throws UnsupportedOperationException if no body reader is registered
      */
     @SuppressWarnings("unchecked")
-    default <T> T bodyAs(final Class<T> type) {
-        final var reader = attribute(BODY_READER_ATTRIBUTE, BiFunction.class);
+    default JsonValue bodyAsJson() {
+        final var reader = attribute(BODY_READER_ATTRIBUTE, Function.class);
 
         if (reader.isPresent()) {
-            return (T) reader.get().apply(request(), type);
+            return (JsonValue) reader.get().apply(request());
         }
 
         throw new UnsupportedOperationException(
-            "Body deserialization requires a transport module (e.g., serve-transport-json)");
+            "Body parsing requires a transport module (e.g., serve-transport-json)");
     }
 
     /**

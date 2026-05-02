@@ -1,5 +1,6 @@
 package build.serve.foundation.middleware;
 
+import build.base.json.JsonValue;
 import build.base.telemetry.TelemetryRecorder;
 import build.base.telemetry.foundation.PrintStreamTelemetryRecorder;
 import build.serve.foundation.Exchange;
@@ -140,7 +141,7 @@ class TelemetryMiddlewareTests {
         }
 
         @Override
-        public <T> T body(Class<T> t) {
+        public JsonValue bodyAsJson() {
             throw new UnsupportedOperationException();
         }
     }

@@ -35,7 +35,6 @@ public class JsonBodyReader {
      * Reads the request body and parses it as a {@link JsonValue}.
      *
      * @param request the {@link Request}
-     * @param type    ignored; always returns {@link JsonValue}
      * @return the parsed {@link JsonValue}
      */
     public JsonValue read(final Request request) {
