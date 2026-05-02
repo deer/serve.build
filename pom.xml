@@ -601,7 +601,9 @@
                         <configuration>
                             <publishingServerId>central</publishingServerId>
                             <autoPublish>true</autoPublish>
-                            <excludeArtifacts>serve-example</excludeArtifacts>
+                            <excludeArtifacts>
+                                <excludeArtifact>serve-example</excludeArtifact>
+                            </excludeArtifacts>
                         </configuration>
                     </plugin>
                 </plugins>
