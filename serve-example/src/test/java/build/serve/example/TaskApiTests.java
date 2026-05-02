@@ -19,8 +19,8 @@
  */
 package build.serve.example;
 
+import build.base.json.JsonObject;
 import build.serve.example.api.TaskApiHandler;
-import build.serve.example.domain.Task;
 import build.serve.example.domain.TaskService;
 import build.serve.foundation.routing.RouterBuilder;
 import build.serve.testing.TestServer;
@@ -54,27 +54,27 @@ class TaskApiTests {
     void shouldCreateTask() {
         try (final var s = server()) {
             final var response = s.post("/api/tasks")
-                .jsonBody(new CreateRequest("Buy milk"))
+                .jsonBody(JsonObject.builder().put("title", "Buy milk").build())
                 .send()
                 .assertStatus(201);
 
-            final var task = response.bodyAs(Task.class);
-            assertThat(task.title()).isEqualTo("Buy milk");
-            assertThat(task.done()).isFalse();
-            assertThat(task.id()).isGreaterThan(0);
+            final var task = response.bodyAsJson().asObject();
+            assertThat(task.getString("title")).isEqualTo("Buy milk");
+            assertThat(task.get("done").asBoolean().value()).isFalse();
+            assertThat(task.get("id").asNumber().toNumber().longValue()).isGreaterThan(0);
         }
     }
 
     @Test
     void shouldListCreatedTasks() {
         try (final var s = server()) {
-            s.post("/api/tasks").jsonBody(new CreateRequest("Task A")).send().assertStatus(201);
-            s.post("/api/tasks").jsonBody(new CreateRequest("Task B")).send().assertStatus(201);
+            s.post("/api/tasks").jsonBody(JsonObject.builder().put("title", "Task A").build()).send().assertStatus(201);
+            s.post("/api/tasks").jsonBody(JsonObject.builder().put("title", "Task B").build()).send().assertStatus(201);
 
-            final var response = s.get("/api/tasks").send().assertStatus(200);
-            final var tasks = response.bodyAs(Task[].class);
+            final var tasks = s.get("/api/tasks").send().assertStatus(200).bodyAsJson().asArray().values();
             assertThat(tasks).hasSize(2);
-            assertThat(tasks).extracting(Task::title).contains("Task A", "Task B");
+            final var titles = tasks.stream().map(t -> t.asObject().getString("title")).toList();
+            assertThat(titles).containsExactlyInAnyOrder("Task A", "Task B");
         }
     }
 
@@ -82,17 +82,18 @@ class TaskApiTests {
     void shouldToggleTask() {
         try (final var s = server()) {
             final var created = s.post("/api/tasks")
-                .jsonBody(new CreateRequest("Toggle me"))
+                .jsonBody(JsonObject.builder().put("title", "Toggle me").build())
                 .send()
-                .bodyAs(Task.class);
+                .bodyAsJson().asObject();
 
-            final var toggled = s.put("/api/tasks/" + created.id())
+            final var toggled = s.put("/api/tasks/" + created.get("id").asNumber().toNumber().longValue())
                 .send()
                 .assertStatus(200)
-                .bodyAs(Task.class);
+                .bodyAsJson().asObject();
 
-            assertThat(toggled.done()).isTrue();
-            assertThat(toggled.id()).isEqualTo(created.id());
+            assertThat(toggled.get("done").asBoolean().value()).isTrue();
+            assertThat(toggled.get("id").asNumber().toNumber().longValue())
+                .isEqualTo(created.get("id").asNumber().toNumber().longValue());
         }
     }
 
@@ -100,11 +101,11 @@ class TaskApiTests {
     void shouldDeleteTask() {
         try (final var s = server()) {
             final var created = s.post("/api/tasks")
-                .jsonBody(new CreateRequest("Delete me"))
+                .jsonBody(JsonObject.builder().put("title", "Delete me").build())
                 .send()
-                .bodyAs(Task.class);
+                .bodyAsJson().asObject();
 
-            s.delete("/api/tasks/" + created.id())
+            s.delete("/api/tasks/" + created.get("id").asNumber().toNumber().longValue())
                 .send()
                 .assertStatus(204);
 
@@ -121,8 +122,5 @@ class TaskApiTests {
             s.put("/api/tasks/999").send().assertStatus(404);
             s.delete("/api/tasks/999").send().assertStatus(404);
         }
-    }
-
-    private record CreateRequest(String title) {
     }
 }

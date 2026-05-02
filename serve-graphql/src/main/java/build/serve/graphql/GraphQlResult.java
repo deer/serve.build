@@ -19,7 +19,13 @@
  */
 package build.serve.graphql;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
+import build.base.json.JsonArray;
+import build.base.json.JsonBoolean;
+import build.base.json.JsonNull;
+import build.base.json.JsonNumber;
+import build.base.json.JsonObject;
+import build.base.json.JsonString;
+import build.base.json.JsonValue;
 
 import java.util.List;
 import java.util.Map;
@@ -34,7 +40,7 @@ import java.util.Map;
  */
 public record GraphQlResult(
     Map<String, Object> data,
-    @JsonInclude(JsonInclude.Include.NON_EMPTY) List<GraphQlError> errors
+    List<GraphQlError> errors
 ) {
 
     /**
@@ -64,5 +70,58 @@ public record GraphQlResult(
      */
     public static GraphQlResult error(final String message) {
         return new GraphQlResult(null, List.of(new GraphQlError(message, null)));
+    }
+
+    /**
+     * Serializes this result to a {@link JsonValue}.
+     *
+     * @return the JSON representation
+     */
+    public JsonValue toJson() {
+        final var builder = JsonObject.builder();
+        if (data != null) {
+            builder.put("data", objectToJson(data));
+        } else {
+            builder.putNull("data");
+        }
+        if (errors != null && !errors.isEmpty()) {
+            final var errorsArray = JsonArray.builder();
+            for (final var error : errors) {
+                errorsArray.add(error.toJson());
+            }
+            builder.put("errors", errorsArray.build());
+        }
+        return builder.build();
+    }
+
+    @SuppressWarnings("unchecked")
+    static JsonValue objectToJson(final Object obj) {
+        if (obj == null) {
+            return JsonNull.INSTANCE;
+        }
+        if (obj instanceof String s) {
+            return JsonString.of(s);
+        }
+        if (obj instanceof Boolean b) {
+            return JsonBoolean.of(b);
+        }
+        if (obj instanceof Number n) {
+            return JsonNumber.of(n);
+        }
+        if (obj instanceof Map<?, ?> m) {
+            final var b = JsonObject.builder();
+            for (final var entry : m.entrySet()) {
+                b.put(entry.getKey().toString(), objectToJson(entry.getValue()));
+            }
+            return b.build();
+        }
+        if (obj instanceof List<?> l) {
+            final var b = JsonArray.builder();
+            for (final var item : l) {
+                b.add(objectToJson(item));
+            }
+            return b.build();
+        }
+        return JsonString.of(obj.toString());
     }
 }

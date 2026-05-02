@@ -19,10 +19,9 @@
  */
 package build.serve.testing;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import build.base.json.Json;
+import build.base.json.JsonValue;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
@@ -35,8 +34,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @since Mar-2026
  */
 public final class TestResponse {
-
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final int status;
     private final byte[] body;
@@ -81,18 +78,12 @@ public final class TestResponse {
     }
 
     /**
-     * Deserializes the response body as the given type using Jackson.
+     * Parses the response body as a JSON value.
      *
-     * @param type the target type
-     * @param <T>  the target type
-     * @return the deserialized object
+     * @return the parsed JSON value
      */
-    public <T> T bodyAs(final Class<T> type) {
-        try {
-            return MAPPER.readValue(body, type);
-        } catch (final IOException e) {
-            throw new UncheckedIOException(e);
-        }
+    public JsonValue bodyAsJson() {
+        return Json.parse(new String(body, StandardCharsets.UTF_8));
     }
 
     /**

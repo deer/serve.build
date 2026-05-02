@@ -19,6 +19,17 @@
  */
 package build.serve.graphql;
 
+import build.base.json.JsonArray;
+import build.base.json.JsonBoolean;
+import build.base.json.JsonNull;
+import build.base.json.JsonNumber;
+import build.base.json.JsonObject;
+import build.base.json.JsonString;
+import build.base.json.JsonValue;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -35,4 +46,46 @@ public record GraphQlRequest(
     String operationName,
     Map<String, Object> variables
 ) {
+
+    /**
+     * Parses a {@link GraphQlRequest} from a {@link JsonObject}.
+     *
+     * @param obj the JSON object
+     * @return the parsed request
+     */
+    public static GraphQlRequest fromJson(final JsonObject obj) {
+        final var query = obj.getString("query");
+        final String operationName = obj.has("operationName") ? obj.getString("operationName") : null;
+        final Map<String, Object> variables = obj.has("variables")
+            ? jsonObjectToMap(obj.get("variables").asObject())
+            : null;
+        return new GraphQlRequest(query, operationName, variables);
+    }
+
+    private static Map<String, Object> jsonObjectToMap(final JsonObject obj) {
+        final var map = new LinkedHashMap<String, Object>();
+        for (final var entry : obj.members().entrySet()) {
+            map.put(entry.getKey(), jsonValueToObject(entry.getValue()));
+        }
+        return map;
+    }
+
+    private static Object jsonValueToObject(final JsonValue value) {
+        return switch (value) {
+            case JsonString s -> s.value();
+            case JsonNumber n -> n.toNumber();
+            case JsonBoolean b -> b.value();
+            case JsonNull ignored -> null;
+            case JsonObject o -> jsonObjectToMap(o);
+            case JsonArray a -> jsonArrayToList(a);
+        };
+    }
+
+    private static List<Object> jsonArrayToList(final JsonArray arr) {
+        final var list = new ArrayList<Object>();
+        for (final var item : arr.values()) {
+            list.add(jsonValueToObject(item));
+        }
+        return list;
+    }
 }

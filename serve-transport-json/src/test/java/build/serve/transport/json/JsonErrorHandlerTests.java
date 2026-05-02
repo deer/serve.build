@@ -1,12 +1,12 @@
 package build.serve.transport.json;
 
+import build.base.json.Json;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.Request;
 import build.serve.foundation.Response;
 import build.serve.foundation.SimpleExchange;
 import build.serve.foundation.error.BadRequestException;
 import build.serve.foundation.error.NotFoundException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
@@ -21,10 +21,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class JsonErrorHandlerTests {
 
-    private final JsonErrorHandler handler = new JsonErrorHandler(new ObjectMapper());
+    private final JsonErrorHandler handler = new JsonErrorHandler();
 
     @Test
-    void httpExceptionReturnsJsonResponse() throws Exception {
+    void shouldReturnJsonResponseForHttpException() throws Exception {
         var response = new StubResponse();
         var exchange = exchangeWith(response);
 
@@ -33,16 +33,14 @@ class JsonErrorHandlerTests {
         assertThat(response.statusCode).isEqualTo(404);
         assertThat(response.headers.get("Content-Type")).isEqualTo("application/json");
 
-        var mapper = new ObjectMapper();
-        var json = mapper.readTree(response.body);
-
-        assertThat(json.get("status").asInt()).isEqualTo(404);
-        assertThat(json.get("error").asText()).isEqualTo("Not Found");
-        assertThat(json.get("message").asText()).isEqualTo("User 42 not found");
+        var json = Json.parse(response.body).asObject();
+        assertThat(json.get("status").asNumber().toNumber().intValue()).isEqualTo(404);
+        assertThat(json.getString("error")).isEqualTo("Not Found");
+        assertThat(json.getString("message")).isEqualTo("User 42 not found");
     }
 
     @Test
-    void badRequestReturnsJsonResponse() throws Exception {
+    void shouldReturnBadRequestJson() throws Exception {
         var response = new StubResponse();
         var exchange = exchangeWith(response);
 
@@ -50,14 +48,13 @@ class JsonErrorHandlerTests {
 
         assertThat(response.statusCode).isEqualTo(400);
 
-        var json = new ObjectMapper().readTree(response.body);
-
-        assertThat(json.get("status").asInt()).isEqualTo(400);
-        assertThat(json.get("error").asText()).isEqualTo("Bad Request");
+        var json = Json.parse(response.body).asObject();
+        assertThat(json.get("status").asNumber().toNumber().intValue()).isEqualTo(400);
+        assertThat(json.getString("error")).isEqualTo("Bad Request");
     }
 
     @Test
-    void genericExceptionReturns500Json() throws Exception {
+    void shouldReturn500JsonForGenericException() throws Exception {
         var response = new StubResponse();
         var exchange = exchangeWith(response);
 
@@ -65,10 +62,9 @@ class JsonErrorHandlerTests {
 
         assertThat(response.statusCode).isEqualTo(500);
 
-        var json = new ObjectMapper().readTree(response.body);
-
-        assertThat(json.get("status").asInt()).isEqualTo(500);
-        assertThat(json.get("message").asText()).isEqualTo("Internal Server Error");
+        var json = Json.parse(response.body).asObject();
+        assertThat(json.get("status").asNumber().toNumber().intValue()).isEqualTo(500);
+        assertThat(json.getString("message")).isEqualTo("Internal Server Error");
     }
 
     private static Exchange exchangeWith(final Response response) {

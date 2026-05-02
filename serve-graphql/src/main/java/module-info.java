@@ -25,7 +25,7 @@
  */
 module build.serve.graphql {
     requires transitive build.serve.foundation;
-    requires com.fasterxml.jackson.databind;
+    requires build.base.json;
     requires com.graphqljava;
 
     exports build.serve.graphql;

@@ -21,12 +21,16 @@ package build.serve.mcp;
 
 import build.base.flow.Publisher;
 import build.base.flow.SubscriberRegistry;
+import build.base.json.Json;
+import build.base.json.JsonArray;
+import build.base.json.JsonNull;
+import build.base.json.JsonNumber;
+import build.base.json.JsonObject;
+import build.base.json.JsonString;
+import build.base.json.JsonValue;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.Handler;
 import build.serve.sse.SseEvent;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -53,13 +57,11 @@ public final class McpServer {
 
     private final McpServerInfo info;
     private final Map<String, McpTool> tools;
-    private final ObjectMapper mapper;
     private final SubscriberRegistry<ToolCallEvent> toolCallEvents = new SubscriberRegistry<>();
     private final Set<String> sessions = ConcurrentHashMap.newKeySet();
 
     private McpServer(final Builder builder) {
         this.info = new McpServerInfo(builder.name, builder.version);
-        this.mapper = new ObjectMapper();
 
         final var toolMap = new LinkedHashMap<String, McpTool>();
         for (final var tool : builder.tools) {
@@ -93,40 +95,36 @@ public final class McpServer {
             }
 
             final var body = exchange.request().bodyAsString();
-            final var request = mapper.readTree(body);
+            final var request = Json.parse(body).asObject();
 
-            final var rpcMethod = request.path("method").asText("");
-            final var id = request.get("id");
+            final var rpcMethod = getString(request, "method");
+            final var id = request.members().get("id");
 
             // Notification (no id) — respond 202
-            if (id == null || id.isNull()) {
+            if (id == null || id instanceof JsonNull) {
                 exchange.response().status(202).send("");
                 return;
             }
 
-            final var result = switch (rpcMethod) {
-                case "initialize" -> handleInitialize();
-                case "ping" -> handlePing();
-                case "tools/list" -> handleToolsList();
-                case "tools/call" -> handleToolsCall(request.path("params"), sessionId.orElse("local"));
-                default -> errorResponse(-32601, "Method not found");
+            final var isInitialize = "initialize".equals(rpcMethod);
+            final var responseJson = switch (rpcMethod) {
+                case "initialize" -> envelope(id, handleInitialize());
+                case "ping" -> envelope(id, JsonObject.builder().build());
+                case "tools/list" -> envelope(id, handleToolsList());
+                case "tools/call" -> {
+                    final var params = request.members().getOrDefault("params", JsonNull.INSTANCE);
+                    yield handleToolsCall(params, sessionId.orElse("local"), id);
+                }
+                default -> errorEnvelope(id, -32601, "Method not found");
             };
 
-            result.put("jsonrpc", "2.0");
-
-            if (id.isNumber()) {
-                result.put("id", id.asInt());
-            } else {
-                result.put("id", id.asText());
-            }
-
-            if ("initialize".equals(rpcMethod)) {
+            if (isInitialize) {
                 final var newSessionId = UUID.randomUUID().toString();
                 sessions.add(newSessionId);
                 exchange.response().header("Mcp-Session-Id", newSessionId);
             }
 
-            final var jsonString = mapper.writeValueAsString(result);
+            final var jsonString = responseJson.toJsonString();
 
             if (acceptsSse(exchange)) {
                 final var sseBody = SseEvent.of("message", jsonString).serialize()
@@ -163,59 +161,46 @@ public final class McpServer {
         return toolCallEvents;
     }
 
-    private ObjectNode handlePing() {
-        final var result = mapper.createObjectNode();
-        result.set("result", mapper.createObjectNode());
-        return result;
+    private JsonObject handleInitialize() {
+        final var capabilities = JsonObject.builder()
+            .put("tools", JsonObject.builder().put("listChanged", false).build())
+            .build();
+
+        final var serverInfo = JsonObject.builder()
+            .put("name", info.name())
+            .put("version", info.version())
+            .build();
+
+        return JsonObject.builder()
+            .put("protocolVersion", "2025-03-26")
+            .put("capabilities", capabilities)
+            .put("serverInfo", serverInfo)
+            .build();
     }
 
-    private ObjectNode handleInitialize() {
-        final var result = mapper.createObjectNode();
-
-        final var resultObj = mapper.createObjectNode();
-        resultObj.put("protocolVersion", "2025-03-26");
-
-        final var capabilities = mapper.createObjectNode();
-        final var toolsCap = mapper.createObjectNode();
-        toolsCap.put("listChanged", false);
-        capabilities.set("tools", toolsCap);
-        resultObj.set("capabilities", capabilities);
-
-        final var serverInfo = mapper.createObjectNode();
-        serverInfo.put("name", info.name());
-        serverInfo.put("version", info.version());
-        resultObj.set("serverInfo", serverInfo);
-
-        result.set("result", resultObj);
-        return result;
-    }
-
-    private ObjectNode handleToolsList() {
-        final var result = mapper.createObjectNode();
-        final var resultObj = mapper.createObjectNode();
-
-        final var toolsArray = mapper.createArrayNode();
+    private JsonObject handleToolsList() {
+        final var toolsArray = JsonArray.builder();
         for (final var tool : tools.values()) {
-            final var toolNode = mapper.createObjectNode();
-            toolNode.put("name", tool.name());
-            toolNode.put("description", tool.description());
-            toolNode.set("inputSchema", tool.inputSchema());
-            toolsArray.add(toolNode);
+            toolsArray.add(JsonObject.builder()
+                .put("name", tool.name())
+                .put("description", tool.description())
+                .put("inputSchema", tool.inputSchema())
+                .build());
         }
-        resultObj.set("tools", toolsArray);
 
-        result.set("result", resultObj);
-        return result;
+        return JsonObject.builder()
+            .put("tools", toolsArray.build())
+            .build();
     }
 
-    private ObjectNode handleToolsCall(final JsonNode params, final String sessionId) {
-        final var toolName = params.path("name").asText("");
-        final var arguments = params.path("arguments");
+    private JsonObject handleToolsCall(final JsonValue params, final String sessionId, final JsonValue id) {
+        final var paramsObj = params instanceof JsonObject p ? p : JsonObject.builder().build();
+        final var toolName = getString(paramsObj, "name");
+        final var arguments = paramsObj.members().getOrDefault("arguments", JsonNull.INSTANCE);
 
         final var tool = tools.get(toolName);
         if (tool == null) {
-            // Unknown-tool lookups do not publish events — no tool invocation occurred.
-            return errorResponse(-32602, "Unknown tool: " + toolName);
+            return errorEnvelope(id, -32602, "Unknown tool: " + toolName);
         }
 
         final var start = System.currentTimeMillis();
@@ -223,57 +208,76 @@ public final class McpServer {
             final var toolResult = ScopedValue.where(SESSION_ID, sessionId).call(() -> tool.call(arguments));
             final var duration = System.currentTimeMillis() - start;
             toolCallEvents.publish(ToolCallEvent.success(sessionId, toolName, arguments, toolResult, duration));
-            return buildToolResult(toolResult);
+            return envelope(id, buildToolResultJson(toolResult));
         } catch (final Exception e) {
             final var duration = System.currentTimeMillis() - start;
             toolCallEvents.publish(ToolCallEvent.failure(sessionId, toolName, arguments, e, duration));
-            return buildToolResult(McpToolResult.error(e.getMessage()));
+            return envelope(id, buildToolResultJson(McpToolResult.error(e.getMessage())));
         }
     }
 
-    private ObjectNode buildToolResult(final McpToolResult toolResult) {
-        final var result = mapper.createObjectNode();
-        final var resultObj = mapper.createObjectNode();
-
-        final var contentArray = mapper.createArrayNode();
+    private static JsonObject buildToolResultJson(final McpToolResult toolResult) {
+        final var contentArray = JsonArray.builder();
         for (final var content : toolResult.content()) {
-            final var contentNode = mapper.createObjectNode();
-            switch (content) {
-                case McpContent.Text text -> {
-                    contentNode.put("type", "text");
-                    contentNode.put("text", text.text());
-                }
-                case McpContent.Image image -> {
-                    contentNode.put("type", "image");
-                    contentNode.put("data", image.data());
-                    contentNode.put("mimeType", image.mimeType());
-                }
-                case McpContent.Resource resource -> {
-                    contentNode.put("type", "resource");
-                    final var resourceNode = mapper.createObjectNode();
-                    resourceNode.put("uri", resource.uri());
-                    resourceNode.put("mimeType", resource.mimeType());
-                    resourceNode.put("blob", resource.blob());
-                    contentNode.set("resource", resourceNode);
-                }
-            }
+            final var contentNode = switch (content) {
+                case McpContent.Text text -> JsonObject.builder()
+                    .put("type", "text")
+                    .put("text", text.text())
+                    .build();
+                case McpContent.Image image -> JsonObject.builder()
+                    .put("type", "image")
+                    .put("data", image.data())
+                    .put("mimeType", image.mimeType())
+                    .build();
+                case McpContent.Resource resource -> JsonObject.builder()
+                    .put("type", "resource")
+                    .put("resource", JsonObject.builder()
+                        .put("uri", resource.uri())
+                        .put("mimeType", resource.mimeType())
+                        .put("blob", resource.blob())
+                        .build())
+                    .build();
+            };
             contentArray.add(contentNode);
         }
-        resultObj.set("content", contentArray);
-        resultObj.put("isError", toolResult.isError());
 
-        result.set("result", resultObj);
-        return result;
+        return JsonObject.builder()
+            .put("content", contentArray.build())
+            .put("isError", toolResult.isError())
+            .build();
     }
 
-    private ObjectNode errorResponse(final int code,
-                                     final String message) {
-        final var result = mapper.createObjectNode();
-        final var error = mapper.createObjectNode();
-        error.put("code", code);
-        error.put("message", message);
-        result.set("error", error);
-        return result;
+    private static JsonObject envelope(final JsonValue id, final JsonValue result) {
+        final var builder = JsonObject.builder().put("jsonrpc", "2.0");
+        addId(builder, id);
+        builder.put("result", result);
+        return builder.build();
+    }
+
+    private static JsonObject errorEnvelope(final JsonValue id, final int code, final String message) {
+        final var error = JsonObject.builder()
+            .put("code", code)
+            .put("message", message)
+            .build();
+        final var builder = JsonObject.builder().put("jsonrpc", "2.0");
+        addId(builder, id);
+        builder.put("error", error);
+        return builder.build();
+    }
+
+    private static void addId(final JsonObject.Builder builder, final JsonValue id) {
+        if (id instanceof JsonNumber n) {
+            builder.put("id", n.toNumber());
+        } else if (id instanceof JsonString s) {
+            builder.put("id", s.value());
+        } else {
+            builder.put("id", JsonNull.INSTANCE);
+        }
+    }
+
+    private static String getString(final JsonObject obj, final String key) {
+        final var val = obj.members().get(key);
+        return val instanceof JsonString s ? s.value() : "";
     }
 
     /**

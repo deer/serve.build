@@ -19,6 +19,10 @@
  */
 package build.serve.graphql;
 
+import build.base.json.JsonArray;
+import build.base.json.JsonObject;
+import build.base.json.JsonValue;
+
 import java.util.List;
 
 /**
@@ -33,4 +37,18 @@ public record GraphQlError(
     String message,
     List<String> path
 ) {
+
+    /**
+     * Serializes this error to a {@link JsonValue}.
+     *
+     * @return the JSON representation
+     */
+    public JsonValue toJson() {
+        final var builder = JsonObject.builder()
+            .put("message", message);
+        if (path != null && !path.isEmpty()) {
+            builder.put("path", JsonArray.builder().addAll(path).build());
+        }
+        return builder.build();
+    }
 }

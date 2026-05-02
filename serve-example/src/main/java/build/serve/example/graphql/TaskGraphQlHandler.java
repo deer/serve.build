@@ -54,12 +54,12 @@ public final class TaskGraphQlHandler {
             title: String!
             done: Boolean!
         }
-
+        
         type Query {
             tasks: [Task!]!
             task(id: ID!): Task
         }
-
+        
         type Mutation {
             createTask(title: String!): Task!
             toggleTask(id: ID!): Task

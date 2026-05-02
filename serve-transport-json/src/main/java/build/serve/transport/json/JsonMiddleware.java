@@ -24,29 +24,20 @@ import build.serve.foundation.Handler;
 import build.serve.foundation.Request;
 import build.serve.foundation.Response;
 import build.serve.foundation.middleware.Middleware;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
+import java.util.function.Function;
 
 /**
  * A {@link Middleware} that registers JSON body reading and writing capabilities on each
- * {@link Exchange}, enabling deserialization of request bodies and serialization of response bodies
- * via {@link Exchange#bodyAs(Class)} and {@link Exchange#sendBody(Object)}.
- * <p>
- * Also registers the {@link ObjectMapper}, {@link JsonBodyReader}, and {@link JsonBodyWriter} as named
- * attributes for direct access by handlers that need lower-level control.
+ * {@link Exchange}, enabling parsing of request bodies and serialization of {@link build.base.json.JsonValue}
+ * response bodies via {@link Exchange#bodyAs(Class)} and {@link Exchange#sendBody(Object)}.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
  */
 public class JsonMiddleware
     implements Middleware {
-
-    /**
-     * The attribute key used to store the {@link ObjectMapper} on the exchange.
-     */
-    public static final String OBJECT_MAPPER_ATTRIBUTE = "json.objectMapper";
 
     /**
      * The attribute key used to store the {@link JsonBodyReader} on the exchange.
@@ -58,60 +49,16 @@ public class JsonMiddleware
      */
     public static final String JSON_BODY_WRITER_ATTRIBUTE = "json.bodyWriter";
 
-    /**
-     * The Jackson {@link ObjectMapper}.
-     */
-    private final ObjectMapper objectMapper;
-
-    /**
-     * The {@link JsonBodyReader}.
-     */
-    private final JsonBodyReader bodyReader;
-
-    /**
-     * The {@link JsonBodyWriter}.
-     */
-    private final JsonBodyWriter bodyWriter;
-
-    /**
-     * The body reader function for {@link Exchange#bodyAs(Class)}.
-     */
-    private final BiFunction<Request, Class<?>, Object> readerFunction;
-
-    /**
-     * The body writer consumer for {@link Exchange#sendBody(Object)}.
-     */
-    private final BiConsumer<Response, Object> writerConsumer;
-
-    /**
-     * Constructs a {@link JsonMiddleware} with the specified {@link ObjectMapper}.
-     *
-     * @param objectMapper the {@link ObjectMapper}
-     */
-    public JsonMiddleware(final ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
-        this.bodyReader = new JsonBodyReader(objectMapper);
-        this.bodyWriter = new JsonBodyWriter(objectMapper);
-        this.readerFunction = bodyReader::read;
-        this.writerConsumer = bodyWriter::write;
-    }
-
-    /**
-     * Constructs a {@link JsonMiddleware} with a default {@link ObjectMapper}.
-     */
-    public JsonMiddleware() {
-        this(new ObjectMapper());
-    }
+    private final JsonBodyReader bodyReader = new JsonBodyReader();
+    private final JsonBodyWriter bodyWriter = new JsonBodyWriter();
+    private final Function<Request, Object> readerFunction = bodyReader::read;
+    private final BiConsumer<Response, Object> writerConsumer = bodyWriter::write;
 
     @Override
     public Handler apply(final Handler next) {
         return exchange -> {
-            // Register the ObjectMapper and typed reader/writer for direct access
-            exchange.attribute(OBJECT_MAPPER_ATTRIBUTE, objectMapper);
             exchange.attribute(JSON_BODY_READER_ATTRIBUTE, bodyReader);
             exchange.attribute(JSON_BODY_WRITER_ATTRIBUTE, bodyWriter);
-
-            // Register functional wrappers for Exchange convenience methods
             exchange.attribute(Exchange.BODY_READER_ATTRIBUTE, readerFunction);
             exchange.attribute(Exchange.BODY_WRITER_ATTRIBUTE, writerConsumer);
 

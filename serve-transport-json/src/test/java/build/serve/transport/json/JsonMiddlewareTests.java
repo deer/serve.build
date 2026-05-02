@@ -1,5 +1,7 @@
 package build.serve.transport.json;
 
+import build.base.json.JsonObject;
+import build.base.json.JsonValue;
 import build.serve.foundation.Handler;
 import build.serve.foundation.routing.RouterBuilder;
 import build.serve.transport.http.HttpTransport;
@@ -26,12 +28,13 @@ class JsonMiddlewareTests {
     }
 
     @Test
-    void postJsonBodyAndRespondWithJson() throws Exception {
+    void shouldPostJsonBodyAndRespondWithJson() throws Exception {
         var router = RouterBuilder.create()
             .middleware(new JsonMiddleware())
             .post("/echo", exchange -> {
-                var input = exchange.bodyAs(TestMessage.class);
-                exchange.sendBody(new TestMessage(input.text().toUpperCase()));
+                var input = exchange.bodyAs(JsonValue.class).asObject();
+                var text = input.getString("text").toUpperCase();
+                exchange.sendBody(JsonObject.builder().put("text", text).build());
             })
             .build();
 
@@ -47,10 +50,10 @@ class JsonMiddlewareTests {
     }
 
     @Test
-    void contentTypeSetToApplicationJson() throws Exception {
+    void shouldSetContentTypeToApplicationJson() throws Exception {
         var router = RouterBuilder.create()
             .middleware(new JsonMiddleware())
-            .get("/json", exchange -> exchange.sendBody(new TestMessage("hi")))
+            .get("/json", exchange -> exchange.sendBody(JsonObject.builder().put("text", "hi").build()))
             .build();
 
         startWith(router);
@@ -61,12 +64,12 @@ class JsonMiddlewareTests {
     }
 
     @Test
-    void invalidJsonReturnsError() throws Exception {
+    void shouldReturn400ForInvalidJson() throws Exception {
         var router = RouterBuilder.create()
             .middleware(new JsonMiddleware())
             .post("/parse", exchange -> {
                 try {
-                    exchange.bodyAs(TestMessage.class);
+                    exchange.bodyAs(JsonValue.class);
                     exchange.response().send("ok");
                 } catch (RuntimeException e) {
                     exchange.response().status(400).send("Bad JSON");
@@ -83,29 +86,6 @@ class JsonMiddlewareTests {
     }
 
     // --- Helpers ---
-
-    public static class TestMessage {
-        private String text;
-
-        public TestMessage() {
-        }
-
-        public TestMessage(String text) {
-            this.text = text;
-        }
-
-        public String text() {
-            return text;
-        }
-
-        public String getText() {
-            return text;
-        }
-
-        public void setText(String text) {
-            this.text = text;
-        }
-    }
 
     private void startWith(Handler handler) throws Exception {
         transport = new HttpTransport(new InetSocketAddress("127.0.0.1", 0), 0, handler);

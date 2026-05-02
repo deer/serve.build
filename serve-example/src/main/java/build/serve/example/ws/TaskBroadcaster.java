@@ -19,16 +19,15 @@
  */
 package build.serve.example.ws;
 
+import build.base.json.JsonObject;
+import build.serve.example.domain.Task;
 import build.serve.example.domain.TaskService;
 import build.serve.foundation.Handler;
 import build.serve.websocket.WebSocket;
 import build.serve.websocket.WebSocketUpgrade;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -44,7 +43,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public final class TaskBroadcaster {
 
     private final CopyOnWriteArrayList<WebSocket> sessions = new CopyOnWriteArrayList<>();
-    private final ObjectMapper mapper = new ObjectMapper();
 
     /**
      * Constructs a {@link TaskBroadcaster} that listens for events from the given service.
@@ -54,12 +52,11 @@ public final class TaskBroadcaster {
             if (sessions.isEmpty()) {
                 return;
             }
-            final String json;
-            try {
-                json = mapper.writeValueAsString(Map.of("event", event.type(), "task", event.task()));
-            } catch (final JsonProcessingException e) {
-                return;
-            }
+            final var json = JsonObject.builder()
+                .put("event", event.type())
+                .put("task", taskToJson(event.task()))
+                .build()
+                .toJsonString();
             final List<WebSocket> dead = new ArrayList<>();
             for (final var ws : sessions) {
                 if (!ws.isOpen()) {
@@ -85,5 +82,13 @@ public final class TaskBroadcaster {
             sessions.add(ws);
             ws.onClose(() -> sessions.remove(ws));
         });
+    }
+
+    private static JsonObject taskToJson(final Task task) {
+        return JsonObject.builder()
+            .put("id", task.id())
+            .put("title", task.title())
+            .put("done", task.done())
+            .build();
     }
 }

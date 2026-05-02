@@ -19,8 +19,8 @@
  */
 package build.serve.mcp;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import build.base.json.JsonObject;
+import build.base.json.JsonValue;
 
 /**
  * A tool that can be invoked via the MCP protocol.
@@ -47,16 +47,16 @@ public interface McpTool {
     /**
      * Returns the JSON Schema describing the input parameters for this tool.
      *
-     * @return the input schema as a Jackson {@link ObjectNode}
+     * @return the input schema as a {@link JsonObject}
      */
-    ObjectNode inputSchema();
+    JsonObject inputSchema();
 
     /**
      * Invokes this tool with the specified arguments.
      *
-     * @param arguments the input arguments as a Jackson {@link JsonNode}
+     * @param arguments the input arguments as a {@link JsonValue}
      * @return the tool result
      * @throws Exception if an error occurs during invocation
      */
-    McpToolResult call(JsonNode arguments) throws Exception;
+    McpToolResult call(JsonValue arguments) throws Exception;
 }

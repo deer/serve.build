@@ -19,8 +19,7 @@
  */
 package build.serve.testing;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import build.base.json.JsonValue;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -38,8 +37,6 @@ import java.util.Map;
  * @since Mar-2026
  */
 public final class TestRequest {
-
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final URI baseUri;
     private final String method;
@@ -88,17 +85,13 @@ public final class TestRequest {
     }
 
     /**
-     * Serializes the given object as JSON and sets it as the request body.
+     * Serializes the given {@link JsonValue} as JSON and sets it as the request body.
      *
-     * @param body the object to serialize
+     * @param body the JSON value to serialize
      * @return this request
      */
-    public TestRequest jsonBody(final Object body) {
-        try {
-            this.body = MAPPER.writeValueAsBytes(body);
-        } catch (final JsonProcessingException e) {
-            throw new UncheckedIOException(e);
-        }
+    public TestRequest jsonBody(final JsonValue body) {
+        this.body = body.toJsonString().getBytes(StandardCharsets.UTF_8);
         return contentType("application/json");
     }
 

@@ -19,14 +19,12 @@
  */
 package build.serve.transport.json;
 
+import build.base.json.Json;
+import build.base.json.JsonValue;
 import build.serve.foundation.Request;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import java.io.IOException;
-import java.util.Objects;
 
 /**
- * Reads and deserializes JSON request bodies using Jackson {@link ObjectMapper}.
+ * Reads and parses JSON request bodies using {@link Json}.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
@@ -34,40 +32,13 @@ import java.util.Objects;
 public class JsonBodyReader {
 
     /**
-     * The Jackson {@link ObjectMapper}.
-     */
-    private final ObjectMapper objectMapper;
-
-    /**
-     * Constructs a {@link JsonBodyReader} with the specified {@link ObjectMapper}.
+     * Reads the request body and parses it as a {@link JsonValue}.
      *
-     * @param objectMapper the {@link ObjectMapper} to use for deserialization
-     */
-    public JsonBodyReader(final ObjectMapper objectMapper) {
-        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
-    }
-
-    /**
-     * Constructs a {@link JsonBodyReader} with a default {@link ObjectMapper}.
-     */
-    public JsonBodyReader() {
-        this(new ObjectMapper());
-    }
-
-    /**
-     * Reads the request body as the specified type.
-     *
-     * @param <T>     the target type
      * @param request the {@link Request}
-     * @param type    the {@link Class} of the target type
-     * @return the deserialized object
+     * @param type    ignored; always returns {@link JsonValue}
+     * @return the parsed {@link JsonValue}
      */
-    public <T> T read(final Request request,
-                      final Class<T> type) {
-        try {
-            return objectMapper.readValue(request.bodyAsStream(), type);
-        } catch (final IOException e) {
-            throw new RuntimeException("Failed to deserialize JSON request body to " + type.getName(), e);
-        }
+    public JsonValue read(final Request request) {
+        return Json.parse(request.bodyAsString());
     }
 }

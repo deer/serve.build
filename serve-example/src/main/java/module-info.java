@@ -42,13 +42,10 @@ module build.serve.example {
     requires build.serve.form;
     requires build.base.network;
     requires build.base.template;
-    requires com.fasterxml.jackson.databind;
+    requires build.base.json;
     requires java.net.http;
 
     requires static build.base.template.processor;
 
-    opens build.serve.example to com.fasterxml.jackson.databind;
-    opens build.serve.example.api to com.fasterxml.jackson.databind;
-    opens build.serve.example.domain to com.fasterxml.jackson.databind, com.graphqljava;
-    opens build.serve.example.graphql to com.fasterxml.jackson.databind;
+    opens build.serve.example.domain to com.graphqljava;
 }

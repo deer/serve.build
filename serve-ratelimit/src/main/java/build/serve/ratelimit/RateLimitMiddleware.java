@@ -56,8 +56,8 @@ public final class RateLimitMiddleware implements Middleware {
         this.keyExtractor = builder.keyExtractor != null
             ? builder.keyExtractor
             : req -> req.header("X-Forwarded-For")
-                .map(v -> v.split(",")[0].trim())
-                .orElse("unknown");
+                     .map(v -> v.split(",")[0].trim())
+                     .orElse("unknown");
         this.clock = builder.clock != null ? builder.clock : Clock.systemUTC();
     }
 

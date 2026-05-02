@@ -19,9 +19,10 @@
  */
 package build.serve.graphql;
 
+import build.base.json.Json;
+import build.base.json.JsonArray;
 import build.serve.foundation.routing.RouterBuilder;
 import build.serve.testing.TestServer;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,8 +38,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @since Mar-2026
  */
 class GraphQlHandlerTests {
-
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private TestServer server;
 
@@ -77,69 +76,70 @@ class GraphQlHandlerTests {
     }
 
     @Test
-    void simpleQueryTest() throws Exception {
+    void shouldExecuteSimpleQuery() throws Exception {
         final var response = server.post("/graphql")
             .header("Content-Type", "application/json")
             .body("{\"query\":\"{ hello }\"}")
             .send()
             .assertStatus(200);
 
-        final var json = MAPPER.readTree(response.body());
-        assertThat(json.path("data").path("hello").asText()).isEqualTo("Hello, World!");
-        assertThat(json.path("errors").isMissingNode()).isTrue();
+        final var json = Json.parse(response.body()).asObject();
+        assertThat(json.get("data").asObject().getString("hello")).isEqualTo("Hello, World!");
+        assertThat(json.has("errors")).isFalse();
     }
 
     @Test
-    void queryWithArgTest() throws Exception {
+    void shouldExecuteQueryWithArgument() throws Exception {
         final var response = server.post("/graphql")
             .header("Content-Type", "application/json")
             .body("{\"query\":\"{ hello(name: \\\"Reed\\\") }\"}")
             .send()
             .assertStatus(200);
 
-        final var json = MAPPER.readTree(response.body());
-        assertThat(json.path("data").path("hello").asText()).isEqualTo("Hello, Reed!");
+        final var json = Json.parse(response.body()).asObject();
+        assertThat(json.get("data").asObject().getString("hello")).isEqualTo("Hello, Reed!");
     }
 
     @Test
-    void nestedTypeTest() throws Exception {
+    void shouldResolveNestedType() throws Exception {
         final var response = server.post("/graphql")
             .header("Content-Type", "application/json")
             .body("{\"query\":\"{ user(id: \\\"42\\\") { id name } }\"}")
             .send()
             .assertStatus(200);
 
-        final var json = MAPPER.readTree(response.body());
-        assertThat(json.path("data").path("user").path("id").asText()).isEqualTo("42");
-        assertThat(json.path("data").path("user").path("name").asText()).isEqualTo("User 42");
+        final var json = Json.parse(response.body()).asObject();
+        final var user = json.get("data").asObject().get("user").asObject();
+        assertThat(user.getString("id")).isEqualTo("42");
+        assertThat(user.getString("name")).isEqualTo("User 42");
     }
 
     @Test
-    void introspectionTest() throws Exception {
+    void shouldAllowIntrospectionByDefault() throws Exception {
         final var response = server.post("/graphql")
             .header("Content-Type", "application/json")
             .body("{\"query\":\"{ __typename }\"}")
             .send()
             .assertStatus(200);
 
-        final var json = MAPPER.readTree(response.body());
-        assertThat(json.path("data").path("__typename").asText()).isEqualTo("Query");
+        final var json = Json.parse(response.body()).asObject();
+        assertThat(json.get("data").asObject().getString("__typename")).isEqualTo("Query");
     }
 
     @Test
-    void invalidQueryTest() throws Exception {
+    void shouldReturnErrorsForInvalidQuery() throws Exception {
         final var response = server.post("/graphql")
             .header("Content-Type", "application/json")
             .body("{\"query\":\"{ invalid syntax !!!\"}")
             .send()
             .assertStatus(200);
 
-        final var json = MAPPER.readTree(response.body());
-        assertThat(json.path("errors")).isNotEmpty();
+        final var json = Json.parse(response.body()).asObject();
+        assertThat(((JsonArray) json.get("errors")).values()).isNotEmpty();
     }
 
     @Test
-    void introspectionBlockedWhenDisabled() throws Exception {
+    void shouldBlockIntrospectionWhenDisabled() throws Exception {
         var schema = GraphQlSchema.builder("""
                 type Query { hello: String }
                 """)
@@ -147,7 +147,7 @@ class GraphQlHandlerTests {
             .build();
 
         var restrictedServer = TestServer.of(
-            build.serve.foundation.routing.RouterBuilder.create()
+            RouterBuilder.create()
                 .post("/graphql", GraphQlHandler.graphql(schema,
                     GraphQlOptions.builder().disableIntrospection().build()))
                 .build());
@@ -159,8 +159,8 @@ class GraphQlHandlerTests {
                 .send();
 
             assertThat(response.status()).isEqualTo(400);
-            var json = MAPPER.readTree(response.body());
-            assertThat(json.path("errors").get(0).path("message").asText())
+            var json = Json.parse(response.body()).asObject();
+            assertThat(((JsonArray) json.get("errors")).values().get(0).asObject().getString("message"))
                 .isEqualTo("Introspection is not allowed");
         } finally {
             restrictedServer.close();
@@ -168,20 +168,20 @@ class GraphQlHandlerTests {
     }
 
     @Test
-    void introspectionAllowedByDefault() throws Exception {
+    void shouldAllowFullIntrospectionByDefault() throws Exception {
         var response = server.post("/graphql")
             .header("Content-Type", "application/json")
             .body("{\"query\":\"{ __schema { queryType { name } } }\"}")
             .send()
             .assertStatus(200);
 
-        var json = MAPPER.readTree(response.body());
-        assertThat(json.path("data").path("__schema").path("queryType").path("name").asText())
+        var json = Json.parse(response.body()).asObject();
+        assertThat(json.get("data").asObject().get("__schema").asObject().get("queryType").asObject().getString("name"))
             .isEqualTo("Query");
     }
 
     @Test
-    void queryExceedingMaxDepthIsRejected() throws Exception {
+    void shouldRejectQueryExceedingMaxDepth() throws Exception {
         var schema = GraphQlSchema.builder("""
                 type Query { user: User }
                 type User { friend: Friend }
@@ -192,7 +192,7 @@ class GraphQlHandlerTests {
             .build();
 
         var depthServer = TestServer.of(
-            build.serve.foundation.routing.RouterBuilder.create()
+            RouterBuilder.create()
                 .post("/graphql", GraphQlHandler.graphql(schema,
                     GraphQlOptions.builder().maxDepth(1).build()))
                 .build());
@@ -204,22 +204,30 @@ class GraphQlHandlerTests {
                 .send()
                 .assertStatus(200);
 
-            var json = MAPPER.readTree(response.body());
-            assertThat(json.path("errors")).isNotEmpty();
+            var json = Json.parse(response.body()).asObject();
+            assertThat(((JsonArray) json.get("errors")).values()).isNotEmpty();
         } finally {
             depthServer.close();
         }
     }
 
     @Test
-    void unknownFieldTest() throws Exception {
+    void shouldReturnErrorsForUnknownField() throws Exception {
         final var response = server.post("/graphql")
             .header("Content-Type", "application/json")
             .body("{\"query\":\"{ nonexistent }\"}")
             .send()
             .assertStatus(200);
 
-        final var json = MAPPER.readTree(response.body());
-        assertThat(json.path("errors")).isNotEmpty();
+        final var json = Json.parse(response.body()).asObject();
+        assertThat(((JsonArray) json.get("errors")).values()).isNotEmpty();
+    }
+
+    @Test
+    void shouldSerializeResultWithNullErrors() {
+        final var result = new GraphQlResult(Map.of("hello", "world"), null);
+        final var json = result.toJson().asObject();
+        assertThat(json.get("data").asObject().getString("hello")).isEqualTo("world");
+        assertThat(json.has("errors")).isFalse();
     }
 }

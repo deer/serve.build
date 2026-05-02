@@ -1,12 +1,12 @@
 package build.serve.lsp;
 
+import build.base.json.Json;
+import build.base.json.JsonObject;
 import build.serve.lsp.types.CompletionItem;
 import build.serve.lsp.types.CompletionItemKind;
 import build.serve.lsp.types.Hover;
 import build.serve.lsp.types.ServerCapabilities;
 import build.serve.lsp.types.ServerCapability;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.io.BufferedReader;
@@ -19,13 +19,10 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class LspTransportTests {
-
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Test
     void initializeTest() throws Exception {
@@ -40,9 +37,9 @@ class LspTransportTests {
                     """);
 
             assertThat(response.has("result")).isTrue();
-            final var result = response.get("result");
-            assertThat(result.path("hoverProvider").asBoolean()).isTrue();
-            assertThat(result.path("completionProvider").asBoolean()).isTrue();
+            final var result = response.get("result").asObject();
+            assertThat(result.get("hoverProvider").asBoolean().value()).isTrue();
+            assertThat(result.get("completionProvider").asBoolean().value()).isTrue();
         }
     }
 
@@ -52,7 +49,6 @@ class LspTransportTests {
 
         try (final var client = new LspTestClient(server)) {
             client.sendNotification("initialized", "{}");
-            // Send a request after to verify server is still running
             final var response = client.sendRequest(1, "shutdown", null);
             assertThat(response.has("result")).isTrue();
         }
@@ -70,9 +66,9 @@ class LspTransportTests {
                     {"textDocument":{"uri":"file:///test.java"},"position":{"line":0,"character":0}}
                     """);
 
-            final var result = response.get("result");
-            assertThat(result.path("contents").path("kind").asText()).isEqualTo("markdown");
-            assertThat(result.path("contents").path("value").asText()).isEqualTo("Hello **world**");
+            final var result = response.get("result").asObject();
+            assertThat(result.get("contents").asObject().get("kind").asString().value()).isEqualTo("markdown");
+            assertThat(result.get("contents").asObject().get("value").asString().value()).isEqualTo("Hello **world**");
         }
     }
 
@@ -91,18 +87,14 @@ class LspTransportTests {
                     {"textDocument":{"uri":"file:///test.java"},"position":{"line":0,"character":0}}
                     """);
 
-            final var result = response.get("result");
-            assertThat(result.isArray()).isTrue();
-            assertThat(result.size()).isEqualTo(2);
-            assertThat(result.get(0).path("label").asText()).isEqualTo("println");
+            final var result = response.get("result").asArray();
+            assertThat(result.values()).hasSize(2);
+            assertThat(result.values().get(0).asObject().get("label").asString().value()).isEqualTo("println");
         }
     }
 
     @Test
     void publishDiagnosticsTest() throws Exception {
-        final var diagnosticsReceived = new CountDownLatch(1);
-        final var receivedNotification = new AtomicReference<JsonNode>();
-
         final var server = LspServer.builder()
             .onDidOpen((params, ctx) -> {
                 ctx.publishDiagnostics(params.textDocument().uri(), List.of(
@@ -113,17 +105,15 @@ class LspTransportTests {
             .build();
 
         try (final var client = new LspTestClient(server)) {
-            // Send didOpen notification - handler will publish diagnostics
             client.sendNotification("textDocument/didOpen",
                 """
                     {"textDocument":{"uri":"file:///test.java","languageId":"java","version":1,"text":"hello"}}
                     """);
 
-            // Read the diagnostics notification from server
             final var notification = client.readMessage();
-            assertThat(notification.path("method").asText()).isEqualTo("textDocument/publishDiagnostics");
-            assertThat(notification.path("params").path("uri").asText()).isEqualTo("file:///test.java");
-            assertThat(notification.path("params").path("diagnostics").size()).isEqualTo(1);
+            assertThat(notification.get("method").asString().value()).isEqualTo("textDocument/publishDiagnostics");
+            assertThat(notification.get("params").asObject().get("uri").asString().value()).isEqualTo("file:///test.java");
+            assertThat(notification.get("params").asObject().get("diagnostics").asArray().values()).hasSize(1);
         }
     }
 
@@ -134,8 +124,6 @@ class LspTransportTests {
         try (final var client = new LspTestClient(server)) {
             final var response = client.sendRequest(1, "shutdown", null);
             assertThat(response.has("result")).isTrue();
-            // After shutdown, we could send exit but that calls Runtime.halt()
-            // so we just verify shutdown responded correctly
         }
     }
 
@@ -166,7 +154,7 @@ class LspTransportTests {
                     {"rootUri":"file:///test","capabilities":{}}
                     """);
 
-            assertThat(response.path("result").path("hoverProvider").asBoolean()).isTrue();
+            assertThat(response.get("result").asObject().get("hoverProvider").asBoolean().value()).isTrue();
         }
 
         serverThread.interrupt();
@@ -202,7 +190,7 @@ class LspTransportTests {
                         """
                             {"rootUri":"file:///test","capabilities":{}}
                             """);
-                    assertThat(response.path("result").path("completionProvider").asBoolean()).isTrue();
+                    assertThat(response.get("result").asObject().get("completionProvider").asBoolean().value()).isTrue();
                     latch.countDown();
                 } catch (final Exception e) {
                     throw new RuntimeException(e);
@@ -225,8 +213,21 @@ class LspTransportTests {
                     """);
 
             assertThat(response.has("error")).isTrue();
-            assertThat(response.path("error").path("code").asInt()).isEqualTo(-32601);
-            assertThat(response.path("error").path("message").asText()).isEqualTo("Method not found");
+            assertThat(response.get("error").asObject().get("code").asNumber().toNumber().intValue()).isEqualTo(-32601);
+            assertThat(response.get("error").asObject().get("message").asString().value()).isEqualTo("Method not found");
+        }
+    }
+
+    @Test
+    void shouldEchoStringIdInResponse() throws Exception {
+        final var server = LspServer.builder().build();
+
+        try (final var client = new LspTestClient(server)) {
+            final var response = client.sendRequestWithStringId("req-abc", "textDocument/hover",
+                "{\"textDocument\":{\"uri\":\"file:///test.java\"},\"position\":{\"line\":0,\"character\":0}}");
+
+            assertThat(response.getString("id")).isEqualTo("req-abc");
+            assertThat(response.has("error")).isFalse();
         }
     }
 
@@ -268,7 +269,7 @@ class LspTransportTests {
             this.serverThread = null;
         }
 
-        JsonNode sendRequest(final int id, final String method, final String params) throws Exception {
+        JsonObject sendRequest(final int id, final String method, final String params) throws Exception {
             final var json = params != null
                 ? String.format("{\"jsonrpc\":\"2.0\",\"id\":%d,\"method\":\"%s\",\"params\":%s}", id, method, params)
                 : String.format("{\"jsonrpc\":\"2.0\",\"id\":%d,\"method\":\"%s\"}", id, method);
@@ -276,14 +277,21 @@ class LspTransportTests {
             return readMessage();
         }
 
+        JsonObject sendRequestWithStringId(final String id, final String method, final String params) throws Exception {
+            final var json = params != null
+                ? String.format("{\"jsonrpc\":\"2.0\",\"id\":\"%s\",\"method\":\"%s\",\"params\":%s}", id, method, params)
+                : String.format("{\"jsonrpc\":\"2.0\",\"id\":\"%s\",\"method\":\"%s\"}", id, method);
+            writeMessage(json);
+            return readMessage();
+        }
+
         void sendNotification(final String method, final String params) throws Exception {
             final var json = String.format("{\"jsonrpc\":\"2.0\",\"method\":\"%s\",\"params\":%s}", method, params);
             writeMessage(json);
-            // Small delay to let server process
             Thread.sleep(100);
         }
 
-        JsonNode readMessage() throws Exception {
+        JsonObject readMessage() throws Exception {
             final var contentLength = readContentLength();
             final var body = new char[contentLength];
             var read = 0;
@@ -294,7 +302,7 @@ class LspTransportTests {
                 }
                 read += n;
             }
-            return MAPPER.readTree(new String(body));
+            return Json.parse(new String(body)).asObject();
         }
 
         private void writeMessage(final String json) throws IOException {

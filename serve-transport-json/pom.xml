@@ -14,7 +14,7 @@
     <artifactId>serve-transport-json</artifactId>
 
     <name>Serve Transport (JSON)</name>
-    <description>Jackson-based JSON body reader and writer injected via Exchange attributes.</description>
+    <description>JSON body reader and writer injected via Exchange attributes.</description>
 
     <dependencies>
         <dependency>
@@ -28,13 +28,8 @@
         </dependency>
 
         <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-core</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
+            <groupId>build.base</groupId>
+            <artifactId>base-json</artifactId>
         </dependency>
 
         <!-- Test Dependencies -->

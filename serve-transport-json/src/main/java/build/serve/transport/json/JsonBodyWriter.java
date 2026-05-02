@@ -19,13 +19,13 @@
  */
 package build.serve.transport.json;
 
+import build.base.json.JsonValue;
 import build.serve.foundation.Response;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.util.Objects;
+import java.nio.charset.StandardCharsets;
 
 /**
- * Writes objects as JSON response bodies using Jackson {@link ObjectMapper}.
+ * Writes {@link JsonValue} objects as JSON response bodies.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
@@ -33,41 +33,18 @@ import java.util.Objects;
 public class JsonBodyWriter {
 
     /**
-     * The Jackson {@link ObjectMapper}.
-     */
-    private final ObjectMapper objectMapper;
-
-    /**
-     * Constructs a {@link JsonBodyWriter} with the specified {@link ObjectMapper}.
-     *
-     * @param objectMapper the {@link ObjectMapper} to use for serialization
-     */
-    public JsonBodyWriter(final ObjectMapper objectMapper) {
-        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
-    }
-
-    /**
-     * Constructs a {@link JsonBodyWriter} with a default {@link ObjectMapper}.
-     */
-    public JsonBodyWriter() {
-        this(new ObjectMapper());
-    }
-
-    /**
-     * Writes the specified object as JSON to the response.
+     * Writes the specified {@link JsonValue} as JSON to the response.
      *
      * @param response the {@link Response}
-     * @param body     the object to serialize
+     * @param body     the {@link JsonValue} to serialize; must be a {@link JsonValue}
      */
     public void write(final Response response,
                       final Object body) {
-        try {
-            final var json = objectMapper.writeValueAsBytes(body);
-
-            response.header("Content-Type", "application/json; charset=utf-8")
-                .send(json);
-        } catch (final com.fasterxml.jackson.core.JsonProcessingException e) {
-            throw new RuntimeException("Failed to serialize object to JSON", e);
+        if (!(body instanceof JsonValue jv)) {
+            throw new IllegalArgumentException("JsonBodyWriter requires a JsonValue, got: " +
+                (body == null ? "null" : body.getClass().getName()));
         }
+        response.header("Content-Type", "application/json; charset=utf-8")
+            .send(jv.toJsonString().getBytes(StandardCharsets.UTF_8));
     }
 }

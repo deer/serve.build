@@ -54,15 +54,13 @@
 
         <!-- Module Dependency Versions -->
         <assertj.version>3.27.7</assertj.version>
-        <base.version>0.23.1</base.version>
-        <codemodel.version>0.21.1</codemodel.version>
+        <base.version>0.24.0</base.version>
+        <codemodel.version>0.21.2</codemodel.version>
         <graphql-java.version>25.0</graphql-java.version>
-        <jackson.version>2.21.2</jackson.version>
-        <jackson-annotations.version>2.21</jackson-annotations.version>
         <jte.version>3.2.3</jte.version>
         <junit.version>6.0.3</junit.version>
         <jakarta-inject.version>2.0.1</jakarta-inject.version>
-        <spawn.version>0.1.4</spawn.version>
+        <spawn.version>0.1.5</spawn.version>
 
         <!-- Plugin Dependency Versions -->
         <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
@@ -286,6 +284,11 @@
             </dependency>
             <dependency>
                 <groupId>build.base</groupId>
+                <artifactId>base-json</artifactId>
+                <version>${base.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>build.base</groupId>
                 <artifactId>base-transport-json</artifactId>
                 <version>${base.version}</version>
             </dependency>
@@ -301,21 +304,6 @@
             </dependency>
 
             <!-- Third-party -->
-            <dependency>
-                <groupId>com.fasterxml.jackson.core</groupId>
-                <artifactId>jackson-annotations</artifactId>
-                <version>${jackson-annotations.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.fasterxml.jackson.core</groupId>
-                <artifactId>jackson-core</artifactId>
-                <version>${jackson.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.fasterxml.jackson.core</groupId>
-                <artifactId>jackson-databind</artifactId>
-                <version>${jackson.version}</version>
-            </dependency>
             <dependency>
                 <groupId>com.graphql-java</groupId>
                 <artifactId>graphql-java</artifactId>

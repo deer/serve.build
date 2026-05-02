@@ -19,8 +19,6 @@
  */
 package build.serve.lsp.types;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
  * A symbol kind.
@@ -43,24 +41,10 @@ public enum SymbolKind {
         this.value = value;
     }
 
-    /**
-     * Returns the numeric LSP value of this kind.
-     *
-     * @return the value
-     */
-    @JsonValue
     public int value() {
         return value;
     }
 
-    /**
-     * Returns the {@link SymbolKind} for the given LSP integer value.
-     *
-     * @param value the LSP integer value
-     * @return the matching kind
-     * @throws IllegalArgumentException if the value is not a valid kind
-     */
-    @JsonCreator
     public static SymbolKind fromValue(final int value) {
         for (final var v : values()) {
             if (v.value == value) {

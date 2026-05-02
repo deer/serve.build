@@ -28,7 +28,7 @@ module build.serve.testing {
     requires build.serve.transport.http;
     requires transitive org.junit.jupiter.api;
     requires transitive org.assertj.core;
-    requires com.fasterxml.jackson.databind;
+    requires build.base.json;
     requires java.net.http;
 
     exports build.serve.testing;

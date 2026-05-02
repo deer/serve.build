@@ -27,10 +27,14 @@ package build.serve.transport.http;
  */
 public enum TlsVersion {
 
-    /** TLS 1.2 (RFC 5246). */
+    /**
+     * TLS 1.2 (RFC 5246).
+     */
     TLS_1_2("TLSv1.2"),
 
-    /** TLS 1.3 (RFC 8446). */
+    /**
+     * TLS 1.3 (RFC 8446).
+     */
     TLS_1_3("TLSv1.3");
 
     private final String protocolName;

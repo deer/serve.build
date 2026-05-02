@@ -19,12 +19,11 @@
  */
 package build.serve.lsp;
 
+import build.base.json.JsonObject;
 import build.serve.lsp.params.DidChangeParams;
 import build.serve.lsp.params.DidCloseParams;
 import build.serve.lsp.params.DidOpenParams;
 import build.serve.lsp.params.DidSaveParams;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Sealed hierarchy of all typed LSP notifications (fire-and-forget messages with no id).
@@ -71,14 +70,12 @@ public sealed interface LspNotification {
         }
     }
 
-    static LspNotification parse(final LspNotificationMethod method,
-                                 final ObjectMapper mapper,
-                                 final JsonNode params) throws Exception {
+    static LspNotification parse(final LspNotificationMethod method, final JsonObject params) {
         return switch (method) {
-            case DID_CHANGE -> new DidChange(mapper.treeToValue(params, DidChangeParams.class));
-            case DID_CLOSE -> new DidClose(mapper.treeToValue(params, DidCloseParams.class));
-            case DID_OPEN -> new DidOpen(mapper.treeToValue(params, DidOpenParams.class));
-            case DID_SAVE -> new DidSave(mapper.treeToValue(params, DidSaveParams.class));
+            case DID_CHANGE -> new DidChange(LspJson.parseDidChange(params));
+            case DID_CLOSE -> new DidClose(LspJson.parseDidClose(params));
+            case DID_OPEN -> new DidOpen(LspJson.parseDidOpen(params));
+            case DID_SAVE -> new DidSave(LspJson.parseDidSave(params));
             case INITIALIZED -> new Initialized();
         };
     }

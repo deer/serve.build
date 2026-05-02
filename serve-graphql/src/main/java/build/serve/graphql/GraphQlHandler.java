@@ -19,10 +19,10 @@
  */
 package build.serve.graphql;
 
+import build.base.json.Json;
 import build.serve.foundation.Handler;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.util.List;
+import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 /**
@@ -32,8 +32,6 @@ import java.util.Objects;
  * @since Mar-2026
  */
 public final class GraphQlHandler {
-
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private GraphQlHandler() {
     }
@@ -67,23 +65,22 @@ public final class GraphQlHandler {
         final var effectiveSchema = schema.withOptions(options);
 
         return exchange -> {
-            final var request = MAPPER.readValue(
-                exchange.request().bodyAsStream(), GraphQlRequest.class);
+            final var request = GraphQlRequest.fromJson(
+                Json.parse(exchange.request().bodyAsString()).asObject());
 
             if (options.disableIntrospection() && isIntrospectionQuery(request.query())) {
-                final var error = MAPPER.writeValueAsBytes(new GraphQlResult(
-                    null, List.of(new GraphQlError("Introspection is not allowed", null))));
+                final var error = GraphQlResult.error("Introspection is not allowed").toJson().toJsonString();
                 exchange.response()
                     .status(400)
                     .header("Content-Type", "application/json")
-                    .send(error);
-
+                    .send(error.getBytes(StandardCharsets.UTF_8));
                 return;
             }
 
             final var result = effectiveSchema.execute(request);
-            exchange.response().header("Content-Type", "application/json");
-            exchange.response().send(MAPPER.writeValueAsBytes(result));
+            exchange.response()
+                .header("Content-Type", "application/json")
+                .send(result.toJson().toJsonString().getBytes(StandardCharsets.UTF_8));
         };
     }
 

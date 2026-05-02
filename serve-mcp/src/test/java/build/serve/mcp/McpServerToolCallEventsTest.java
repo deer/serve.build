@@ -1,10 +1,10 @@
 package build.serve.mcp;
 
+import build.base.json.Json;
+import build.base.json.JsonObject;
+import build.base.json.JsonValue;
 import build.serve.foundation.routing.RouterBuilder;
 import build.serve.testing.TestServer;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -20,8 +20,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class McpServerToolCallEventsTest {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
-
     private TestServer server;
 
     @AfterEach
@@ -32,12 +30,12 @@ class McpServerToolCallEventsTest {
     }
 
     @Test
-    void shouldPublishToolCallEventOnSuccessfulInvocation() throws Exception {
+    void shouldPublishToolCallEventOnSuccessfulInvocation() {
         final var mcpServer = McpServer.builder("test", "1.0")
             .tool(new EchoTool())
             .build();
         final var received = new CopyOnWriteArrayList<ToolCallEvent>();
-        mcpServer.toolCallEvents().subscribe(event -> received.add(event));
+        mcpServer.toolCallEvents().subscribe(received::add);
         server = TestServer.of(RouterBuilder.create().route("/mcp", mcpServer.handler()).build());
 
         server.post("/mcp")
@@ -50,7 +48,7 @@ class McpServerToolCallEventsTest {
         assertThat(received).hasSize(1);
         final var event = received.get(0);
         assertThat(event.toolName()).isEqualTo("echo");
-        assertThat(event.arguments().path("text").asText()).isEqualTo("hello");
+        assertThat(event.arguments().asObject().getString("text")).isEqualTo("hello");
         assertThat(event.result()).isPresent();
         assertThat(event.result().get().isError()).isFalse();
         assertThat(event.error()).isEmpty();
@@ -59,12 +57,12 @@ class McpServerToolCallEventsTest {
     }
 
     @Test
-    void shouldPublishToolCallEventOnToolFailure() throws Exception {
+    void shouldPublishToolCallEventOnToolFailure() {
         final var mcpServer = McpServer.builder("test", "1.0")
             .tool(new ThrowingTool())
             .build();
         final var received = new CopyOnWriteArrayList<ToolCallEvent>();
-        mcpServer.toolCallEvents().subscribe(event -> received.add(event));
+        mcpServer.toolCallEvents().subscribe(received::add);
         server = TestServer.of(RouterBuilder.create().route("/mcp", mcpServer.handler()).build());
 
         server.post("/mcp")
@@ -84,7 +82,7 @@ class McpServerToolCallEventsTest {
     }
 
     @Test
-    void shouldNotAffectDispatchBehaviorWhenNoSubscribersAttached() throws Exception {
+    void shouldNotAffectDispatchBehaviorWhenNoSubscribersAttached() {
         final var mcpServer = McpServer.builder("test", "1.0")
             .tool(new EchoTool())
             .build();
@@ -97,19 +95,19 @@ class McpServerToolCallEventsTest {
             .send()
             .assertStatus(200);
 
-        final var json = MAPPER.readTree(response.body());
-        assertThat(json.path("result").path("isError").asBoolean()).isFalse();
-        assertThat(json.path("result").path("content").get(0).get("text").asText())
-            .isEqualTo("echo: world");
+        final var json = Json.parse(response.body()).asObject();
+        assertThat(json.get("result").asObject().get("isError").asBoolean().value()).isFalse();
+        assertThat(((build.base.json.JsonArray) json.get("result").asObject().get("content"))
+            .values().get(0).asObject().getString("text")).isEqualTo("echo: world");
     }
 
     @Test
-    void shouldNotPublishEventForUnknownTool() throws Exception {
+    void shouldNotPublishEventForUnknownTool() {
         final var mcpServer = McpServer.builder("test", "1.0")
             .tool(new EchoTool())
             .build();
         final var received = new CopyOnWriteArrayList<ToolCallEvent>();
-        mcpServer.toolCallEvents().subscribe(event -> received.add(event));
+        mcpServer.toolCallEvents().subscribe(received::add);
         server = TestServer.of(RouterBuilder.create().route("/mcp", mcpServer.handler()).build());
 
         server.post("/mcp")
@@ -123,12 +121,12 @@ class McpServerToolCallEventsTest {
     }
 
     @Test
-    void shouldCarrySessionIdOnEvent() throws Exception {
+    void shouldCarrySessionIdOnEvent() {
         final var mcpServer = McpServer.builder("test", "1.0")
             .tool(new EchoTool())
             .build();
         final var received = new CopyOnWriteArrayList<ToolCallEvent>();
-        mcpServer.toolCallEvents().subscribe(event -> received.add(event));
+        mcpServer.toolCallEvents().subscribe(received::add);
 
         try (var client = McpTestClient.start(mcpServer)) {
             client.initialize();
@@ -140,12 +138,12 @@ class McpServerToolCallEventsTest {
     }
 
     @Test
-    void shouldUseLocalSessionIdWhenNoSessionHeader() throws Exception {
+    void shouldUseLocalSessionIdWhenNoSessionHeader() {
         final var mcpServer = McpServer.builder("test", "1.0")
             .tool(new EchoTool())
             .build();
         final var received = new CopyOnWriteArrayList<ToolCallEvent>();
-        mcpServer.toolCallEvents().subscribe(event -> received.add(event));
+        mcpServer.toolCallEvents().subscribe(received::add);
         server = TestServer.of(RouterBuilder.create().route("/mcp", mcpServer.handler()).build());
 
         server.post("/mcp")
@@ -160,14 +158,14 @@ class McpServerToolCallEventsTest {
     }
 
     @Test
-    void shouldFanOutToMultipleSubscribers() throws Exception {
+    void shouldFanOutToMultipleSubscribers() {
         final var mcpServer = McpServer.builder("test", "1.0")
             .tool(new EchoTool())
             .build();
         final var first = new CopyOnWriteArrayList<ToolCallEvent>();
         final var second = new CopyOnWriteArrayList<ToolCallEvent>();
-        mcpServer.toolCallEvents().subscribe(event -> first.add(event));
-        mcpServer.toolCallEvents().subscribe(event -> second.add(event));
+        mcpServer.toolCallEvents().subscribe(first::add);
+        mcpServer.toolCallEvents().subscribe(second::add);
         server = TestServer.of(RouterBuilder.create().route("/mcp", mcpServer.handler()).build());
 
         server.post("/mcp")
@@ -196,13 +194,16 @@ class McpServerToolCallEventsTest {
         }
 
         @Override
-        public ObjectNode inputSchema() {
-            return MAPPER.createObjectNode();
+        public JsonObject inputSchema() {
+            return JsonObject.builder().build();
         }
 
         @Override
-        public McpToolResult call(final JsonNode arguments) {
-            return McpToolResult.text("echo: " + arguments.path("text").asText());
+        public McpToolResult call(final JsonValue arguments) {
+            final var text = arguments.asObject().members().getOrDefault("text",
+                build.base.json.JsonNull.INSTANCE);
+            final var textStr = text instanceof build.base.json.JsonString s ? s.value() : "";
+            return McpToolResult.text("echo: " + textStr);
         }
     }
 
@@ -219,12 +220,12 @@ class McpServerToolCallEventsTest {
         }
 
         @Override
-        public ObjectNode inputSchema() {
-            return MAPPER.createObjectNode();
+        public JsonObject inputSchema() {
+            return JsonObject.builder().build();
         }
 
         @Override
-        public McpToolResult call(final JsonNode arguments) {
+        public McpToolResult call(final JsonValue arguments) {
             throw new RuntimeException("tool failure");
         }
     }
