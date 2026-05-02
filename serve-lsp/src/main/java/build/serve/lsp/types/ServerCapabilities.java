@@ -19,15 +19,9 @@
  */
 package build.serve.lsp.types;
 
-import com.fasterxml.jackson.annotation.JsonAnyGetter;
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonInclude;
-
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -36,9 +30,8 @@ import java.util.Set;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public record ServerCapabilities(Object textDocumentSync,
-                                 @JsonIgnore Set<ServerCapability> providers) implements LspType {
+                                 Set<ServerCapability> providers) implements LspType {
 
     public static ServerCapabilities of(final ServerCapability... providers) {
         return new ServerCapabilities(null, toSet(providers));
@@ -52,14 +45,5 @@ public record ServerCapabilities(Object textDocumentSync,
         return providers.length > 0
             ? Collections.unmodifiableSet(EnumSet.copyOf(List.of(providers)))
             : Collections.unmodifiableSet(EnumSet.noneOf(ServerCapability.class));
-    }
-
-    @JsonAnyGetter
-    public Map<String, Boolean> capabilityFields() {
-        final Map<String, Boolean> fields = new LinkedHashMap<>();
-        for (final ServerCapability cap : providers) {
-            fields.put(cap.fieldName, Boolean.TRUE);
-        }
-        return fields;
     }
 }

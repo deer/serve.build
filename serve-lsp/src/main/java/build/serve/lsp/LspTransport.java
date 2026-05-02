@@ -19,11 +19,14 @@
  */
 package build.serve.lsp;
 
+import build.base.json.Json;
+import build.base.json.JsonNull;
+import build.base.json.JsonNumber;
+import build.base.json.JsonObject;
+import build.base.json.JsonString;
+import build.base.json.JsonValue;
 import build.serve.lsp.types.Diagnostic;
 import build.serve.lsp.types.ShowMessageParams;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -92,7 +95,6 @@ public final class LspTransport {
      * @throws Exception if an error occurs
      */
     public static void run(final LspServer server, final InputStream in, final OutputStream out) throws Exception {
-        final var mapper = new ObjectMapper();
         final var shutdownRequested = new AtomicBoolean(false);
         final var outboundId = new AtomicInteger(0);
         final var lock = new Object();
@@ -100,35 +102,34 @@ public final class LspTransport {
         final LspContext ctx = new LspContext() {
             @Override
             public void publishDiagnostics(final String uri, final List<Diagnostic> diagnostics) {
-                final var params = mapper.createObjectNode();
-                params.put("uri", uri);
-                params.set("diagnostics", mapper.valueToTree(diagnostics));
-                sendNotification(mapper, out, lock, LspServerPushMethod.PUBLISH_DIAGNOSTICS, params);
+                final var params = JsonObject.builder()
+                    .put("uri", uri)
+                    .put("diagnostics", LspJson.toJson(diagnostics))
+                    .build();
+                sendNotification(out, lock, LspServerPushMethod.PUBLISH_DIAGNOSTICS, params);
             }
 
             @Override
             public void showMessage(final ShowMessageParams params) {
-                final var node = mapper.createObjectNode();
-                node.put("type", params.type());
-                node.put("message", params.message());
-                sendNotification(mapper, out, lock, LspServerPushMethod.SHOW_MESSAGE, node);
+                sendNotification(out, lock, LspServerPushMethod.SHOW_MESSAGE, showMessageNode(params));
             }
 
             @Override
             public void logMessage(final ShowMessageParams params) {
-                final var node = mapper.createObjectNode();
-                node.put("type", params.type());
-                node.put("message", params.message());
-                sendNotification(mapper, out, lock, LspServerPushMethod.LOG_MESSAGE, node);
+                sendNotification(out, lock, LspServerPushMethod.LOG_MESSAGE, showMessageNode(params));
             }
 
             @Override
             public void showMessageRequest(final ShowMessageParams params) {
-                final var node = mapper.createObjectNode();
-                node.put("type", params.type());
-                node.put("message", params.message());
-                sendOutboundRequest(mapper, out, lock, outboundId.incrementAndGet(),
-                    "window/showMessageRequest", node);
+                sendOutboundRequest(out, lock, outboundId.incrementAndGet(),
+                    "window/showMessageRequest", showMessageNode(params));
+            }
+
+            private JsonObject showMessageNode(final ShowMessageParams params) {
+                return JsonObject.builder()
+                    .put("type", params.type())
+                    .put("message", params.message())
+                    .build();
             }
         };
 
@@ -143,10 +144,10 @@ public final class LspTransport {
                 return;
             }
 
-            final var message = mapper.readTree(body);
-            final var methodStr = message.path("method").asText("");
-            final var id = message.get("id");
-            final var params = message.get("params");
+            final var message = Json.parse(body).asObject();
+            final var methodStr = message.has("method") ? message.get("method").asString().value() : "";
+            final var id = message.has("id") ? message.get("id") : null;
+            final var params = message.has("params") ? message.get("params").asObject() : null;
 
             // Transport lifecycle — handled before typed dispatch
             if ("exit".equals(methodStr)) {
@@ -155,35 +156,35 @@ public final class LspTransport {
             }
             if ("shutdown".equals(methodStr)) {
                 shutdownRequested.set(true);
-                sendResponse(mapper, out, lock, id, mapper.nullNode());
+                sendResponse(out, lock, id, JsonNull.INSTANCE);
                 continue;
             }
 
-            if (id != null && !id.isNull()) {
+            if (id != null && !(id instanceof JsonNull)) {
                 if (methodStr.isEmpty()) {
                     // Client response to a server-initiated request — ignore
                     continue;
                 }
                 final var methodOpt = LspRequestMethod.from(methodStr);
                 if (methodOpt.isEmpty()) {
-                    sendErrorResponse(mapper, out, lock, id, -32601, "Method not found");
+                    sendErrorResponse(out, lock, id, -32601, "Method not found");
                     continue;
                 }
                 try {
-                    final var request = LspRequest.parse(methodOpt.get(), mapper, params);
+                    final var request = LspRequest.parse(methodOpt.get(), params);
                     switch (server.handle(request, ctx)) {
-                        case LspResponse.Ok ok -> sendResponse(mapper, out, lock, id, mapper.valueToTree(ok.value()));
+                        case LspResponse.Ok ok -> sendResponse(out, lock, id, LspJson.toJson(ok.value()));
                         case LspResponse.MethodNotFound __ ->
-                            sendErrorResponse(mapper, out, lock, id, -32601, "Method not found");
+                            sendErrorResponse(out, lock, id, -32601, "Method not found");
                     }
                 } catch (final Exception e) {
-                    sendErrorResponse(mapper, out, lock, id, -32603, "Internal error");
+                    sendErrorResponse(out, lock, id, -32603, "Internal error");
                 }
             } else {
                 final var methodOpt = LspNotificationMethod.from(methodStr);
                 if (methodOpt.isPresent()) {
                     try {
-                        server.handle(LspNotification.parse(methodOpt.get(), mapper, params), ctx);
+                        server.handle(LspNotification.parse(methodOpt.get(), params), ctx);
                     } catch (final Exception e) {
                         // silently ignore notification errors
                     }
@@ -213,60 +214,51 @@ public final class LspTransport {
         return contentLength;
     }
 
-    private static void sendResponse(final ObjectMapper mapper, final OutputStream out,
-                                     final Object lock, final JsonNode id, final JsonNode result) {
-        final var response = mapper.createObjectNode();
-        response.put("jsonrpc", "2.0");
-        if (id.isNumber()) {
-            response.put("id", id.asInt());
+    private static void sendResponse(final OutputStream out, final Object lock,
+                                     final JsonValue id, final JsonValue result) {
+        writeMessage(out, lock, responseBase(id).put("result", result).build());
+    }
+
+    private static void sendErrorResponse(final OutputStream out, final Object lock,
+                                          final JsonValue id, final int code, final String message) {
+        final var error = JsonObject.builder().put("code", code).put("message", message).build();
+        writeMessage(out, lock, responseBase(id).put("error", error).build());
+    }
+
+    private static JsonObject.Builder responseBase(final JsonValue id) {
+        final var b = JsonObject.builder().put("jsonrpc", "2.0");
+        if (id instanceof JsonNumber n) {
+            b.put("id", n.toNumber());
+        } else if (id instanceof JsonString s) {
+            b.put("id", s.value());
         } else {
-            response.put("id", id.asText());
+            b.put("id", JsonNull.INSTANCE);
         }
-        response.set("result", result);
-        writeMessage(mapper, out, lock, response);
+        return b;
     }
 
-    private static void sendErrorResponse(final ObjectMapper mapper, final OutputStream out,
-                                          final Object lock, final JsonNode id, final int code, final String message) {
-        final var response = mapper.createObjectNode();
-        response.put("jsonrpc", "2.0");
-        if (id.isNumber()) {
-            response.put("id", id.asInt());
-        } else {
-            response.put("id", id.asText());
-        }
-        final var error = mapper.createObjectNode();
-        error.put("code", code);
-        error.put("message", message);
-        response.set("error", error);
-        writeMessage(mapper, out, lock, response);
+    private static void sendNotification(final OutputStream out, final Object lock,
+                                         final LspServerPushMethod method, final JsonObject params) {
+        writeMessage(out, lock, JsonObject.builder()
+            .put("jsonrpc", "2.0")
+            .put("method", method.methodName)
+            .put("params", params)
+            .build());
     }
 
-    private static void sendNotification(final ObjectMapper mapper, final OutputStream out,
-                                         final Object lock, final LspServerPushMethod method,
-                                         final ObjectNode params) {
-        final var notification = mapper.createObjectNode();
-        notification.put("jsonrpc", "2.0");
-        notification.put("method", method.methodName);
-        notification.set("params", params);
-        writeMessage(mapper, out, lock, notification);
+    private static void sendOutboundRequest(final OutputStream out, final Object lock,
+                                            final int id, final String method, final JsonObject params) {
+        writeMessage(out, lock, JsonObject.builder()
+            .put("jsonrpc", "2.0")
+            .put("id", id)
+            .put("method", method)
+            .put("params", params)
+            .build());
     }
 
-    private static void sendOutboundRequest(final ObjectMapper mapper, final OutputStream out,
-                                            final Object lock, final int id, final String method,
-                                            final ObjectNode params) {
-        final var request = mapper.createObjectNode();
-        request.put("jsonrpc", "2.0");
-        request.put("id", id);
-        request.put("method", method);
-        request.set("params", params);
-        writeMessage(mapper, out, lock, request);
-    }
-
-    private static void writeMessage(final ObjectMapper mapper, final OutputStream out,
-                                     final Object lock, final ObjectNode message) {
+    private static void writeMessage(final OutputStream out, final Object lock, final JsonObject message) {
         try {
-            final var json = mapper.writeValueAsBytes(message);
+            final var json = message.toJsonString().getBytes(StandardCharsets.UTF_8);
             final var header = ("Content-Length: " + json.length + "\r\n\r\n").getBytes(StandardCharsets.UTF_8);
             synchronized (lock) {
                 out.write(header);

@@ -19,6 +19,7 @@
  */
 package build.serve.foundation;
 
+import build.base.json.JsonValue;
 import build.serve.foundation.http.Cookie;
 
 import java.io.InputStream;
@@ -131,13 +132,11 @@ public interface Request {
     String bodyAsString();
 
     /**
-     * Obtains the request body deserialized as the specified type.
+     * Parses the request body as a {@link build.base.json.JsonValue}.
      * <p>
-     * This method requires a body deserializer to be registered (e.g., via the JSON transport module).
+     * This method requires a body reader to be registered (e.g., via the JSON transport module).
      *
-     * @param <T>  the type to deserialize to
-     * @param type the {@link Class} of the desired type
-     * @return the deserialized body
+     * @return the parsed {@link build.base.json.JsonValue}
      */
-    <T> T body(Class<T> type);
+    JsonValue bodyAsJson();
 }

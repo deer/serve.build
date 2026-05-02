@@ -19,6 +19,7 @@
  */
 package build.serve.transport.http;
 
+import build.base.json.JsonValue;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.Request;
 import build.serve.foundation.http.Cookie;
@@ -197,12 +198,12 @@ public class HttpRequest
     }
 
     @Override
-    public <T> T body(final Class<T> type) {
+    public JsonValue bodyAsJson() {
         if (exchange != null) {
-            return exchange.bodyAs(type);
+            return exchange.bodyAsJson();
         }
 
         throw new UnsupportedOperationException(
-            "Body deserialization requires a transport module (e.g., serve-transport-json)");
+            "Body parsing requires a transport module (e.g., serve-transport-json)");
     }
 }

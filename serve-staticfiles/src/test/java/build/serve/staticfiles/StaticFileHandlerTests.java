@@ -19,6 +19,7 @@
  */
 package build.serve.staticfiles;
 
+import build.base.json.JsonValue;
 import build.serve.foundation.Request;
 import build.serve.foundation.Response;
 import build.serve.foundation.SimpleExchange;
@@ -253,7 +254,7 @@ class StaticFileHandlerTests {
         }
 
         @Override
-        public <T> T body(final Class<T> type) {
+        public JsonValue bodyAsJson() {
             throw new UnsupportedOperationException();
         }
     }

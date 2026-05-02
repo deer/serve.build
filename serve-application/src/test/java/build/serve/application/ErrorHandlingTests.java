@@ -19,6 +19,7 @@
  */
 package build.serve.application;
 
+import build.base.json.Json;
 import build.serve.foundation.error.BadRequestException;
 import build.serve.foundation.error.ErrorHandler;
 import build.serve.foundation.error.NotFoundException;
@@ -26,13 +27,12 @@ import build.serve.foundation.routing.RouterBuilder;
 import build.serve.testing.TestServer;
 import build.serve.transport.json.JsonErrorHandler;
 import build.serve.transport.json.JsonMiddleware;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 class ErrorHandlingTests {
 
     @Test
-    void notFoundExceptionReturns404() {
+    void shouldReturn404ForNonexistentRoute() {
         try (var server = createServer(null)) {
             server.get("/nonexistent")
                 .send()
@@ -41,7 +41,7 @@ class ErrorHandlingTests {
     }
 
     @Test
-    void handlerThrowsNotFoundReturns404() {
+    void shouldReturn404WhenHandlerThrowsNotFoundException() {
         try (var server = createServer(null)) {
             server.get("/throw-not-found")
                 .send()
@@ -51,7 +51,7 @@ class ErrorHandlingTests {
     }
 
     @Test
-    void handlerThrowsBadRequestReturns400() {
+    void shouldReturn400WhenHandlerThrowsBadRequestException() {
         try (var server = createServer(null)) {
             server.get("/throw-bad-request")
                 .send()
@@ -61,7 +61,7 @@ class ErrorHandlingTests {
     }
 
     @Test
-    void handlerThrowsRuntimeExceptionReturns500() {
+    void shouldReturn500WhenHandlerThrowsRuntimeException() {
         try (var server = createServer(null)) {
             var response = server.get("/throw-runtime").send();
 
@@ -71,18 +71,16 @@ class ErrorHandlingTests {
     }
 
     @Test
-    void jsonErrorHandlerReturnsJsonResponse() throws Exception {
-        final var mapper = new ObjectMapper();
-
-        try (var server = createServer(new JsonErrorHandler(mapper))) {
+    void shouldReturnJsonErrorResponseFromJsonErrorHandler() throws Exception {
+        try (var server = createServer(new JsonErrorHandler())) {
             var response = server.get("/throw-not-found").send();
 
             response.assertStatus(404)
                 .assertContentType("application/json");
 
-            final var json = mapper.readTree(response.body());
-            assert json.get("status").asInt() == 404;
-            assert json.get("message").asText().equals("User 42 not found");
+            final var json = Json.parse(response.body()).asObject();
+            assert json.get("status").asNumber().toNumber().intValue() == 404;
+            assert json.getString("message").equals("User 42 not found");
         }
     }
 

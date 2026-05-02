@@ -19,6 +19,7 @@
  */
 package build.serve.health;
 
+import build.base.json.JsonValue;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.Request;
 import build.serve.foundation.Response;
@@ -184,7 +185,7 @@ class HealthHandlerTests {
         }
 
         @Override
-        public <T> T body(final Class<T> type) {
+        public JsonValue bodyAsJson() {
             throw new UnsupportedOperationException();
         }
     }

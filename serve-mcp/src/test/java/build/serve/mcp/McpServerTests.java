@@ -19,9 +19,10 @@
  */
 package build.serve.mcp;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import build.base.json.Json;
+import build.base.json.JsonArray;
+import build.base.json.JsonObject;
+import build.base.json.JsonValue;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,8 +39,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @since Mar-2026
  */
 class McpServerTests {
-
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private McpTestClient client;
 
@@ -58,15 +57,15 @@ class McpServerTests {
                 }
 
                 @Override
-                public ObjectNode inputSchema() {
-                    return McpTools.schema(MAPPER,
+                public JsonObject inputSchema() {
+                    return McpTools.schema(
                         Map.of("location", "City name or zip code"),
                         List.of("location"));
                 }
 
                 @Override
-                public McpToolResult call(final JsonNode arguments) {
-                    final var location = arguments.get("location").asText();
+                public McpToolResult call(final JsonValue arguments) {
+                    final var location = arguments.asObject().getString("location");
                     return McpToolResult.text("Weather in " + location + ": sunny, 72°F");
                 }
             })
@@ -81,50 +80,57 @@ class McpServerTests {
     }
 
     @Test
-    void initializeTest() throws Exception {
-        final var json = client.initialize();
-        assertThat(json.get("jsonrpc").asText()).isEqualTo("2.0");
-        assertThat(json.path("result").path("protocolVersion").asText()).isEqualTo("2025-03-26");
-        assertThat(json.path("result").path("capabilities").path("tools").path("listChanged").asBoolean()).isFalse();
-        assertThat(json.path("result").path("serverInfo").path("name").asText()).isEqualTo("test-server");
-        assertThat(json.path("result").path("serverInfo").path("version").asText()).isEqualTo("1.0.0");
+    void initializeTest() {
+        final var json = client.initialize().asObject();
+        assertThat(json.getString("jsonrpc")).isEqualTo("2.0");
+        final var result = json.get("result").asObject();
+        assertThat(result.getString("protocolVersion")).isEqualTo("2025-03-26");
+        assertThat(result.get("capabilities").asObject().get("tools").asObject().get("listChanged").asBoolean().value()).isFalse();
+        assertThat(result.get("serverInfo").asObject().getString("name")).isEqualTo("test-server");
+        assertThat(result.get("serverInfo").asObject().getString("version")).isEqualTo("1.0.0");
     }
 
     @Test
-    void toolsListTest() throws Exception {
+    void toolsListTest() {
         final var tools = client.listTools();
-        assertThat(tools.isArray()).isTrue();
-        assertThat(tools.size()).isEqualTo(1);
-        assertThat(tools.get(0).get("name").asText()).isEqualTo("get_weather");
-        assertThat(tools.get(0).get("description").asText()).isEqualTo("Get weather for a location");
-        assertThat(tools.get(0).path("inputSchema").path("type").asText()).isEqualTo("object");
+        assertThat(tools).isInstanceOf(JsonArray.class);
+        assertThat(((JsonArray) tools).values()).hasSize(1);
+        final var tool = ((JsonArray) tools).values().get(0).asObject();
+        assertThat(tool.getString("name")).isEqualTo("get_weather");
+        assertThat(tool.getString("description")).isEqualTo("Get weather for a location");
+        assertThat(tool.get("inputSchema").asObject().getString("type")).isEqualTo("object");
     }
 
     @Test
-    void toolsCallTest() throws Exception {
-        final var result = client.call("get_weather", Map.of("location", "Berlin"));
-        assertThat(result.path("isError").asBoolean()).isFalse();
-        assertThat(result.path("content").get(0).get("type").asText()).isEqualTo("text");
-        assertThat(result.path("content").get(0).get("text").asText()).isEqualTo("Weather in Berlin: sunny, 72°F");
+    void toolsCallTest() {
+        final var result = client.call("get_weather", Map.of("location", "Berlin")).asObject();
+        assertThat(result.get("isError").asBoolean().value()).isFalse();
+        final var content = ((JsonArray) result.get("content")).values().get(0).asObject();
+        assertThat(content.getString("type")).isEqualTo("text");
+        assertThat(content.getString("text")).isEqualTo("Weather in Berlin: sunny, 72°F");
     }
 
     @Test
-    void shouldSerializeResourceContent() throws Exception {
+    void shouldSerializeResourceContent() {
         try (final var resourceClient = McpTestClient.start(McpServer.builder("res-server", "1.0.0")
             .tool(new McpTool() {
                 @Override
-                public String name() { return "get_file"; }
-
-                @Override
-                public String description() { return "Returns a binary file"; }
-
-                @Override
-                public ObjectNode inputSchema() {
-                    return McpTools.schema(MAPPER, Map.of(), List.of());
+                public String name() {
+                    return "get_file";
                 }
 
                 @Override
-                public McpToolResult call(final JsonNode arguments) {
+                public String description() {
+                    return "Returns a binary file";
+                }
+
+                @Override
+                public JsonObject inputSchema() {
+                    return McpTools.schema(Map.of(), List.of());
+                }
+
+                @Override
+                public McpToolResult call(final JsonValue arguments) {
                     return McpToolResult.withResources("Here is the file.",
                         List.of(new McpContent.Resource("output.mid", "audio/midi", "TVRoZA==")));
                 }
@@ -132,27 +138,29 @@ class McpServerTests {
             .build())) {
 
             resourceClient.initialize();
-            final var result = resourceClient.call("get_file", Map.of());
-            assertThat(result.path("isError").asBoolean()).isFalse();
+            final var result = resourceClient.call("get_file", Map.of()).asObject();
+            assertThat(result.get("isError").asBoolean().value()).isFalse();
 
-            final var text = result.path("content").get(0);
-            assertThat(text.get("type").asText()).isEqualTo("text");
-            assertThat(text.get("text").asText()).isEqualTo("Here is the file.");
+            final var content = ((JsonArray) result.get("content")).values();
+            final var text = content.get(0).asObject();
+            assertThat(text.getString("type")).isEqualTo("text");
+            assertThat(text.getString("text")).isEqualTo("Here is the file.");
 
-            final var resource = result.path("content").get(1);
-            assertThat(resource.get("type").asText()).isEqualTo("resource");
-            assertThat(resource.path("resource").get("uri").asText()).isEqualTo("output.mid");
-            assertThat(resource.path("resource").get("mimeType").asText()).isEqualTo("audio/midi");
-            assertThat(resource.path("resource").get("blob").asText()).isEqualTo("TVRoZA==");
+            final var resource = content.get(1).asObject();
+            assertThat(resource.getString("type")).isEqualTo("resource");
+            final var resourceObj = resource.get("resource").asObject();
+            assertThat(resourceObj.getString("uri")).isEqualTo("output.mid");
+            assertThat(resourceObj.getString("mimeType")).isEqualTo("audio/midi");
+            assertThat(resourceObj.getString("blob")).isEqualTo("TVRoZA==");
         }
     }
 
     @Test
-    void toolsCallUnknownTest() throws Exception {
+    void toolsCallUnknownTest() {
         final var json = client.send("tools/call",
-            Map.of("name", "nonexistent", "arguments", Map.of()));
-        assertThat(json.path("error").path("code").asInt()).isEqualTo(-32602);
-        assertThat(json.path("error").path("message").asText()).contains("Unknown tool");
+            Map.of("name", "nonexistent", "arguments", Map.of())).asObject();
+        assertThat(json.get("error").asObject().get("code").asNumber().toNumber().intValue()).isEqualTo(-32602);
+        assertThat(json.get("error").asObject().getString("message")).contains("Unknown tool");
     }
 
     @Test
@@ -165,10 +173,10 @@ class McpServerTests {
     }
 
     @Test
-    void unknownMethodTest() throws Exception {
-        final var json = client.send("unknown/method", Map.of());
-        assertThat(json.path("error").path("code").asInt()).isEqualTo(-32601);
-        assertThat(json.path("error").path("message").asText()).isEqualTo("Method not found");
+    void unknownMethodTest() {
+        final var json = client.send("unknown/method", Map.of()).asObject();
+        assertThat(json.get("error").asObject().get("code").asNumber().toNumber().intValue()).isEqualTo(-32601);
+        assertThat(json.get("error").asObject().getString("message")).isEqualTo("Method not found");
     }
 
     @Test
@@ -176,18 +184,14 @@ class McpServerTests {
         client.get("/mcp").send().assertStatus(405);
     }
 
-    // --- ping ---
-
     @Test
-    void shouldRespondToPing() throws Exception {
-        final var json = client.send("ping", Map.of());
-        assertThat(json.path("result").isObject()).isTrue();
+    void shouldRespondToPing() {
+        final var json = client.send("ping", Map.of()).asObject();
+        assertThat(json.get("result")).isInstanceOf(JsonObject.class);
     }
 
-    // --- session management ---
-
     @Test
-    void shouldReturnSessionIdOnInitialize() throws Exception {
+    void shouldReturnSessionIdOnInitialize() {
         final var response = client.post("/mcp")
             .header("Content-Type", "application/json")
             .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
@@ -197,11 +201,10 @@ class McpServerTests {
     }
 
     @Test
-    void shouldAcceptValidSessionId() throws Exception {
+    void shouldAcceptValidSessionId() {
         client.initialize();
-        // subsequent calls via client automatically include the session ID
         final var tools = client.listTools();
-        assertThat(tools.isArray()).isTrue();
+        assertThat(tools).isInstanceOf(JsonArray.class);
     }
 
     @Test
@@ -214,10 +217,8 @@ class McpServerTests {
             .assertStatus(404);
     }
 
-    // --- SSE transport ---
-
     @Test
-    void shouldRespondWithSseWhenAcceptHeaderIncludesEventStream() throws Exception {
+    void shouldRespondWithSseWhenAcceptHeaderIncludesEventStream() {
         final var response = client.post("/mcp")
             .header("Content-Type", "application/json")
             .header("Accept", "application/json, text/event-stream")
@@ -230,7 +231,7 @@ class McpServerTests {
     }
 
     @Test
-    void shouldIncludeValidJsonInSseDataField() throws Exception {
+    void shouldIncludeValidJsonInSseDataField() {
         final var response = client.post("/mcp")
             .header("Content-Type", "application/json")
             .header("Accept", "text/event-stream")
@@ -241,18 +242,29 @@ class McpServerTests {
             .filter(l -> l.startsWith("data: "))
             .findFirst()
             .orElseThrow();
-        final var json = MAPPER.readTree(dataLine.substring("data: ".length()));
-        assertThat(json.path("result").path("protocolVersion").asText()).isEqualTo("2025-03-26");
+        final var json = Json.parse(dataLine.substring("data: ".length())).asObject();
+        assertThat(json.get("result").asObject().getString("protocolVersion")).isEqualTo("2025-03-26");
     }
 
     @Test
-    void shouldReturnJsonWhenAcceptHeaderIsAbsent() throws Exception {
+    void shouldReturnJsonWhenAcceptHeaderIsAbsent() {
         final var response = client.post("/mcp")
             .header("Content-Type", "application/json")
             .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
             .send()
             .assertStatus(200);
         assertThat(response.contentType()).contains("application/json");
-        MAPPER.readTree(response.body()); // parses without error
+        Json.parse(response.body()); // parses without error
+    }
+
+    @Test
+    void shouldEchoStringIdInResponse() {
+        final var response = client.post("/mcp")
+            .header("Content-Type", "application/json")
+            .body("{\"jsonrpc\":\"2.0\",\"id\":\"req-abc\",\"method\":\"ping\",\"params\":{}}")
+            .send()
+            .assertStatus(200);
+        final var json = Json.parse(response.body()).asObject();
+        assertThat(json.getString("id")).isEqualTo("req-abc");
     }
 }

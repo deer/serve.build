@@ -19,6 +19,7 @@
  */
 package build.serve.ratelimit;
 
+import build.base.json.JsonValue;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.Request;
 import build.serve.foundation.Response;
@@ -85,7 +86,8 @@ class RateLimitMiddlewareTests {
             .build();
 
         var response = new StubResponse();
-        middleware.apply(ex -> {}).handle(createExchange("1.2.3.4", response));
+        middleware.apply(ex -> {
+        }).handle(createExchange("1.2.3.4", response));
 
         assertThat(response.headers).containsEntry("X-RateLimit-Limit", "5");
         assertThat(response.headers).containsEntry("X-RateLimit-Remaining", "4");
@@ -101,7 +103,8 @@ class RateLimitMiddlewareTests {
             .clock(clock)
             .build();
 
-        var handler = middleware.apply(ex -> {});
+        var handler = middleware.apply(ex -> {
+        });
 
         handler.handle(createExchange("1.2.3.4", new StubResponse()));
 
@@ -120,7 +123,8 @@ class RateLimitMiddlewareTests {
             .per(Duration.ofSeconds(10))
             .build();
 
-        var handler = middleware.apply(ex -> {});
+        var handler = middleware.apply(ex -> {
+        });
 
         handler.handle(createExchange("10.0.0.1", new StubResponse()));
 
@@ -141,7 +145,8 @@ class RateLimitMiddlewareTests {
             .per(Duration.ofSeconds(10))
             .build();
 
-        var handler = middleware.apply(ex -> {});
+        var handler = middleware.apply(ex -> {
+        });
         handler.handle(createExchange("5.6.7.8", new StubResponse()));
 
         var response = new StubResponse();
@@ -157,7 +162,8 @@ class RateLimitMiddlewareTests {
             .per(Duration.ofSeconds(10))
             .build();
 
-        var handler = middleware.apply(ex -> {});
+        var handler = middleware.apply(ex -> {
+        });
         handler.handle(createExchange("5.6.7.8, 10.0.0.1, 10.0.0.2", new StubResponse()));
 
         var response = new StubResponse();
@@ -174,7 +180,8 @@ class RateLimitMiddlewareTests {
             .keyExtractor(req -> req.header("X-User-Id").orElse("anon"))
             .build();
 
-        var handler = middleware.apply(ex -> {});
+        var handler = middleware.apply(ex -> {
+        });
 
         var r1 = new StubResponse();
         var r2 = new StubResponse();
@@ -196,7 +203,8 @@ class RateLimitMiddlewareTests {
             .clock(clock)
             .build();
 
-        var handler = middleware.apply(ex -> {});
+        var handler = middleware.apply(ex -> {
+        });
         handler.handle(createExchange("1.2.3.4", new StubResponse()));
 
         var response = new StubResponse();
@@ -305,7 +313,7 @@ class RateLimitMiddlewareTests {
         }
 
         @Override
-        public <T> T body(final Class<T> type) {
+        public JsonValue bodyAsJson() {
             throw new UnsupportedOperationException();
         }
     }

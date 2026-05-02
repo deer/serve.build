@@ -20,12 +20,19 @@ package build.serve.mcp;
  * #L%
  */
 
+import build.base.json.Json;
+import build.base.json.JsonArray;
+import build.base.json.JsonBoolean;
+import build.base.json.JsonNull;
+import build.base.json.JsonNumber;
+import build.base.json.JsonObject;
+import build.base.json.JsonString;
+import build.base.json.JsonValue;
 import build.serve.foundation.routing.RouterBuilder;
 import build.serve.testing.TestRequest;
 import build.serve.testing.TestServer;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -43,7 +50,6 @@ import java.util.Map;
  */
 final class McpTestClient implements AutoCloseable {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final String MCP_PATH = "/mcp";
 
     private final TestServer server;
@@ -64,31 +70,31 @@ final class McpTestClient implements AutoCloseable {
      * Sends {@code initialize}, captures the session ID from the response, and returns the
      * full JSON-RPC response for assertion.
      */
-    JsonNode initialize() throws Exception {
+    JsonValue initialize() {
         final var response = postRaw(rpc("initialize", nextId++, Map.of()));
         sessionId = response.header("Mcp-Session-Id");
-        return MAPPER.readTree(response.body());
+        return Json.parse(response.body());
     }
 
     /**
      * Returns the {@code tools} array from a {@code tools/list} call.
      */
-    JsonNode listTools() throws Exception {
-        return postJson(rpc("tools/list", nextId++, Map.of())).path("result").path("tools");
+    JsonValue listTools() {
+        return postJson(rpc("tools/list", nextId++, Map.of())).asObject().get("result").asObject().get("tools");
     }
 
     /**
      * Calls the named tool and returns the {@code result} object.
      */
-    JsonNode call(final String toolName, final Map<String, Object> arguments) throws Exception {
-        final var params = Map.of("name", toolName, "arguments", arguments);
-        return postJson(rpc("tools/call", nextId++, params)).path("result");
+    JsonValue call(final String toolName, final Map<String, Object> arguments) {
+        final var params = Map.<String, Object>of("name", toolName, "arguments", arguments);
+        return postJson(rpc("tools/call", nextId++, params)).asObject().get("result");
     }
 
     /**
      * Sends a raw JSON-RPC request and returns the full response node.
      */
-    JsonNode send(final String method, final Map<String, Object> params) throws Exception {
+    JsonValue send(final String method, final Map<String, Object> params) {
         return postJson(rpc(method, nextId++, params));
     }
 
@@ -111,13 +117,14 @@ final class McpTestClient implements AutoCloseable {
         server.close();
     }
 
-    private String rpc(final String method, final int id, final Map<String, Object> params) throws Exception {
-        final var node = MAPPER.createObjectNode()
+    private String rpc(final String method, final int id, final Map<String, Object> params) {
+        return JsonObject.builder()
             .put("jsonrpc", "2.0")
             .put("id", id)
-            .put("method", method);
-        node.set("params", MAPPER.valueToTree(params));
-        return MAPPER.writeValueAsString(node);
+            .put("method", method)
+            .put("params", toJsonValue(params))
+            .build()
+            .toJsonString();
     }
 
     private build.serve.testing.TestResponse postRaw(final String body) {
@@ -128,7 +135,38 @@ final class McpTestClient implements AutoCloseable {
         return req.body(body).send();
     }
 
-    private JsonNode postJson(final String body) throws Exception {
-        return MAPPER.readTree(postRaw(body).body());
+    private JsonValue postJson(final String body) {
+        return Json.parse(postRaw(body).body());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static JsonValue toJsonValue(final Object value) {
+        if (value == null) {
+            return JsonNull.INSTANCE;
+        }
+        if (value instanceof String s) {
+            return JsonString.of(s);
+        }
+        if (value instanceof Number n) {
+            return JsonNumber.of(n);
+        }
+        if (value instanceof Boolean b) {
+            return JsonBoolean.of(b);
+        }
+        if (value instanceof Map<?, ?> m) {
+            final var builder = JsonObject.builder();
+            for (final var entry : m.entrySet()) {
+                builder.put((String) entry.getKey(), toJsonValue(entry.getValue()));
+            }
+            return builder.build();
+        }
+        if (value instanceof List<?> l) {
+            final var builder = JsonArray.builder();
+            for (final var item : l) {
+                builder.add(toJsonValue(item));
+            }
+            return builder.build();
+        }
+        throw new IllegalArgumentException("Unsupported type for JSON conversion: " + value.getClass());
     }
 }

@@ -1,5 +1,6 @@
 package build.serve.foundation.error;
 
+import build.base.json.JsonValue;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.Request;
 import build.serve.foundation.Response;
@@ -121,7 +122,7 @@ class DefaultErrorHandlerTests {
         }
 
         @Override
-        public <T> T body(Class<T> type) {
+        public JsonValue bodyAsJson() {
             throw new UnsupportedOperationException();
         }
     }

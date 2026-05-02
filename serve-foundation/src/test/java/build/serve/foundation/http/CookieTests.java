@@ -1,5 +1,6 @@
 package build.serve.foundation.http;
 
+import build.base.json.JsonValue;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -320,7 +321,7 @@ class CookieTests {
         }
 
         @Override
-        public <T> T body(final Class<T> type) {
+        public JsonValue bodyAsJson() {
             throw new UnsupportedOperationException();
         }
     }

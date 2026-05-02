@@ -19,14 +19,11 @@
  */
 package build.serve.lsp.types;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-
 /**
  * Client capabilities sent in the initialize request.
  *
  * @author reed.vonredwitz
  * @since Apr-2026
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
 public record ClientCapabilities() implements LspType {
 }

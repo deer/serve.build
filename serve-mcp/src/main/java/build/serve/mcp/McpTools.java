@@ -19,14 +19,14 @@
  */
 package build.serve.mcp;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import build.base.json.JsonArray;
+import build.base.json.JsonObject;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * Factory helpers for building JSON Schema {@link ObjectNode} instances used as MCP tool input schemas.
+ * Factory helpers for building JSON Schema {@link JsonObject} instances used as MCP tool input schemas.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
@@ -39,43 +39,39 @@ public final class McpTools {
     /**
      * Builds a simple string property schema.
      *
-     * @param mapper      the {@link ObjectMapper}
      * @param description the property description
      * @return the schema node
      */
-    public static ObjectNode stringProperty(final ObjectMapper mapper, final String description) {
-        final var node = mapper.createObjectNode();
-        node.put("type", "string");
-        node.put("description", description);
-        return node;
+    public static JsonObject stringProperty(final String description) {
+        return JsonObject.builder()
+            .put("type", "string")
+            .put("description", description)
+            .build();
     }
 
     /**
      * Builds an object schema with required string properties.
      *
-     * @param mapper     the {@link ObjectMapper}
      * @param properties a map of property names to descriptions
      * @param required   the list of required property names
      * @return the schema node
      */
-    public static ObjectNode schema(final ObjectMapper mapper,
-                                    final Map<String, String> properties,
+    public static JsonObject schema(final Map<String, String> properties,
                                     final List<String> required) {
-        final var schema = mapper.createObjectNode();
-        schema.put("type", "object");
-
-        final var props = mapper.createObjectNode();
+        final var props = JsonObject.builder();
         for (final var entry : properties.entrySet()) {
-            props.set(entry.getKey(), stringProperty(mapper, entry.getValue()));
+            props.put(entry.getKey(), stringProperty(entry.getValue()));
         }
-        schema.set("properties", props);
 
-        final var requiredArray = mapper.createArrayNode();
+        final var requiredArray = JsonArray.builder();
         for (final var name : required) {
             requiredArray.add(name);
         }
-        schema.set("required", requiredArray);
 
-        return schema;
+        return JsonObject.builder()
+            .put("type", "object")
+            .put("properties", props.build())
+            .put("required", requiredArray.build())
+            .build();
     }
 }

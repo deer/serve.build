@@ -19,8 +19,6 @@
  */
 package build.serve.lsp.types;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
  * The kind of a completion entry.
@@ -42,24 +40,10 @@ public enum CompletionItemKind {
         this.value = value;
     }
 
-    /**
-     * Returns the numeric LSP value of this kind.
-     *
-     * @return the value
-     */
-    @JsonValue
     public int value() {
         return value;
     }
 
-    /**
-     * Returns the {@link CompletionItemKind} for the given LSP integer value.
-     *
-     * @param value the LSP integer value
-     * @return the matching kind
-     * @throws IllegalArgumentException if the value is not a valid kind
-     */
-    @JsonCreator
     public static CompletionItemKind fromValue(final int value) {
         for (final var v : values()) {
             if (v.value == value) {

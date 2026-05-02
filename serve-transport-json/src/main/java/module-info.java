@@ -18,7 +18,7 @@
  * #L%
  */
 /**
- * Jackson-based JSON body reader and writer injected via Exchange attributes.
+ * JSON body reader and writer injected via Exchange attributes.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
@@ -26,7 +26,7 @@
 module build.serve.transport.json {
     requires transitive build.serve.foundation;
     requires build.base.transport.json;
-    requires transitive com.fasterxml.jackson.databind;
+    requires transitive build.base.json;
     requires java.logging;
 
     exports build.serve.transport.json;

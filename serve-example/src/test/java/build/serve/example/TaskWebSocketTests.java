@@ -19,6 +19,7 @@
  */
 package build.serve.example;
 
+import build.base.json.JsonObject;
 import build.serve.example.api.TaskApiHandler;
 import build.serve.example.domain.TaskService;
 import build.serve.example.ws.TaskBroadcaster;
@@ -73,11 +74,10 @@ class TaskWebSocketTests {
                     })
                 .get(5, TimeUnit.SECONDS);
 
-            // Give the WebSocket handshake time to complete
             Thread.sleep(100);
 
             server.post("/api/tasks")
-                .jsonBody(new CreateRequest("WebSocket test"))
+                .jsonBody(JsonObject.builder().put("title", "WebSocket test").build())
                 .send()
                 .assertStatus(201);
 
@@ -100,11 +100,10 @@ class TaskWebSocketTests {
             .build();
 
         try (final var server = TestServer.of(router)) {
-            // Create a task first
             final var created = server.post("/api/tasks")
-                .jsonBody(new CreateRequest("To delete"))
+                .jsonBody(JsonObject.builder().put("title", "To delete").build())
                 .send()
-                .bodyAs(build.serve.example.domain.Task.class);
+                .bodyAsJson().asObject();
 
             final var received = new CompletableFuture<String>();
 
@@ -131,7 +130,7 @@ class TaskWebSocketTests {
 
             Thread.sleep(100);
 
-            server.delete("/api/tasks/" + created.id())
+            server.delete("/api/tasks/" + created.get("id").asNumber().toNumber().longValue())
                 .send()
                 .assertStatus(204);
 
@@ -154,9 +153,9 @@ class TaskWebSocketTests {
 
         try (final var server = TestServer.of(router)) {
             final var created = server.post("/api/tasks")
-                .jsonBody(new CreateRequest("Toggle me"))
+                .jsonBody(JsonObject.builder().put("title", "Toggle me").build())
                 .send()
-                .bodyAs(build.serve.example.domain.Task.class);
+                .bodyAsJson().asObject();
 
             final var received = new CompletableFuture<String>();
 
@@ -183,7 +182,7 @@ class TaskWebSocketTests {
 
             Thread.sleep(100);
 
-            server.put("/api/tasks/" + created.id())
+            server.put("/api/tasks/" + created.get("id").asNumber().toNumber().longValue())
                 .send()
                 .assertStatus(200);
 
@@ -191,8 +190,5 @@ class TaskWebSocketTests {
             assertThat(message).contains("\"event\":\"updated\"");
             assertThat(message).contains("\"done\":true");
         }
-    }
-
-    private record CreateRequest(String title) {
     }
 }

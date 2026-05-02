@@ -19,18 +19,18 @@
  */
 package build.serve.example;
 
+import build.base.json.Json;
+import build.base.json.JsonArray;
+import build.base.json.JsonNull;
 import build.serve.example.domain.TaskService;
 import build.serve.example.graphql.TaskGraphQlHandler;
 import build.serve.foundation.routing.RouterBuilder;
 import build.serve.testing.TestServer;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class TaskGraphQlTests {
-
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private static TestServer server() {
         final var service = new TaskService();
@@ -43,127 +43,126 @@ class TaskGraphQlTests {
     @Test
     void shouldQueryEmptyTaskList() throws Exception {
         try (final var s = server()) {
-            final var json = MAPPER.readTree(
+            final var json = Json.parse(
                 s.post("/graphql")
                     .header("Content-Type", "application/json")
                     .body("{\"query\":\"{ tasks { id title done } }\"}")
                     .send()
                     .assertStatus(200)
-                    .body());
+                    .body()).asObject();
 
-            assertThat(json.path("data").path("tasks").isArray()).isTrue();
-            assertThat(json.path("data").path("tasks")).isEmpty();
-            assertThat(json.path("errors").isMissingNode()).isTrue();
+            assertThat(json.get("data").asObject().get("tasks")).isInstanceOf(JsonArray.class);
+            assertThat(((JsonArray) json.get("data").asObject().get("tasks")).values()).isEmpty();
+            assertThat(json.has("errors")).isFalse();
         }
     }
 
     @Test
     void shouldCreateTaskViaMutation() throws Exception {
         try (final var s = server()) {
-            final var json = MAPPER.readTree(
+            final var json = Json.parse(
                 s.post("/graphql")
                     .header("Content-Type", "application/json")
                     .body("{\"query\":\"mutation { createTask(title: \\\"Buy milk\\\") { id title done } }\"}")
                     .send()
                     .assertStatus(200)
-                    .body());
+                    .body()).asObject();
 
-            final var task = json.path("data").path("createTask");
-            assertThat(task.path("title").asText()).isEqualTo("Buy milk");
-            assertThat(task.path("done").asBoolean()).isFalse();
-            assertThat(task.path("id").asLong()).isGreaterThan(0);
-            assertThat(json.path("errors").isMissingNode()).isTrue();
+            final var task = json.get("data").asObject().get("createTask").asObject();
+            assertThat(task.getString("title")).isEqualTo("Buy milk");
+            assertThat(task.get("done").asBoolean().value()).isFalse();
+            assertThat(Long.parseLong(task.getString("id"))).isGreaterThan(0);
+            assertThat(json.has("errors")).isFalse();
         }
     }
 
     @Test
     void shouldQueryTaskById() throws Exception {
         try (final var s = server()) {
-            // Create first
-            final var created = MAPPER.readTree(
+            final var created = Json.parse(
                 s.post("/graphql")
                     .header("Content-Type", "application/json")
                     .body("{\"query\":\"mutation { createTask(title: \\\"Find me\\\") { id } }\"}")
                     .send()
-                    .body());
+                    .body()).asObject();
 
-            final var id = created.path("data").path("createTask").path("id").asText();
+            final var id = created.get("data").asObject().get("createTask").asObject().getString("id");
 
-            final var json = MAPPER.readTree(
+            final var json = Json.parse(
                 s.post("/graphql")
                     .header("Content-Type", "application/json")
                     .body("{\"query\":\"{ task(id: \\\"" + id + "\\\") { id title done } }\"}")
                     .send()
                     .assertStatus(200)
-                    .body());
+                    .body()).asObject();
 
-            assertThat(json.path("data").path("task").path("title").asText()).isEqualTo("Find me");
+            assertThat(json.get("data").asObject().get("task").asObject().getString("title")).isEqualTo("Find me");
         }
     }
 
     @Test
     void shouldToggleTaskViaMutation() throws Exception {
         try (final var s = server()) {
-            final var created = MAPPER.readTree(
+            final var created = Json.parse(
                 s.post("/graphql")
                     .header("Content-Type", "application/json")
                     .body("{\"query\":\"mutation { createTask(title: \\\"Toggle me\\\") { id } }\"}")
                     .send()
-                    .body());
+                    .body()).asObject();
 
-            final var id = created.path("data").path("createTask").path("id").asText();
+            final var id = created.get("data").asObject().get("createTask").asObject().getString("id");
 
-            final var json = MAPPER.readTree(
+            final var json = Json.parse(
                 s.post("/graphql")
                     .header("Content-Type", "application/json")
                     .body("{\"query\":\"mutation { toggleTask(id: \\\"" + id + "\\\") { id done } }\"}")
                     .send()
                     .assertStatus(200)
-                    .body());
+                    .body()).asObject();
 
-            assertThat(json.path("data").path("toggleTask").path("done").asBoolean()).isTrue();
-            assertThat(json.path("errors").isMissingNode()).isTrue();
+            assertThat(json.get("data").asObject().get("toggleTask").asObject().get("done").asBoolean().value()).isTrue();
+            assertThat(json.has("errors")).isFalse();
         }
     }
 
     @Test
     void shouldDeleteTaskViaMutation() throws Exception {
         try (final var s = server()) {
-            final var created = MAPPER.readTree(
+            final var created = Json.parse(
                 s.post("/graphql")
                     .header("Content-Type", "application/json")
                     .body("{\"query\":\"mutation { createTask(title: \\\"Delete me\\\") { id } }\"}")
                     .send()
-                    .body());
+                    .body()).asObject();
 
-            final var id = created.path("data").path("createTask").path("id").asText();
+            final var id = created.get("data").asObject().get("createTask").asObject().getString("id");
 
-            final var json = MAPPER.readTree(
+            final var json = Json.parse(
                 s.post("/graphql")
                     .header("Content-Type", "application/json")
                     .body("{\"query\":\"mutation { deleteTask(id: \\\"" + id + "\\\") }\"}")
                     .send()
                     .assertStatus(200)
-                    .body());
+                    .body()).asObject();
 
-            assertThat(json.path("data").path("deleteTask").asBoolean()).isTrue();
-            assertThat(json.path("errors").isMissingNode()).isTrue();
+            assertThat(json.get("data").asObject().get("deleteTask").asBoolean().value()).isTrue();
+            assertThat(json.has("errors")).isFalse();
         }
     }
 
     @Test
     void shouldReturnNullForMissingTask() throws Exception {
         try (final var s = server()) {
-            final var json = MAPPER.readTree(
+            final var json = Json.parse(
                 s.post("/graphql")
                     .header("Content-Type", "application/json")
                     .body("{\"query\":\"{ task(id: \\\"999\\\") { id title } }\"}")
                     .send()
                     .assertStatus(200)
-                    .body());
+                    .body()).asObject();
 
-            assertThat(json.path("data").path("task").isNull()).isTrue();
-            assertThat(json.path("errors").isMissingNode()).isTrue();
+            assertThat(json.get("data").asObject().get("task")).isInstanceOf(JsonNull.class);
+            assertThat(json.has("errors")).isFalse();
         }
     }
 }

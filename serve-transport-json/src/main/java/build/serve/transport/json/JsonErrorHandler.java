@@ -19,14 +19,12 @@
  */
 package build.serve.transport.json;
 
+import build.base.json.JsonObject;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.error.DefaultErrorHandler;
 import build.serve.foundation.error.ErrorHandler;
 import build.serve.foundation.error.HttpException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -38,43 +36,14 @@ import java.util.logging.Logger;
  */
 public class JsonErrorHandler implements ErrorHandler {
 
-    /**
-     * The {@link Logger} for this class.
-     */
     private static final Logger LOGGER = Logger.getLogger(JsonErrorHandler.class.getName());
 
-    /**
-     * The Jackson {@link ObjectMapper}.
-     */
-    private final ObjectMapper objectMapper;
-
-    /**
-     * The fallback {@link ErrorHandler} used when JSON serialization fails.
-     */
-    private final ErrorHandler fallback;
-
-    /**
-     * Constructs a {@link JsonErrorHandler} with the specified {@link ObjectMapper}.
-     *
-     * @param objectMapper the {@link ObjectMapper}
-     */
-    public JsonErrorHandler(final ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
-        this.fallback = new DefaultErrorHandler();
-    }
-
-    /**
-     * Constructs a {@link JsonErrorHandler} with a default {@link ObjectMapper}.
-     */
-    public JsonErrorHandler() {
-        this(new ObjectMapper());
-    }
+    private final ErrorHandler fallback = new DefaultErrorHandler();
 
     @Override
     public void handle(final Exchange exchange, final Throwable error) {
         final int statusCode;
         final String message;
-        final String errorName;
 
         if (error instanceof HttpException httpException) {
             statusCode = httpException.statusCode();
@@ -82,19 +51,18 @@ public class JsonErrorHandler implements ErrorHandler {
         } else {
             statusCode = 500;
             message = "Internal Server Error";
-
             LOGGER.log(Level.SEVERE, "Unhandled exception", error);
         }
 
-        errorName = statusText(statusCode);
+        final var errorName = statusText(statusCode);
 
         try {
-            final Map<String, Object> body = new LinkedHashMap<>();
-            body.put("status", statusCode);
-            body.put("error", errorName);
-            body.put("message", message);
-
-            final var json = objectMapper.writeValueAsString(body);
+            final var json = JsonObject.builder()
+                .put("status", statusCode)
+                .put("error", errorName)
+                .put("message", message)
+                .build()
+                .toJsonString();
 
             exchange.response()
                 .status(statusCode)
@@ -102,17 +70,10 @@ public class JsonErrorHandler implements ErrorHandler {
                 .send(json);
         } catch (final Exception e) {
             LOGGER.log(Level.WARNING, "Failed to serialize JSON error response", e);
-
             fallback.handle(exchange, error);
         }
     }
 
-    /**
-     * Returns the standard HTTP status text for a status code.
-     *
-     * @param statusCode the HTTP status code
-     * @return the status text
-     */
     private static String statusText(final int statusCode) {
         return switch (statusCode) {
             case 400 -> "Bad Request";

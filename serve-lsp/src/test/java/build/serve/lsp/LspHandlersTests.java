@@ -19,7 +19,10 @@
  */
 package build.serve.lsp;
 
+import build.base.json.JsonNull;
+import build.serve.lsp.types.CodeAction;
 import build.serve.lsp.types.Diagnostic;
+import build.serve.lsp.types.DiagnosticSeverity;
 import build.serve.lsp.types.Location;
 import build.serve.lsp.types.Range;
 import build.serve.lsp.types.ShowMessageParams;
@@ -54,11 +57,11 @@ class LspHandlersTests {
         try (final var client = new LspTransportTests.LspTestClient(server)) {
             final var response = client.sendRequest(1, "textDocument/definition", POSITION_PARAMS);
 
-            final var result = response.get("result");
-            assertThat(result.path("uri").asText()).isEqualTo("file:///other.java");
-            assertThat(result.path("range").path("start").path("line").asInt()).isEqualTo(10);
-            assertThat(result.path("range").path("start").path("character").asInt()).isEqualTo(0);
-            assertThat(result.path("range").path("end").path("character").asInt()).isEqualTo(15);
+            final var result = response.get("result").asObject();
+            assertThat(result.get("uri").asString().value()).isEqualTo("file:///other.java");
+            assertThat(result.get("range").asObject().get("start").asObject().get("line").asNumber().toNumber().intValue()).isEqualTo(10);
+            assertThat(result.get("range").asObject().get("start").asObject().get("character").asNumber().toNumber().intValue()).isEqualTo(0);
+            assertThat(result.get("range").asObject().get("end").asObject().get("character").asNumber().toNumber().intValue()).isEqualTo(15);
         }
     }
 
@@ -77,12 +80,11 @@ class LspHandlersTests {
                     + "\"position\":{\"line\":0,\"character\":0},"
                     + "\"includeDeclaration\":true}");
 
-            final var result = response.get("result");
-            assertThat(result.isArray()).isTrue();
-            assertThat(result.size()).isEqualTo(3);
-            assertThat(result.get(0).path("uri").asText()).isEqualTo("file:///a.java");
-            assertThat(result.get(1).path("uri").asText()).isEqualTo("file:///b.java");
-            assertThat(result.get(2).path("range").path("start").path("line").asInt()).isEqualTo(7);
+            final var result = response.get("result").asArray();
+            assertThat(result.values()).hasSize(3);
+            assertThat(result.values().get(0).asObject().get("uri").asString().value()).isEqualTo("file:///a.java");
+            assertThat(result.values().get(1).asObject().get("uri").asString().value()).isEqualTo("file:///b.java");
+            assertThat(result.values().get(2).asObject().get("range").asObject().get("start").asObject().get("line").asNumber().toNumber().intValue()).isEqualTo(7);
         }
     }
 
@@ -102,11 +104,11 @@ class LspHandlersTests {
                     + "\"position\":{\"line\":5,\"character\":10},"
                     + "\"newName\":\"newMethodName\"}");
 
-            final var result = response.get("result");
-            assertThat(result.path("changes").has("file:///test.java")).isTrue();
-            final var edits = result.path("changes").path("file:///test.java");
-            assertThat(edits.size()).isEqualTo(1);
-            assertThat(edits.get(0).path("newText").asText()).isEqualTo("newMethodName");
+            final var result = response.get("result").asObject();
+            assertThat(result.get("changes").asObject().has("file:///test.java")).isTrue();
+            final var edits = result.get("changes").asObject().get("file:///test.java").asArray();
+            assertThat(edits.values()).hasSize(1);
+            assertThat(edits.values().get(0).asObject().get("newText").asString().value()).isEqualTo("newMethodName");
         }
     }
 
@@ -117,9 +119,8 @@ class LspHandlersTests {
         try (final var client = new LspTransportTests.LspTestClient(server)) {
             final var response = client.sendRequest(1, "textDocument/definition", POSITION_PARAMS);
 
-            // No handler registered — result should be null, not an error
             assertThat(response.has("error")).isFalse();
-            assertThat(response.path("result").isNull()).isTrue();
+            assertThat(response.get("result")).isInstanceOf(JsonNull.class);
         }
     }
 
@@ -137,11 +138,11 @@ class LspHandlersTests {
                     + "\"contentChanges\":[{\"text\":\"updated content\"}]}");
 
             final var notification = client.readMessage();
-            assertThat(notification.path("method").asText()).isEqualTo("textDocument/publishDiagnostics");
+            assertThat(notification.get("method").asString().value()).isEqualTo("textDocument/publishDiagnostics");
 
-            final var diag = notification.path("params").path("diagnostics").get(0);
-            assertThat(diag.path("message").asText()).isEqualTo("Unused variable");
-            assertThat(diag.path("severity").asInt()).isEqualTo(2); // WARNING = 2
+            final var diag = notification.get("params").asObject().get("diagnostics").asArray().values().get(0).asObject();
+            assertThat(diag.get("message").asString().value()).isEqualTo("Unused variable");
+            assertThat(diag.get("severity").asNumber().toNumber().intValue()).isEqualTo(2);
         }
     }
 
@@ -157,8 +158,8 @@ class LspHandlersTests {
                 "{\"textDocument\":{\"uri\":\"file:///test.java\"}}");
 
             final var notification = client.readMessage();
-            assertThat(notification.path("method").asText()).isEqualTo("textDocument/publishDiagnostics");
-            assertThat(notification.path("params").path("diagnostics").size()).isEqualTo(0);
+            assertThat(notification.get("method").asString().value()).isEqualTo("textDocument/publishDiagnostics");
+            assertThat(notification.get("params").asObject().get("diagnostics").asArray().values()).isEmpty();
         }
     }
 
@@ -174,10 +175,53 @@ class LspHandlersTests {
                 "{\"textDocument\":{\"uri\":\"file:///test.java\"}}");
 
             final var notification = client.readMessage();
-            assertThat(notification.path("method").asText()).isEqualTo("window/showMessage");
-            assertThat(notification.path("params").path("message").asText())
+            assertThat(notification.get("method").asString().value()).isEqualTo("window/showMessage");
+            assertThat(notification.get("params").asObject().get("message").asString().value())
                 .isEqualTo("File saved successfully");
-            assertThat(notification.path("params").path("type").asInt()).isEqualTo(3); // Info
+            assertThat(notification.get("params").asObject().get("type").asNumber().toNumber().intValue()).isEqualTo(3);
+        }
+    }
+
+    @Test
+    void shouldParseCodeActionContextDiagnostics() throws Exception {
+        final var server = LspServer.builder()
+            .onCodeAction((params, ctx) -> {
+                assertThat(params.context()).hasSize(1);
+                assertThat(params.context().get(0).message()).isEqualTo("Unused import");
+                assertThat(params.context().get(0).severity()).isEqualTo(DiagnosticSeverity.WARNING);
+                return List.of(new CodeAction("Remove unused import", "quickfix", null, null, null));
+            })
+            .build();
+
+        try (final var client = new LspTransportTests.LspTestClient(server)) {
+            final var response = client.sendRequest(1, "textDocument/codeAction",
+                "{\"textDocument\":{\"uri\":\"file:///test.java\"},"
+                    + "\"range\":{\"start\":{\"line\":0,\"character\":0},\"end\":{\"line\":0,\"character\":0}},"
+                    + "\"context\":{\"diagnostics\":[{\"range\":{\"start\":{\"line\":0,\"character\":0},"
+                    + "\"end\":{\"line\":0,\"character\":10}},\"severity\":2,\"message\":\"Unused import\"}]}}");
+
+            final var result = response.get("result").asArray();
+            assertThat(result.values()).hasSize(1);
+            assertThat(result.values().get(0).asObject().getString("title")).isEqualTo("Remove unused import");
+        }
+    }
+
+    @Test
+    void shouldHandleCodeActionWithEmptyContext() throws Exception {
+        final var server = LspServer.builder()
+            .onCodeAction((params, ctx) -> {
+                assertThat(params.context()).isEmpty();
+                return List.of();
+            })
+            .build();
+
+        try (final var client = new LspTransportTests.LspTestClient(server)) {
+            final var response = client.sendRequest(1, "textDocument/codeAction",
+                "{\"textDocument\":{\"uri\":\"file:///test.java\"},"
+                    + "\"range\":{\"start\":{\"line\":0,\"character\":0},\"end\":{\"line\":0,\"character\":0}},"
+                    + "\"context\":{\"diagnostics\":[]}}");
+
+            assertThat(response.has("error")).isFalse();
         }
     }
 
@@ -196,11 +240,11 @@ class LspHandlersTests {
                     + "\"position\":{\"line\":0,\"character\":0},"
                     + "\"includeDeclaration\":false}");
 
-            assertThat(def.path("id").asInt()).isEqualTo(1);
-            assertThat(def.path("result").path("uri").asText()).isEqualTo("file:///def.java");
+            assertThat(def.get("id").asNumber().toNumber().intValue()).isEqualTo(1);
+            assertThat(def.get("result").asObject().get("uri").asString().value()).isEqualTo("file:///def.java");
 
-            assertThat(refs.path("id").asInt()).isEqualTo(2);
-            assertThat(refs.path("result").get(0).path("uri").asText()).isEqualTo("file:///ref.java");
+            assertThat(refs.get("id").asNumber().toNumber().intValue()).isEqualTo(2);
+            assertThat(refs.get("result").asArray().values().get(0).asObject().get("uri").asString().value()).isEqualTo("file:///ref.java");
         }
     }
 }

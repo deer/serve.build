@@ -25,6 +25,7 @@
  */
 module build.serve.foundation {
     requires build.base.foundation;
+    requires transitive build.base.json;
     requires transitive build.base.configuration;
     requires build.base.option;
     requires build.base.network;

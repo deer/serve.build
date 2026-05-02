@@ -19,6 +19,7 @@
  */
 package build.serve.foundation.routing;
 
+import build.base.json.JsonValue;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.Handler;
 import build.serve.foundation.Request;
@@ -331,8 +332,8 @@ public class RouterBuilder {
         }
 
         @Override
-        public <T> T body(final Class<T> type) {
-            return delegate.body(type);
+        public JsonValue bodyAsJson() {
+            return delegate.bodyAsJson();
         }
     }
 }

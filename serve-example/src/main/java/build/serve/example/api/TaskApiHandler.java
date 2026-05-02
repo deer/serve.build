@@ -19,10 +19,16 @@
  */
 package build.serve.example.api;
 
+import build.base.json.Json;
+import build.base.json.JsonArray;
+import build.base.json.JsonObject;
+import build.serve.example.domain.Task;
 import build.serve.example.domain.TaskService;
 import build.serve.foundation.routing.Router;
 import build.serve.foundation.routing.RouterBuilder;
 import build.serve.foundation.validation.Validate;
+
+import java.util.List;
 
 /**
  * JSON REST handler for tasks.
@@ -36,9 +42,6 @@ import build.serve.foundation.validation.Validate;
  * @since Mar-2026
  */
 public final class TaskApiHandler {
-
-    private record CreateRequest(String title) {
-    }
 
     private final TaskService service;
 
@@ -55,20 +58,20 @@ public final class TaskApiHandler {
     public Router router() {
         return RouterBuilder.create()
             .get("/tasks", exchange -> {
-                exchange.sendBody(service.list());
+                exchange.sendBody(tasksToJson(service.list()));
             })
             .post("/tasks", exchange -> {
-                final var req = exchange.bodyAs(CreateRequest.class);
-                final var title = Validate.notBlank("title", req.title());
+                final var body = Json.parse(exchange.request().bodyAsString()).asObject();
+                final var title = Validate.notBlank("title", body.getString("title"));
                 final var task = service.create(title);
                 exchange.response().status(201);
-                exchange.sendBody(task);
+                exchange.sendBody(taskToJson(task));
             })
             .put("/tasks/{id}", exchange -> {
                 final var id = Long.parseLong(Validate.present("id", exchange.pathParam("id")));
                 final var updated = service.toggle(id);
                 if (updated.isPresent()) {
-                    exchange.sendBody(updated.get());
+                    exchange.sendBody(taskToJson(updated.get()));
                 } else {
                     exchange.response().status(404).send("{\"error\":\"not found\"}");
                 }
@@ -82,5 +85,21 @@ public final class TaskApiHandler {
                 }
             })
             .build();
+    }
+
+    private static JsonObject taskToJson(final Task task) {
+        return JsonObject.builder()
+            .put("id", task.id())
+            .put("title", task.title())
+            .put("done", task.done())
+            .build();
+    }
+
+    private static JsonArray tasksToJson(final List<Task> tasks) {
+        final var builder = JsonArray.builder();
+        for (final var task : tasks) {
+            builder.add(taskToJson(task));
+        }
+        return builder.build();
     }
 }

@@ -81,12 +81,6 @@
         </dependency>
 
         <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
             <scope>test</scope>
@@ -108,7 +102,11 @@
                     <!-- JPMS requires compile scope for test-only module requires; maven-dependency-plugin can't model this -->
                     <ignoredNonTestScopedDependencies>
                         <ignoredNonTestScopedDependency>jakarta.inject:jakarta.inject-api</ignoredNonTestScopedDependency>
+                        <ignoredNonTestScopedDependency>build.base:base-json</ignoredNonTestScopedDependency>
                     </ignoredNonTestScopedDependencies>
+                    <ignoredUsedUndeclaredDependencies>
+                        <ignoredUsedUndeclaredDependency>build.base:base-json</ignoredUsedUndeclaredDependency>
+                    </ignoredUsedUndeclaredDependencies>
                 </configuration>
             </plugin>
         </plugins>

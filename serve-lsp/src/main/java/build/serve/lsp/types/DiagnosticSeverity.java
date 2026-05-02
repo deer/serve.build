@@ -19,8 +19,6 @@
  */
 package build.serve.lsp.types;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
  * The diagnostic severity.
@@ -38,24 +36,10 @@ public enum DiagnosticSeverity {
         this.value = value;
     }
 
-    /**
-     * Returns the numeric LSP value of this severity.
-     *
-     * @return the value
-     */
-    @JsonValue
     public int value() {
         return value;
     }
 
-    /**
-     * Returns the {@link DiagnosticSeverity} for the given LSP integer value.
-     *
-     * @param value the LSP integer value
-     * @return the matching severity
-     * @throws IllegalArgumentException if the value is not a valid severity
-     */
-    @JsonCreator
     public static DiagnosticSeverity fromValue(final int value) {
         for (final var v : values()) {
             if (v.value == value) {

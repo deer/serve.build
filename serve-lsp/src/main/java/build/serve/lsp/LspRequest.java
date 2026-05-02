@@ -19,6 +19,7 @@
  */
 package build.serve.lsp;
 
+import build.base.json.JsonObject;
 import build.serve.lsp.params.CodeActionParams;
 import build.serve.lsp.params.DocumentSymbolParams;
 import build.serve.lsp.params.ExecuteCommandParams;
@@ -32,8 +33,6 @@ import build.serve.lsp.params.RenameParams;
 import build.serve.lsp.params.SelectionRangeParams;
 import build.serve.lsp.params.TextDocumentPositionParams;
 import build.serve.lsp.params.WorkspaceSymbolParams;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Sealed hierarchy of all typed LSP requests (messages with an id that expect a response).
@@ -185,31 +184,28 @@ public sealed interface LspRequest {
         }
     }
 
-    static LspRequest parse(final LspRequestMethod method,
-                            final ObjectMapper mapper,
-                            final JsonNode params) throws Exception {
+    static LspRequest parse(final LspRequestMethod method, final JsonObject params) {
         return switch (method) {
-            case CODE_ACTION -> new CodeAction(mapper.treeToValue(params, CodeActionParams.class));
-            case COMPLETION -> new Completion(mapper.treeToValue(params, TextDocumentPositionParams.class));
-            case DECLARATION -> new Declaration(mapper.treeToValue(params, TextDocumentPositionParams.class));
-            case DEFINITION -> new Definition(mapper.treeToValue(params, TextDocumentPositionParams.class));
-            case DOCUMENT_HIGHLIGHT ->
-                new DocumentHighlight(mapper.treeToValue(params, TextDocumentPositionParams.class));
-            case DOCUMENT_SYMBOL -> new DocumentSymbol(mapper.treeToValue(params, DocumentSymbolParams.class));
-            case EXECUTE_COMMAND -> new ExecuteCommand(mapper.treeToValue(params, ExecuteCommandParams.class));
-            case FOLDING_RANGE -> new FoldingRange(mapper.treeToValue(params, FoldingRangeParams.class));
-            case FORMATTING -> new Formatting(mapper.treeToValue(params, FormattingParams.class));
-            case HOVER -> new Hover(mapper.treeToValue(params, TextDocumentPositionParams.class));
-            case IMPLEMENTATION -> new Implementation(mapper.treeToValue(params, TextDocumentPositionParams.class));
-            case INITIALIZE -> new Initialize(mapper.treeToValue(params, InitializeParams.class));
-            case INLAY_HINT -> new InlayHint(mapper.treeToValue(params, InlayHintParams.class));
-            case RANGE_FORMATTING -> new RangeFormatting(mapper.treeToValue(params, RangeFormattingParams.class));
-            case REFERENCES -> new References(mapper.treeToValue(params, ReferenceParams.class));
-            case RENAME -> new Rename(mapper.treeToValue(params, RenameParams.class));
-            case SELECTION_RANGE -> new SelectionRange(mapper.treeToValue(params, SelectionRangeParams.class));
-            case SIGNATURE_HELP -> new SignatureHelp(mapper.treeToValue(params, TextDocumentPositionParams.class));
-            case TYPE_DEFINITION -> new TypeDefinition(mapper.treeToValue(params, TextDocumentPositionParams.class));
-            case WORKSPACE_SYMBOL -> new WorkspaceSymbol(mapper.treeToValue(params, WorkspaceSymbolParams.class));
+            case CODE_ACTION -> new CodeAction(LspJson.parseCodeAction(params));
+            case COMPLETION -> new Completion(LspJson.parseTDPosition(params));
+            case DECLARATION -> new Declaration(LspJson.parseTDPosition(params));
+            case DEFINITION -> new Definition(LspJson.parseTDPosition(params));
+            case DOCUMENT_HIGHLIGHT -> new DocumentHighlight(LspJson.parseTDPosition(params));
+            case DOCUMENT_SYMBOL -> new DocumentSymbol(LspJson.parseDocumentSymbol(params));
+            case EXECUTE_COMMAND -> new ExecuteCommand(LspJson.parseExecuteCommand(params));
+            case FOLDING_RANGE -> new FoldingRange(LspJson.parseFoldingRange(params));
+            case FORMATTING -> new Formatting(LspJson.parseFormatting(params));
+            case HOVER -> new Hover(LspJson.parseTDPosition(params));
+            case IMPLEMENTATION -> new Implementation(LspJson.parseTDPosition(params));
+            case INITIALIZE -> new Initialize(LspJson.parseInitialize(params));
+            case INLAY_HINT -> new InlayHint(LspJson.parseInlayHint(params));
+            case RANGE_FORMATTING -> new RangeFormatting(LspJson.parseRangeFormatting(params));
+            case REFERENCES -> new References(LspJson.parseReferences(params));
+            case RENAME -> new Rename(LspJson.parseRename(params));
+            case SELECTION_RANGE -> new SelectionRange(LspJson.parseSelectionRange(params));
+            case SIGNATURE_HELP -> new SignatureHelp(LspJson.parseTDPosition(params));
+            case TYPE_DEFINITION -> new TypeDefinition(LspJson.parseTDPosition(params));
+            case WORKSPACE_SYMBOL -> new WorkspaceSymbol(LspJson.parseWorkspaceSymbol(params));
         };
     }
 }

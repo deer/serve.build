@@ -19,7 +19,7 @@
  */
 package build.serve.mcp;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import build.base.json.JsonValue;
 
 import java.time.Instant;
 import java.util.Objects;
@@ -46,7 +46,7 @@ import java.util.Optional;
 public record ToolCallEvent(Instant timestamp,
                             String sessionId,
                             String toolName,
-                            JsonNode arguments,
+                            JsonValue arguments,
                             Optional<McpToolResult> result,
                             long durationMs,
                             Optional<Throwable> error) {
@@ -63,7 +63,7 @@ public record ToolCallEvent(Instant timestamp,
      */
     public static ToolCallEvent success(final String sessionId,
                                         final String toolName,
-                                        final JsonNode arguments,
+                                        final JsonValue arguments,
                                         final McpToolResult result,
                                         final long durationMs) {
         Objects.requireNonNull(sessionId, "sessionId must not be null");
@@ -93,7 +93,7 @@ public record ToolCallEvent(Instant timestamp,
      */
     public static ToolCallEvent failure(final String sessionId,
                                         final String toolName,
-                                        final JsonNode arguments,
+                                        final JsonValue arguments,
                                         final Throwable error,
                                         final long durationMs) {
         Objects.requireNonNull(sessionId, "sessionId must not be null");
