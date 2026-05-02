@@ -19,6 +19,7 @@
  */
 package build.serve.security;
 
+import build.base.json.JsonValue;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.Request;
 import build.serve.foundation.Response;
@@ -189,7 +190,7 @@ class SecurityHeadersMiddlewareTests {
         }
 
         @Override
-        public build.base.json.JsonValue bodyAsJson() {
+        public JsonValue bodyAsJson() {
             throw new UnsupportedOperationException();
         }
     }

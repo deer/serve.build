@@ -1,6 +1,7 @@
 package build.serve.transport.json;
 
 import build.base.json.Json;
+import build.base.json.JsonValue;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.Request;
 import build.serve.foundation.Response;
@@ -123,7 +124,7 @@ class JsonErrorHandlerTests {
         }
 
         @Override
-        public build.base.json.JsonValue bodyAsJson() {
+        public JsonValue bodyAsJson() {
             throw new UnsupportedOperationException();
         }
     }

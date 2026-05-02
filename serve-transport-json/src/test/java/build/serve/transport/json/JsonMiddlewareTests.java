@@ -1,7 +1,6 @@
 package build.serve.transport.json;
 
 import build.base.json.JsonObject;
-import build.base.json.JsonValue;
 import build.serve.foundation.Handler;
 import build.serve.foundation.routing.RouterBuilder;
 import build.serve.transport.http.HttpTransport;
