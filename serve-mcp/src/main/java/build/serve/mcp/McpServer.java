@@ -32,11 +32,19 @@ import build.serve.foundation.Exchange;
 import build.serve.foundation.Handler;
 import build.serve.sse.SseEvent;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -96,27 +104,14 @@ public final class McpServer {
 
             final var body = exchange.request().bodyAsString();
             final var request = Json.parse(body).asObject();
+            final var isInitialize = "initialize".equals(getString(request, "method"));
 
-            final var rpcMethod = getString(request, "method");
-            final var id = request.members().get("id");
+            final var maybeResponse = dispatch(request, sessionId.orElse("local"));
 
-            // Notification (no id) — respond 202
-            if (id == null || id instanceof JsonNull) {
+            if (maybeResponse.isEmpty()) {
                 exchange.response().status(202).send("");
                 return;
             }
-
-            final var isInitialize = "initialize".equals(rpcMethod);
-            final var responseJson = switch (rpcMethod) {
-                case "initialize" -> envelope(id, handleInitialize());
-                case "ping" -> envelope(id, JsonObject.builder().build());
-                case "tools/list" -> envelope(id, handleToolsList());
-                case "tools/call" -> {
-                    final var params = request.members().getOrDefault("params", JsonNull.INSTANCE);
-                    yield handleToolsCall(params, sessionId.orElse("local"), id);
-                }
-                default -> errorEnvelope(id, -32601, "Method not found");
-            };
 
             if (isInitialize) {
                 final var newSessionId = UUID.randomUUID().toString();
@@ -124,7 +119,7 @@ public final class McpServer {
                 exchange.response().header("Mcp-Session-Id", newSessionId);
             }
 
-            final var jsonString = responseJson.toJsonString();
+            final var jsonString = maybeResponse.get().toJsonString();
 
             if (acceptsSse(exchange)) {
                 final var sseBody = SseEvent.of("message", jsonString).serialize()
@@ -140,6 +135,56 @@ public final class McpServer {
                     .send(jsonString.getBytes(StandardCharsets.UTF_8));
             }
         };
+    }
+
+    /**
+     * Runs the MCP stdio transport, reading newline-delimited JSON-RPC from {@code in} and
+     * writing newline-delimited JSON responses to {@code out}. Blocks until {@code in} reaches EOF.
+     * <p>
+     * All tool calls use the session ID {@code "local"}.
+     *
+     * @param in  the input stream (e.g. {@code System.in})
+     * @param out the output stream (e.g. {@code System.out})
+     */
+    public void stdioLoop(final InputStream in,
+                          final OutputStream out) {
+        final var reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
+        final var writer = new PrintWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8), true);
+        try {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                final var request = Json.parse(line).asObject();
+                dispatch(request, "local").ifPresent(response -> writer.println(response.toJsonString()));
+            }
+        } catch (final IOException e) {
+            // EOF or closed stream — exit normally
+        }
+    }
+
+    private Optional<JsonObject> dispatch(final JsonObject request,
+                                          final String sessionId) {
+        final var rpcMethod = getString(request, "method");
+        final var id = request.members().get("id");
+
+        if (id == null || id instanceof JsonNull) {
+            return Optional.empty();
+        }
+
+        final var response = switch (rpcMethod) {
+            case "initialize" -> envelope(id, handleInitialize());
+            case "ping" -> envelope(id, JsonObject.builder().build());
+            case "tools/list" -> envelope(id, handleToolsList());
+            case "tools/call" -> {
+                final var params = request.members().getOrDefault("params", JsonNull.INSTANCE);
+                yield handleToolsCall(params, sessionId, id);
+            }
+            default -> errorEnvelope(id, -32601, "Method not found");
+        };
+
+        return Optional.of(response);
     }
 
     private boolean acceptsSse(final Exchange exchange) {
