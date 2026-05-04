@@ -76,6 +76,7 @@
     "npm:tailwindcss@^4.2.4": "4.2.4",
     "npm:unified@^11.0.5": "11.0.5",
     "npm:unist-util-visit@^5.1.0": "5.1.0",
+    "npm:vite@*": "7.3.2",
     "npm:vite@7.3.2": "7.3.2",
     "npm:vite@^7.1.4": "7.3.2",
     "npm:vite@^7.3.2": "7.3.2",
