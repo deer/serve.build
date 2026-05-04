@@ -43,10 +43,18 @@ public final class GraphiQlHandler {
                 body { margin: 0; }
                 #graphiql { height: 100dvh; }
             </style>
-            <link rel="stylesheet" href="https://unpkg.com/graphiql@3/graphiql.min.css"/>
-            <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-            <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-            <script crossorigin src="https://unpkg.com/graphiql@3/graphiql.min.js"></script>
+            <link rel="stylesheet" href="https://unpkg.com/graphiql@3.9.0/graphiql.min.css"
+                  integrity="sha384-QMux00XgRtwRLSYIY3kw2rj1ovk5AuuliAchk+HSQbqdbGFnz9GYuqIlOqxhwCE2"
+                  crossorigin="anonymous"/>
+            <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"
+                    integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z"
+                    crossorigin="anonymous"></script>
+            <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"
+                    integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1"
+                    crossorigin="anonymous"></script>
+            <script src="https://unpkg.com/graphiql@3.9.0/graphiql.min.js"
+                    integrity="sha384-8NGfVj4CVlqHajlZj+bPJT4thxPMHMJYn7DWK2CvtopLd02E7qsPHazniBYvVjOO"
+                    crossorigin="anonymous"></script>
         </head>
         <body>
             <div id="graphiql">Loading\u2026</div>

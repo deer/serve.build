@@ -47,14 +47,16 @@ import java.util.concurrent.TimeUnit;
 public final class InMemorySessionStore implements SessionStore {
 
     private final Duration ttl;
+    private final int maxSessions;
     private final ConcurrentHashMap<String, Entry> sessions = new ConcurrentHashMap<>();
     private final ScheduledExecutorService cleaner;
 
     private record Entry(Map<String, Object> attributes, Instant expiresAt) {
     }
 
-    private InMemorySessionStore(final Duration ttl) {
+    private InMemorySessionStore(final Duration ttl, final int maxSessions) {
         this.ttl = Objects.requireNonNull(ttl, "ttl");
+        this.maxSessions = maxSessions;
         this.cleaner = Executors.newSingleThreadScheduledExecutor(r -> {
             final var thread = new Thread(r, "session-cleaner");
             thread.setDaemon(true);
@@ -64,22 +66,39 @@ public final class InMemorySessionStore implements SessionStore {
     }
 
     /**
-     * Creates a store with the default 30-minute session TTL.
+     * Creates a store with the default 30-minute session TTL and a 10,000-session cap.
      *
      * @return a new {@link InMemorySessionStore}
      */
     public static InMemorySessionStore create() {
-        return new InMemorySessionStore(Duration.ofMinutes(30));
+        return new InMemorySessionStore(Duration.ofMinutes(30), 10_000);
     }
 
     /**
-     * Creates a store with a custom session TTL.
+     * Creates a store with a custom session TTL and a 10,000-session cap.
      *
      * @param ttl the time-to-live for inactive sessions
      * @return a new {@link InMemorySessionStore}
      */
     public static InMemorySessionStore withTtl(final Duration ttl) {
-        return new InMemorySessionStore(ttl);
+        return new InMemorySessionStore(ttl, 10_000);
+    }
+
+    /**
+     * Creates a store with a custom session TTL and a custom session cap.
+     * <p>
+     * When the cap is reached, {@link #save(Session)} silently discards new sessions until
+     * existing ones expire and are evicted.
+     *
+     * @param ttl         the time-to-live for inactive sessions
+     * @param maxSessions the maximum number of sessions held simultaneously
+     * @return a new {@link InMemorySessionStore}
+     */
+    public static InMemorySessionStore withTtlAndMaxSessions(final Duration ttl, final int maxSessions) {
+        if (maxSessions <= 0) {
+            throw new IllegalArgumentException("maxSessions must be positive");
+        }
+        return new InMemorySessionStore(ttl, maxSessions);
     }
 
     @Override
@@ -97,6 +116,9 @@ public final class InMemorySessionStore implements SessionStore {
 
     @Override
     public void save(final Session session) {
+        if (!sessions.containsKey(session.id()) && sessions.size() >= maxSessions) {
+            return;
+        }
         sessions.put(session.id(), new Entry(
             new HashMap<>(session.attributes()),
             Instant.now().plus(ttl)
