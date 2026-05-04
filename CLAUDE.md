@@ -5,10 +5,10 @@
 A lightweight, JPMS-native HTTP server framework for Java 25+ built directly on `jdk.httpserver`, virtual threads,
 scoped values, and structured concurrency. Routes are code, DI is explicit. Part of the `*.build` family.
 
-**Stack**: Java 25 (preview enabled), Maven multi-module, Jackson, graphql-java, JTE, JUnit 5 + AssertJ  
-**Structure**: 24 JPMS modules — core layer (foundation, transports, application, testing), protocol layer (WebSocket,
-SSE, MCP, LSP, GraphQL), middleware layer (CORS, security, compression, logging, health, static, auth, ratelimit,
-session, form), template layer (template SPI, JTE, HTMX)
+**Stack**: Java 25 (preview enabled), Maven multi-module, base-json, graphql-java, JTE, JUnit 5 + AssertJ  
+**Structure**: 24 JPMS modules — core layer (foundation, transports, application), protocol layer (WebSocket, SSE, MCP,
+LSP, GraphQL), middleware layer (CORS, security, compression, logging, health, static, auth, ratelimit, session, form),
+template layer (template SPI, JTE, HTMX), DX layer (testing, devtools, example)
 
 For detailed architecture, see [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md).
 
