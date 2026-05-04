@@ -48,6 +48,7 @@ public final class RateLimitMiddleware implements Middleware {
     private final Duration per;
     private final Function<Request, String> keyExtractor;
     private final Clock clock;
+    private final int maxBuckets;
     private final ConcurrentHashMap<String, Bucket> buckets = new ConcurrentHashMap<>();
 
     private RateLimitMiddleware(final Builder builder) {
@@ -59,6 +60,7 @@ public final class RateLimitMiddleware implements Middleware {
                      .map(v -> v.split(",")[0].trim())
                      .orElse("unknown");
         this.clock = builder.clock != null ? builder.clock : Clock.systemUTC();
+        this.maxBuckets = builder.maxBuckets;
     }
 
     /**
@@ -74,6 +76,15 @@ public final class RateLimitMiddleware implements Middleware {
     public Handler apply(final Handler next) {
         return exchange -> {
             final var key = keyExtractor.apply(exchange.request());
+            if (!buckets.containsKey(key) && buckets.size() >= maxBuckets) {
+                exchange.response()
+                    .header("X-RateLimit-Limit", String.valueOf(capacity))
+                    .header("X-RateLimit-Remaining", "0")
+                    .header("Retry-After", "1")
+                    .status(429)
+                    .send("");
+                return;
+            }
             final var bucket = buckets.computeIfAbsent(key, k -> new Bucket(capacity, clock.instant()));
             final var result = bucket.consume(clock.instant(), capacity, per);
 
@@ -136,6 +147,7 @@ public final class RateLimitMiddleware implements Middleware {
         private Duration per;
         private Function<Request, String> keyExtractor;
         private Clock clock;
+        private int maxBuckets = 100_000;
 
         private Builder() {
         }
@@ -166,12 +178,34 @@ public final class RateLimitMiddleware implements Middleware {
          * Sets a custom function that extracts the rate limit key from a request.
          * <p>
          * Defaults to the first IP in {@code X-Forwarded-For}, or {@code "unknown"} if absent.
+         * <strong>Warning:</strong> {@code X-Forwarded-For} is client-controlled and can be spoofed
+         * to bypass per-IP limits. In trusted reverse-proxy deployments, configure your proxy to
+         * overwrite this header with the actual client IP. For other deployments, supply a
+         * {@code keyExtractor} that uses a non-spoofable dimension such as an authenticated user ID.
          *
          * @param keyExtractor the key extraction function
          * @return this {@link Builder}
          */
         public Builder keyExtractor(final Function<Request, String> keyExtractor) {
             this.keyExtractor = Objects.requireNonNull(keyExtractor, "keyExtractor");
+            return this;
+        }
+
+        /**
+         * Sets the maximum number of distinct rate limit keys tracked simultaneously.
+         * When this limit is reached, requests with new (unseen) keys receive a 429 response
+         * until existing buckets are evicted.
+         * <p>
+         * Defaults to {@code 100_000}.
+         *
+         * @param maxBuckets the maximum number of tracked keys
+         * @return this {@link Builder}
+         */
+        public Builder maxBuckets(final int maxBuckets) {
+            if (maxBuckets <= 0) {
+                throw new IllegalArgumentException("maxBuckets must be positive");
+            }
+            this.maxBuckets = maxBuckets;
             return this;
         }
 

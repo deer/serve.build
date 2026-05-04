@@ -45,7 +45,6 @@ import java.util.UUID;
  * SessionMiddleware.builder()
  *     .store(InMemorySessionStore.create())
  *     .cookieName("session")
- *     .secure(true)
  *     .build()
  * }</pre>
  *
@@ -146,7 +145,7 @@ public final class SessionMiddleware implements Middleware {
 
         private SessionStore store;
         private String cookieName = "session";
-        private boolean secure = false;
+        private boolean secure = true;
         private Long maxAgeSeconds = null;
 
         private Builder() {
@@ -175,8 +174,8 @@ public final class SessionMiddleware implements Middleware {
         }
 
         /**
-         * Sets the {@code Secure} flag on the session cookie. Set to {@code true} when serving
-         * over HTTPS. Defaults to {@code false}.
+         * Sets the {@code Secure} flag on the session cookie. Defaults to {@code true}.
+         * Set to {@code false} only in plain-HTTP development environments.
          *
          * @param secure {@code true} to require HTTPS for the session cookie
          * @return this {@link Builder}

@@ -248,7 +248,6 @@ public class HttpTransport {
                     params.setCipherSuites(enabledCiphers);
                 }
 
-                params.setSSLParameters(getSSLContext().getDefaultSSLParameters());
             }
         });
 
