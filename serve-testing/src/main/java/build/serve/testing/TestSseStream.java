@@ -31,6 +31,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -59,9 +60,17 @@ public final class TestSseStream implements AutoCloseable {
     }
 
     static TestSseStream connect(final URI uri) {
+        return connect(uri, Map.of());
+    }
+
+    static TestSseStream connect(final URI uri, final Map<String, String> headers) {
         final var sseStream = new TestSseStream();
         final var client = HttpClient.newHttpClient();
-        final var request = HttpRequest.newBuilder().uri(uri).GET().build();
+        var builder = HttpRequest.newBuilder().uri(uri).GET();
+        for (final var entry : headers.entrySet()) {
+            builder = builder.header(entry.getKey(), entry.getValue());
+        }
+        final var request = builder.build();
 
         Thread.ofVirtual().start(() -> {
             try {
@@ -107,6 +116,22 @@ public final class TestSseStream implements AutoCloseable {
         });
 
         return sseStream;
+    }
+
+    /**
+     * Waits up to {@code timeout} for one event, returning it if it arrives or empty if none arrives.
+     * Useful for asserting that no notification was sent.
+     *
+     * @param timeout the maximum time to wait
+     * @return the event, or empty if the timeout elapsed with nothing arriving
+     */
+    public Optional<TestSseEvent> poll(final Duration timeout) {
+        try {
+            return Optional.ofNullable(queue.poll(timeout.toMillis(), TimeUnit.MILLISECONDS));
+        } catch (final InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return Optional.empty();
+        }
     }
 
     /**

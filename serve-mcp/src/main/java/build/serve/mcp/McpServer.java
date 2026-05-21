@@ -30,7 +30,9 @@ import build.base.json.JsonString;
 import build.base.json.JsonValue;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.Handler;
+import build.serve.sse.SseEmitter;
 import build.serve.sse.SseEvent;
+import build.serve.sse.SseUpgrade;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -45,9 +47,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 /**
  * An MCP (Model Context Protocol) server that exposes tools via JSON-RPC 2.0 over HTTP.
@@ -65,8 +67,10 @@ public final class McpServer {
 
     private final McpServerInfo info;
     private final Map<String, McpTool> tools;
+    private final Map<String, McpResource> resources;
+    private final List<TemplateEntry> templates;
     private final SubscriberRegistry<ToolCallEvent> toolCallEvents = new SubscriberRegistry<>();
-    private final Set<String> sessions = ConcurrentHashMap.newKeySet();
+    private final ConcurrentHashMap<String, SessionState> sessions = new ConcurrentHashMap<>();
 
     private McpServer(final Builder builder) {
         this.info = new McpServerInfo(builder.name, builder.version);
@@ -76,6 +80,39 @@ public final class McpServer {
             toolMap.put(tool.name(), tool);
         }
         this.tools = Map.copyOf(toolMap);
+
+        final var resourceMap = new LinkedHashMap<String, McpResource>();
+        for (final var resource : builder.resources) {
+            resourceMap.put(resource.uri(), resource);
+        }
+        this.resources = Map.copyOf(resourceMap);
+
+        final var templateList = new ArrayList<TemplateEntry>();
+        for (final var template : builder.templates) {
+            templateList.add(new TemplateEntry(template, uriTemplateToPattern(template.uriTemplate())));
+        }
+        this.templates = List.copyOf(templateList);
+    }
+
+    private static final class SessionState {
+        final java.util.Set<String> subscriptions = ConcurrentHashMap.newKeySet();
+        volatile SseEmitter emitter;
+    }
+
+    private record TemplateEntry(McpResourceTemplate template, Pattern pattern) {
+    }
+
+    private static Pattern uriTemplateToPattern(final String uriTemplate) {
+        final var sb = new StringBuilder();
+        final var m = Pattern.compile("\\{\\+?([^}]+)}").matcher(uriTemplate);
+        int pos = 0;
+        while (m.find()) {
+            sb.append(Pattern.quote(uriTemplate.substring(pos, m.start())));
+            sb.append(m.group().startsWith("{+") ? ".+" : "[^/]+");
+            pos = m.end();
+        }
+        sb.append(Pattern.quote(uriTemplate.substring(pos)));
+        return Pattern.compile(sb.toString());
     }
 
     /**
@@ -91,13 +128,18 @@ public final class McpServer {
         return exchange -> {
             final var method = exchange.request().method();
 
+            if ("GET".equalsIgnoreCase(method)) {
+                handleSseConnection(exchange);
+                return;
+            }
+
             if (!"POST".equalsIgnoreCase(method)) {
                 exchange.response().status(405).send("Method Not Allowed");
                 return;
             }
 
             final var sessionId = exchange.request().header("Mcp-Session-Id");
-            if (sessionId.isPresent() && !sessions.contains(sessionId.get())) {
+            if (sessionId.isPresent() && !sessions.containsKey(sessionId.get())) {
                 exchange.response().status(404).send("Session not found");
                 return;
             }
@@ -115,7 +157,7 @@ public final class McpServer {
 
             if (isInitialize) {
                 final var newSessionId = UUID.randomUUID().toString();
-                sessions.add(newSessionId);
+                sessions.put(newSessionId, new SessionState());
                 exchange.response().header("Mcp-Session-Id", newSessionId);
             }
 
@@ -181,6 +223,20 @@ public final class McpServer {
                 final var params = request.members().getOrDefault("params", JsonNull.INSTANCE);
                 yield handleToolsCall(params, sessionId, id);
             }
+            case "resources/list" -> envelope(id, handleResourcesList());
+            case "resources/templates/list" -> envelope(id, handleResourcesTemplatesList());
+            case "resources/read" -> {
+                final var params = request.members().getOrDefault("params", JsonNull.INSTANCE);
+                yield handleResourcesRead(params, id);
+            }
+            case "resources/subscribe" -> {
+                final var params = request.members().getOrDefault("params", JsonNull.INSTANCE);
+                yield handleResourcesSubscribe(params, sessionId, id);
+            }
+            case "resources/unsubscribe" -> {
+                final var params = request.members().getOrDefault("params", JsonNull.INSTANCE);
+                yield handleResourcesUnsubscribe(params, sessionId, id);
+            }
             default -> errorEnvelope(id, -32601, "Method not found");
         };
 
@@ -209,6 +265,10 @@ public final class McpServer {
     private JsonObject handleInitialize() {
         final var capabilities = JsonObject.builder()
             .put("tools", JsonObject.builder().put("listChanged", false).build())
+            .put("resources", JsonObject.builder()
+                .put("subscribe", true)
+                .put("listChanged", false)
+                .build())
             .build();
 
         final var serverInfo = JsonObject.builder()
@@ -259,6 +319,152 @@ public final class McpServer {
             toolCallEvents.publish(ToolCallEvent.failure(sessionId, toolName, arguments, e, duration));
             return envelope(id, buildToolResultJson(McpToolResult.error(e.getMessage())));
         }
+    }
+
+    private void handleSseConnection(final Exchange exchange) throws Exception {
+        final var sessionId = exchange.request().header("Mcp-Session-Id").orElse(null);
+        if (sessionId == null || !sessions.containsKey(sessionId)) {
+            exchange.response().status(404).send("Session not found");
+            return;
+        }
+        final var state = sessions.get(sessionId);
+        SseUpgrade.sse(emitter -> {
+            state.emitter = emitter;
+            try {
+                while (emitter.isOpen()) {
+                    Thread.sleep(500);
+                }
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                state.emitter = null;
+            }
+        }).handle(exchange);
+    }
+
+    /**
+     * Sends a {@code notifications/resources/updated} event to all sessions subscribed to
+     * the given URI. Call this whenever the content of a resource changes.
+     *
+     * @param uri the URI of the changed resource
+     */
+    public void notifyResourceChanged(final String uri) {
+        final var notification = JsonObject.builder()
+            .put("jsonrpc", "2.0")
+            .put("method", "notifications/resources/updated")
+            .put("params", JsonObject.builder().put("uri", uri).build())
+            .build()
+            .toJsonString();
+        final var event = SseEvent.of("message", notification);
+
+        for (final var state : sessions.values()) {
+            if (state.subscriptions.contains(uri)) {
+                final var emitter = state.emitter;
+                if (emitter != null && emitter.isOpen()) {
+                    try {
+                        emitter.send(event);
+                    } catch (final IOException ignored) {
+                    }
+                }
+            }
+        }
+    }
+
+    private JsonObject handleResourcesList() {
+        final var resourcesArray = JsonArray.builder();
+        for (final var resource : resources.values()) {
+            final var builder = JsonObject.builder()
+                .put("uri", resource.uri())
+                .put("name", resource.name());
+            resource.description().ifPresent(d -> builder.put("description", d));
+            resource.mimeType().ifPresent(m -> builder.put("mimeType", m));
+            resourcesArray.add(builder.build());
+        }
+        return JsonObject.builder()
+            .put("resources", resourcesArray.build())
+            .build();
+    }
+
+    private JsonObject handleResourcesTemplatesList() {
+        final var templatesArray = JsonArray.builder();
+        for (final var entry : templates) {
+            final var t = entry.template();
+            final var builder = JsonObject.builder()
+                .put("uriTemplate", t.uriTemplate())
+                .put("name", t.name());
+            t.description().ifPresent(d -> builder.put("description", d));
+            t.mimeType().ifPresent(m -> builder.put("mimeType", m));
+            templatesArray.add(builder.build());
+        }
+        return JsonObject.builder()
+            .put("resourceTemplates", templatesArray.build())
+            .build();
+    }
+
+    private JsonObject handleResourcesRead(final JsonValue params, final JsonValue id) {
+        final var paramsObj = params instanceof JsonObject p ? p : JsonObject.builder().build();
+        final var uri = getString(paramsObj, "uri");
+
+        final McpResourceContent content;
+        try {
+            final var exact = resources.get(uri);
+            if (exact != null) {
+                content = exact.read();
+            } else {
+                final var matched = findTemplate(uri);
+                if (matched == null) {
+                    return errorEnvelope(id, -32002, "Resource not found: " + uri);
+                }
+                content = matched.read(uri);
+            }
+        } catch (final Exception e) {
+            return errorEnvelope(id, -32002, "Failed to read resource: " + e.getMessage());
+        }
+
+        final var contentNode = switch (content) {
+            case McpResourceContent.Text text -> JsonObject.builder()
+                .put("uri", text.uri())
+                .put("mimeType", text.mimeType())
+                .put("text", text.text())
+                .build();
+            case McpResourceContent.Blob blob -> JsonObject.builder()
+                .put("uri", blob.uri())
+                .put("mimeType", blob.mimeType())
+                .put("blob", blob.blob())
+                .build();
+        };
+        return envelope(id, JsonObject.builder()
+            .put("contents", JsonArray.builder().add(contentNode).build())
+            .build());
+    }
+
+    private McpResourceTemplate findTemplate(final String uri) {
+        for (final var entry : templates) {
+            if (entry.pattern().matcher(uri).matches()) {
+                return entry.template();
+            }
+        }
+        return null;
+    }
+
+    private JsonObject handleResourcesSubscribe(final JsonValue params, final String sessionId, final JsonValue id) {
+        final var paramsObj = params instanceof JsonObject p ? p : JsonObject.builder().build();
+        final var uri = getString(paramsObj, "uri");
+        final var state = sessions.get(sessionId);
+        if (state != null) {
+            state.subscriptions.add(uri);
+        }
+        return envelope(id, JsonObject.builder().build());
+    }
+
+    private JsonObject handleResourcesUnsubscribe(final JsonValue params, final String sessionId, final JsonValue id) {
+        final var paramsObj = params instanceof JsonObject p ? p : JsonObject.builder().build();
+        final var uri = getString(paramsObj, "uri");
+        final var state = sessions.get(sessionId);
+        if (state != null) {
+            state.subscriptions.remove(uri);
+        }
+        return envelope(id, JsonObject.builder().build());
     }
 
     private static JsonObject buildToolResultJson(final McpToolResult toolResult) {
@@ -348,6 +554,8 @@ public final class McpServer {
         private final String name;
         private final String version;
         private final List<McpTool> tools = new ArrayList<>();
+        private final List<McpResource> resources = new ArrayList<>();
+        private final List<McpResourceTemplate> templates = new ArrayList<>();
 
         private Builder(final String name, final String version) {
             this.name = name;
@@ -362,6 +570,28 @@ public final class McpServer {
          */
         public Builder tool(final McpTool tool) {
             tools.add(tool);
+            return this;
+        }
+
+        /**
+         * Adds a resource to this server.
+         *
+         * @param resource the resource
+         * @return this builder
+         */
+        public Builder resource(final McpResource resource) {
+            resources.add(resource);
+            return this;
+        }
+
+        /**
+         * Adds a URI-template-based resource to this server.
+         *
+         * @param template the resource template
+         * @return this builder
+         */
+        public Builder template(final McpResourceTemplate template) {
+            templates.add(template);
             return this;
         }
 

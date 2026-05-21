@@ -84,6 +84,20 @@ final class McpTestClient implements AutoCloseable {
     }
 
     /**
+     * Returns the {@code resources} array from a {@code resources/list} call.
+     */
+    JsonValue listResources() {
+        return postJson(rpc("resources/list", nextId++, Map.of())).asObject().get("result").asObject().get("resources");
+    }
+
+    /**
+     * Sends a {@code resources/read} request and returns the full JSON-RPC response.
+     */
+    JsonValue readResource(final String uri) {
+        return postJson(rpc("resources/read", nextId++, Map.of("uri", uri)));
+    }
+
+    /**
      * Calls the named tool and returns the {@code result} object.
      */
     JsonValue call(final String toolName, final Map<String, Object> arguments) {
@@ -96,6 +110,14 @@ final class McpTestClient implements AutoCloseable {
      */
     JsonValue send(final String method, final Map<String, Object> params) {
         return postJson(rpc(method, nextId++, params));
+    }
+
+    /**
+     * Opens a persistent SSE connection on GET /mcp using the current session ID.
+     * The caller is responsible for closing the returned stream.
+     */
+    build.serve.testing.TestSseStream sseStream() {
+        return server.sse("/mcp", sessionId != null ? java.util.Map.of("Mcp-Session-Id", sessionId) : java.util.Map.of());
     }
 
     /**
