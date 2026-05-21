@@ -84,6 +84,20 @@ final class McpTestClient implements AutoCloseable {
     }
 
     /**
+     * Returns the {@code resources} array from a {@code resources/list} call.
+     */
+    JsonValue listResources() {
+        return postJson(rpc("resources/list", nextId++, Map.of())).asObject().get("result").asObject().get("resources");
+    }
+
+    /**
+     * Sends a {@code resources/read} request and returns the full JSON-RPC response.
+     */
+    JsonValue readResource(final String uri) {
+        return postJson(rpc("resources/read", nextId++, Map.of("uri", uri)));
+    }
+
+    /**
      * Calls the named tool and returns the {@code result} object.
      */
     JsonValue call(final String toolName, final Map<String, Object> arguments) {

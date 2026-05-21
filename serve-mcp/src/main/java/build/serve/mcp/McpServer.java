@@ -65,6 +65,7 @@ public final class McpServer {
 
     private final McpServerInfo info;
     private final Map<String, McpTool> tools;
+    private final Map<String, McpResource> resources;
     private final SubscriberRegistry<ToolCallEvent> toolCallEvents = new SubscriberRegistry<>();
     private final Set<String> sessions = ConcurrentHashMap.newKeySet();
 
@@ -76,6 +77,12 @@ public final class McpServer {
             toolMap.put(tool.name(), tool);
         }
         this.tools = Map.copyOf(toolMap);
+
+        final var resourceMap = new LinkedHashMap<String, McpResource>();
+        for (final var resource : builder.resources) {
+            resourceMap.put(resource.uri(), resource);
+        }
+        this.resources = Map.copyOf(resourceMap);
     }
 
     /**
@@ -181,6 +188,11 @@ public final class McpServer {
                 final var params = request.members().getOrDefault("params", JsonNull.INSTANCE);
                 yield handleToolsCall(params, sessionId, id);
             }
+            case "resources/list" -> envelope(id, handleResourcesList());
+            case "resources/read" -> {
+                final var params = request.members().getOrDefault("params", JsonNull.INSTANCE);
+                yield handleResourcesRead(params, id);
+            }
             default -> errorEnvelope(id, -32601, "Method not found");
         };
 
@@ -209,6 +221,10 @@ public final class McpServer {
     private JsonObject handleInitialize() {
         final var capabilities = JsonObject.builder()
             .put("tools", JsonObject.builder().put("listChanged", false).build())
+            .put("resources", JsonObject.builder()
+                .put("subscribe", false)
+                .put("listChanged", false)
+                .build())
             .build();
 
         final var serverInfo = JsonObject.builder()
@@ -258,6 +274,52 @@ public final class McpServer {
             final var duration = System.currentTimeMillis() - start;
             toolCallEvents.publish(ToolCallEvent.failure(sessionId, toolName, arguments, e, duration));
             return envelope(id, buildToolResultJson(McpToolResult.error(e.getMessage())));
+        }
+    }
+
+    private JsonObject handleResourcesList() {
+        final var resourcesArray = JsonArray.builder();
+        for (final var resource : resources.values()) {
+            final var builder = JsonObject.builder()
+                .put("uri", resource.uri())
+                .put("name", resource.name());
+            resource.description().ifPresent(d -> builder.put("description", d));
+            resource.mimeType().ifPresent(m -> builder.put("mimeType", m));
+            resourcesArray.add(builder.build());
+        }
+        return JsonObject.builder()
+            .put("resources", resourcesArray.build())
+            .build();
+    }
+
+    private JsonObject handleResourcesRead(final JsonValue params, final JsonValue id) {
+        final var paramsObj = params instanceof JsonObject p ? p : JsonObject.builder().build();
+        final var uri = getString(paramsObj, "uri");
+
+        final var resource = resources.get(uri);
+        if (resource == null) {
+            return errorEnvelope(id, -32002, "Resource not found: " + uri);
+        }
+
+        try {
+            final var content = resource.read();
+            final var contentNode = switch (content) {
+                case McpResourceContent.Text text -> JsonObject.builder()
+                    .put("uri", text.uri())
+                    .put("mimeType", text.mimeType())
+                    .put("text", text.text())
+                    .build();
+                case McpResourceContent.Blob blob -> JsonObject.builder()
+                    .put("uri", blob.uri())
+                    .put("mimeType", blob.mimeType())
+                    .put("blob", blob.blob())
+                    .build();
+            };
+            return envelope(id, JsonObject.builder()
+                .put("contents", JsonArray.builder().add(contentNode).build())
+                .build());
+        } catch (final Exception e) {
+            return errorEnvelope(id, -32002, "Failed to read resource: " + e.getMessage());
         }
     }
 
@@ -348,6 +410,7 @@ public final class McpServer {
         private final String name;
         private final String version;
         private final List<McpTool> tools = new ArrayList<>();
+        private final List<McpResource> resources = new ArrayList<>();
 
         private Builder(final String name, final String version) {
             this.name = name;
@@ -362,6 +425,17 @@ public final class McpServer {
          */
         public Builder tool(final McpTool tool) {
             tools.add(tool);
+            return this;
+        }
+
+        /**
+         * Adds a resource to this server.
+         *
+         * @param resource the resource
+         * @return this builder
+         */
+        public Builder resource(final McpResource resource) {
+            resources.add(resource);
             return this;
         }
 

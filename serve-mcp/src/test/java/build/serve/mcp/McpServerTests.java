@@ -258,6 +258,103 @@ class McpServerTests {
     }
 
     @Test
+    void shouldAdvertiseResourcesCapabilityOnInitialize() {
+        final var result = client.initialize().asObject().get("result").asObject();
+        final var resources = result.get("capabilities").asObject().get("resources").asObject();
+        assertThat(resources.get("subscribe").asBoolean().value()).isFalse();
+        assertThat(resources.get("listChanged").asBoolean().value()).isFalse();
+    }
+
+    @Test
+    void shouldListResources() {
+        try (final var resourceClient = McpTestClient.start(McpServer.builder("res-server", "1.0.0")
+            .resource(new McpResource() {
+                @Override public String uri() { return "file:///data/config.json"; }
+                @Override public String name() { return "Config"; }
+                @Override public java.util.Optional<String> description() { return java.util.Optional.of("App config"); }
+                @Override public java.util.Optional<String> mimeType() { return java.util.Optional.of("application/json"); }
+                @Override public McpResourceContent read() { return new McpResourceContent.Text(uri(), "application/json", "{}"); }
+            })
+            .build())) {
+
+            resourceClient.initialize();
+            final var resources = (JsonArray) resourceClient.listResources();
+            assertThat(resources.values()).hasSize(1);
+            final var r = resources.values().get(0).asObject();
+            assertThat(r.getString("uri")).isEqualTo("file:///data/config.json");
+            assertThat(r.getString("name")).isEqualTo("Config");
+            assertThat(r.getString("description")).isEqualTo("App config");
+            assertThat(r.getString("mimeType")).isEqualTo("application/json");
+        }
+    }
+
+    @Test
+    void shouldReadTextResource() {
+        try (final var resourceClient = McpTestClient.start(McpServer.builder("res-server", "1.0.0")
+            .resource(new McpResource() {
+                @Override public String uri() { return "file:///readme.txt"; }
+                @Override public String name() { return "Readme"; }
+                @Override public java.util.Optional<String> description() { return java.util.Optional.empty(); }
+                @Override public java.util.Optional<String> mimeType() { return java.util.Optional.of("text/plain"); }
+                @Override public McpResourceContent read() {
+                    return new McpResourceContent.Text(uri(), "text/plain", "Hello, world!");
+                }
+            })
+            .build())) {
+
+            resourceClient.initialize();
+            final var response = resourceClient.readResource("file:///readme.txt").asObject();
+            assertThat(response.members()).containsKey("result");
+            final var contents = (JsonArray) response.get("result").asObject().get("contents");
+            assertThat(contents.values()).hasSize(1);
+            final var content = contents.values().get(0).asObject();
+            assertThat(content.getString("uri")).isEqualTo("file:///readme.txt");
+            assertThat(content.getString("mimeType")).isEqualTo("text/plain");
+            assertThat(content.getString("text")).isEqualTo("Hello, world!");
+        }
+    }
+
+    @Test
+    void shouldReadBlobResource() {
+        try (final var resourceClient = McpTestClient.start(McpServer.builder("res-server", "1.0.0")
+            .resource(new McpResource() {
+                @Override public String uri() { return "file:///image.png"; }
+                @Override public String name() { return "Image"; }
+                @Override public java.util.Optional<String> description() { return java.util.Optional.empty(); }
+                @Override public java.util.Optional<String> mimeType() { return java.util.Optional.of("image/png"); }
+                @Override public McpResourceContent read() {
+                    return new McpResourceContent.Blob(uri(), "image/png", "iVBORw0KGgo=");
+                }
+            })
+            .build())) {
+
+            resourceClient.initialize();
+            final var response = resourceClient.readResource("file:///image.png").asObject();
+            final var content = ((JsonArray) response.get("result").asObject().get("contents")).values().get(0).asObject();
+            assertThat(content.getString("mimeType")).isEqualTo("image/png");
+            assertThat(content.getString("blob")).isEqualTo("iVBORw0KGgo=");
+            assertThat(content.members()).doesNotContainKey("text");
+        }
+    }
+
+    @Test
+    void shouldReturnErrorForUnknownResource() {
+        try (final var resourceClient = McpTestClient.start(McpServer.builder("res-server", "1.0.0").build())) {
+            resourceClient.initialize();
+            final var response = resourceClient.readResource("file:///missing.txt").asObject();
+            assertThat(response.members()).containsKey("error");
+            assertThat(response.get("error").asObject().get("code").asNumber().toNumber().intValue()).isEqualTo(-32002);
+            assertThat(response.get("error").asObject().getString("message")).contains("missing.txt");
+        }
+    }
+
+    @Test
+    void shouldListEmptyResourcesWhenNoneRegistered() {
+        final var resources = (JsonArray) client.listResources();
+        assertThat(resources.values()).isEmpty();
+    }
+
+    @Test
     void shouldEchoStringIdInResponse() {
         final var response = client.post("/mcp")
             .header("Content-Type", "application/json")
