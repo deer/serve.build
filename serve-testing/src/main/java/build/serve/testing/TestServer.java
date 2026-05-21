@@ -206,6 +206,17 @@ public final class TestServer implements AutoCloseable {
         return TestSseStream.connect(baseUri().resolve(path));
     }
 
+    /**
+     * Opens a streaming SSE connection to the given path with the specified request headers.
+     *
+     * @param path    the SSE endpoint path
+     * @param headers additional request headers (e.g. session IDs)
+     * @return a {@link TestSseStream} that receives events as they arrive
+     */
+    public TestSseStream sse(final String path, final Map<String, String> headers) {
+        return TestSseStream.connect(baseUri().resolve(path), headers);
+    }
+
     @Override
     public void close() {
         closeAction.run();

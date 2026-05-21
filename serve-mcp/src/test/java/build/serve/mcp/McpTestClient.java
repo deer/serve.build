@@ -113,6 +113,14 @@ final class McpTestClient implements AutoCloseable {
     }
 
     /**
+     * Opens a persistent SSE connection on GET /mcp using the current session ID.
+     * The caller is responsible for closing the returned stream.
+     */
+    build.serve.testing.TestSseStream sseStream() {
+        return server.sse("/mcp", sessionId != null ? java.util.Map.of("Mcp-Session-Id", sessionId) : java.util.Map.of());
+    }
+
+    /**
      * Delegates to the underlying {@link TestServer} for direct HTTP access.
      */
     TestRequest get(final String path) {
