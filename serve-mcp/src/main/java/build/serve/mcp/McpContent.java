@@ -25,7 +25,7 @@ package build.serve.mcp;
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public sealed interface McpContent permits McpContent.Text, McpContent.Image, McpContent.Resource {
+public sealed interface McpContent permits McpContent.Text, McpContent.Image, McpContent.Audio, McpContent.Resource {
 
     /**
      * Text content.
@@ -39,18 +39,49 @@ public sealed interface McpContent permits McpContent.Text, McpContent.Image, Mc
      * Base64-encoded image content.
      *
      * @param data     the base64-encoded image data
-     * @param mimeType the MIME type of the image
+     * @param mimeType the MIME type of the image (e.g. {@code "image/png"})
      */
     record Image(String data, String mimeType) implements McpContent {
     }
 
     /**
-     * Embedded resource content (MCP spec: type=resource with blob).
+     * Base64-encoded audio content.
      *
-     * @param uri      a synthetic URI identifying the resource (e.g. "composition.mid")
-     * @param mimeType the MIME type (e.g. "audio/midi", "application/pdf")
-     * @param blob     base64-encoded binary data
+     * @param data     the base64-encoded audio data
+     * @param mimeType the MIME type of the audio (e.g. {@code "audio/wav"})
      */
-    record Resource(String uri, String mimeType, String blob) implements McpContent {
+    record Audio(String data, String mimeType) implements McpContent {
+    }
+
+    /**
+     * An embedded resource in a tool result, carrying either text or binary content.
+     *
+     * @param content the resource content (text or blob)
+     */
+    record Resource(McpResourceContent content) implements McpContent {
+
+        /**
+         * Creates an embedded text resource.
+         *
+         * @param uri      a URI identifying the resource
+         * @param mimeType the MIME type (e.g. {@code "text/plain"})
+         * @param text     the text content
+         * @return the embedded resource
+         */
+        public static Resource text(final String uri, final String mimeType, final String text) {
+            return new Resource(new McpResourceContent.Text(uri, mimeType, text));
+        }
+
+        /**
+         * Creates an embedded binary resource.
+         *
+         * @param uri      a URI identifying the resource
+         * @param mimeType the MIME type (e.g. {@code "audio/midi"})
+         * @param blob     base64-encoded binary data
+         * @return the embedded resource
+         */
+        public static Resource blob(final String uri, final String mimeType, final String blob) {
+            return new Resource(new McpResourceContent.Blob(uri, mimeType, blob));
+        }
     }
 }
