@@ -73,6 +73,8 @@ public final class McpServer {
     private final Map<String, McpResource> resources;
     private final List<TemplateEntry> templates;
     private final Set<String> allowedOrigins;
+    private final int maxSessions;
+    private final int maxSubscriptionsPerSession;
     private final SubscriberRegistry<ToolCallEvent> toolCallEvents = new SubscriberRegistry<>();
     private final ConcurrentHashMap<String, SessionState> sessions = new ConcurrentHashMap<>();
 
@@ -80,6 +82,8 @@ public final class McpServer {
         this.info = new McpServerInfo(builder.name, builder.version);
         this.instructions = builder.instructions;
         this.allowedOrigins = Set.copyOf(builder.allowedOrigins);
+        this.maxSessions = builder.maxSessions;
+        this.maxSubscriptionsPerSession = builder.maxSubscriptionsPerSession;
 
         final var toolMap = new LinkedHashMap<String, McpTool>();
         for (final var tool : builder.tools) {
@@ -144,6 +148,15 @@ public final class McpServer {
                 return;
             }
 
+            if ("DELETE".equalsIgnoreCase(method)) {
+                final var sid = exchange.request().header("Mcp-Session-Id");
+                if (sid.isPresent()) {
+                    sessions.remove(sid.get());
+                }
+                exchange.response().status(200).send("");
+                return;
+            }
+
             if (!"POST".equalsIgnoreCase(method)) {
                 exchange.response().status(405).send("Method Not Allowed");
                 return;
@@ -173,6 +186,10 @@ public final class McpServer {
             }
 
             if (isInitialize) {
+                if (sessions.size() >= maxSessions) {
+                    exchange.response().status(503).send("Too many sessions");
+                    return;
+                }
                 final var newSessionId = UUID.randomUUID().toString();
                 sessions.put(newSessionId, new SessionState());
                 exchange.response().header("Mcp-Session-Id", newSessionId);
@@ -366,7 +383,7 @@ public final class McpServer {
         } catch (final Exception e) {
             final var duration = System.currentTimeMillis() - start;
             toolCallEvents.publish(ToolCallEvent.failure(sessionId, toolName, arguments, e, duration));
-            return envelope(id, buildToolResultJson(McpToolResult.error(e.getMessage())));
+            return envelope(id, buildToolResultJson(McpToolResult.error(sanitizeMessage(e.getMessage()))));
         }
     }
 
@@ -472,7 +489,7 @@ public final class McpServer {
                 content = matched.read(uri);
             }
         } catch (final Exception e) {
-            return errorEnvelope(id, -32002, "Failed to read resource: " + e.getMessage());
+            return errorEnvelope(id, -32002, "Failed to read resource: " + sanitizeMessage(e.getMessage()));
         }
 
         final var contentNode = switch (content) {
@@ -505,7 +522,7 @@ public final class McpServer {
         final var paramsObj = params instanceof JsonObject p ? p : JsonObject.builder().build();
         final var uri = getString(paramsObj, "uri");
         final var state = sessions.get(sessionId);
-        if (state != null) {
+        if (state != null && state.subscriptions.size() < maxSubscriptionsPerSession) {
             state.subscriptions.add(uri);
         }
         return envelope(id, JsonObject.builder().build());
@@ -597,6 +614,13 @@ public final class McpServer {
         return val instanceof JsonString s ? s.value() : "";
     }
 
+    private static String sanitizeMessage(final String s) {
+        if (s == null) {
+            return "";
+        }
+        return s.replaceAll("[\\r\\n\\t\\x00-\\x1F\\x7F]", " ");
+    }
+
     /**
      * Creates a new {@link Builder}.
      *
@@ -624,6 +648,8 @@ public final class McpServer {
         private final List<McpResource> resources = new ArrayList<>();
         private final List<McpResourceTemplate> templates = new ArrayList<>();
         private final HashSet<String> allowedOrigins = new HashSet<>();
+        private int maxSessions = 10_000;
+        private int maxSubscriptionsPerSession = 1_000;
 
         private Builder(final String name, final String version) {
             this.name = name;
@@ -686,6 +712,36 @@ public final class McpServer {
          */
         public Builder allowOrigin(final String origin) {
             allowedOrigins.add(origin);
+            return this;
+        }
+
+        /**
+         * Sets the maximum number of concurrent sessions (default 10,000).
+         * {@code initialize} requests are rejected with 503 when the cap is reached.
+         *
+         * @param maxSessions the cap; must be positive
+         * @return this builder
+         */
+        public Builder maxSessions(final int maxSessions) {
+            if (maxSessions <= 0) {
+                throw new IllegalArgumentException("maxSessions must be positive");
+            }
+            this.maxSessions = maxSessions;
+            return this;
+        }
+
+        /**
+         * Sets the maximum number of resource subscriptions per session (default 1,000).
+         * Subscribe requests beyond the cap are silently ignored.
+         *
+         * @param max the cap; must be positive
+         * @return this builder
+         */
+        public Builder maxSubscriptionsPerSession(final int max) {
+            if (max <= 0) {
+                throw new IllegalArgumentException("maxSubscriptionsPerSession must be positive");
+            }
+            this.maxSubscriptionsPerSession = max;
             return this;
         }
 
