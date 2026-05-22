@@ -43,10 +43,12 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
@@ -66,14 +68,18 @@ public final class McpServer {
     public static final ScopedValue<String> SESSION_ID = ScopedValue.newInstance();
 
     private final McpServerInfo info;
+    private final String instructions;
     private final Map<String, McpTool> tools;
     private final Map<String, McpResource> resources;
     private final List<TemplateEntry> templates;
+    private final Set<String> allowedOrigins;
     private final SubscriberRegistry<ToolCallEvent> toolCallEvents = new SubscriberRegistry<>();
     private final ConcurrentHashMap<String, SessionState> sessions = new ConcurrentHashMap<>();
 
     private McpServer(final Builder builder) {
         this.info = new McpServerInfo(builder.name, builder.version);
+        this.instructions = builder.instructions;
+        this.allowedOrigins = Set.copyOf(builder.allowedOrigins);
 
         final var toolMap = new LinkedHashMap<String, McpTool>();
         for (final var tool : builder.tools) {
@@ -126,6 +132,11 @@ public final class McpServer {
      */
     public Handler handler() {
         return exchange -> {
+            if (!isOriginAllowed(exchange)) {
+                exchange.response().status(403).send("Forbidden");
+                return;
+            }
+
             final var method = exchange.request().method();
 
             if ("GET".equalsIgnoreCase(method)) {
@@ -135,6 +146,12 @@ public final class McpServer {
 
             if (!"POST".equalsIgnoreCase(method)) {
                 exchange.response().status(405).send("Method Not Allowed");
+                return;
+            }
+
+            final var accept = exchange.request().header("Accept");
+            if (accept.isPresent() && !canServe(accept.get())) {
+                exchange.response().status(406).send("Not Acceptable");
                 return;
             }
 
@@ -243,10 +260,24 @@ public final class McpServer {
         return Optional.of(response);
     }
 
+    private boolean isOriginAllowed(final Exchange exchange) {
+        if (allowedOrigins.isEmpty()) {
+            return true;
+        }
+        final var origin = exchange.request().header("Origin");
+        return origin.isEmpty() || allowedOrigins.contains(origin.get());
+    }
+
     private boolean acceptsSse(final Exchange exchange) {
         return exchange.request().header("Accept")
             .map(a -> a.contains("text/event-stream"))
             .orElse(false);
+    }
+
+    private static boolean canServe(final String accept) {
+        return accept.contains("application/json")
+            || accept.contains("text/event-stream")
+            || accept.contains("*/*");
     }
 
     /**
@@ -276,26 +307,44 @@ public final class McpServer {
             .put("version", info.version())
             .build();
 
-        return JsonObject.builder()
+        final var result = JsonObject.builder()
             .put("protocolVersion", "2025-03-26")
             .put("capabilities", capabilities)
-            .put("serverInfo", serverInfo)
-            .build();
+            .put("serverInfo", serverInfo);
+        if (instructions != null) {
+            result.put("instructions", instructions);
+        }
+        return result.build();
     }
 
     private JsonObject handleToolsList() {
         final var toolsArray = JsonArray.builder();
         for (final var tool : tools.values()) {
-            toolsArray.add(JsonObject.builder()
+            final var toolBuilder = JsonObject.builder()
                 .put("name", tool.name())
                 .put("description", tool.description())
-                .put("inputSchema", tool.inputSchema())
-                .build());
+                .put("inputSchema", tool.inputSchema());
+            tool.annotations().ifPresent(ann -> toolBuilder.put("annotations", buildAnnotationsJson(ann)));
+            toolsArray.add(toolBuilder.build());
         }
 
         return JsonObject.builder()
             .put("tools", toolsArray.build())
             .build();
+    }
+
+    private static JsonObject buildAnnotationsJson(final McpToolAnnotations ann) {
+        final var b = JsonObject.builder();
+        ann.audience().ifPresent(roles -> {
+            final var arr = JsonArray.builder();
+            roles.forEach(r -> arr.add(JsonString.of(r)));
+            b.put("audience", arr.build());
+        });
+        ann.readOnlyHint().ifPresent(v -> b.put("readOnlyHint", v));
+        ann.destructiveHint().ifPresent(v -> b.put("destructiveHint", v));
+        ann.idempotentHint().ifPresent(v -> b.put("idempotentHint", v));
+        ann.openWorldHint().ifPresent(v -> b.put("openWorldHint", v));
+        return b.build();
     }
 
     private JsonObject handleToolsCall(final JsonValue params, final String sessionId, final JsonValue id) {
@@ -323,7 +372,11 @@ public final class McpServer {
 
     private void handleSseConnection(final Exchange exchange) throws Exception {
         final var sessionId = exchange.request().header("Mcp-Session-Id").orElse(null);
-        if (sessionId == null || !sessions.containsKey(sessionId)) {
+        if (sessionId == null) {
+            exchange.response().status(400).send("Mcp-Session-Id header required");
+            return;
+        }
+        if (!sessions.containsKey(sessionId)) {
             exchange.response().status(404).send("Session not found");
             return;
         }
@@ -378,6 +431,7 @@ public final class McpServer {
                 .put("name", resource.name());
             resource.description().ifPresent(d -> builder.put("description", d));
             resource.mimeType().ifPresent(m -> builder.put("mimeType", m));
+            resource.size().ifPresent(s -> builder.put("size", s));
             resourcesArray.add(builder.build());
         }
         return JsonObject.builder()
@@ -480,13 +534,25 @@ public final class McpServer {
                     .put("data", image.data())
                     .put("mimeType", image.mimeType())
                     .build();
-                case McpContent.Resource resource -> JsonObject.builder()
+                case McpContent.Audio audio -> JsonObject.builder()
+                    .put("type", "audio")
+                    .put("data", audio.data())
+                    .put("mimeType", audio.mimeType())
+                    .build();
+                case McpContent.Resource r -> JsonObject.builder()
                     .put("type", "resource")
-                    .put("resource", JsonObject.builder()
-                        .put("uri", resource.uri())
-                        .put("mimeType", resource.mimeType())
-                        .put("blob", resource.blob())
-                        .build())
+                    .put("resource", switch (r.content()) {
+                        case McpResourceContent.Text t -> JsonObject.builder()
+                            .put("uri", t.uri())
+                            .put("mimeType", t.mimeType())
+                            .put("text", t.text())
+                            .build();
+                        case McpResourceContent.Blob b -> JsonObject.builder()
+                            .put("uri", b.uri())
+                            .put("mimeType", b.mimeType())
+                            .put("blob", b.blob())
+                            .build();
+                    })
                     .build();
             };
             contentArray.add(contentNode);
@@ -553,13 +619,26 @@ public final class McpServer {
 
         private final String name;
         private final String version;
+        private String instructions;
         private final List<McpTool> tools = new ArrayList<>();
         private final List<McpResource> resources = new ArrayList<>();
         private final List<McpResourceTemplate> templates = new ArrayList<>();
+        private final HashSet<String> allowedOrigins = new HashSet<>();
 
         private Builder(final String name, final String version) {
             this.name = name;
             this.version = version;
+        }
+
+        /**
+         * Sets optional instructions for the client describing how to interact with this server.
+         *
+         * @param instructions the instructions string
+         * @return this builder
+         */
+        public Builder instructions(final String instructions) {
+            this.instructions = instructions;
+            return this;
         }
 
         /**
@@ -592,6 +671,21 @@ public final class McpServer {
          */
         public Builder template(final McpResourceTemplate template) {
             templates.add(template);
+            return this;
+        }
+
+        /**
+         * Adds an allowed {@code Origin} header value for DNS rebinding protection.
+         *
+         * <p>When at least one origin is registered, requests with an {@code Origin} header
+         * not in the allowlist are rejected with HTTP 403. Requests without an
+         * {@code Origin} header (e.g. non-browser clients) are always allowed.
+         *
+         * @param origin the allowed origin (e.g. {@code "https://app.example.com"})
+         * @return this builder
+         */
+        public Builder allowOrigin(final String origin) {
+            allowedOrigins.add(origin);
             return this;
         }
 

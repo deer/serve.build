@@ -22,6 +22,8 @@ package build.serve.mcp;
 import build.base.json.JsonObject;
 import build.base.json.JsonValue;
 
+import java.util.Optional;
+
 /**
  * A tool that can be invoked via the MCP protocol.
  *
@@ -50,6 +52,18 @@ public interface McpTool {
      * @return the input schema as a {@link JsonObject}
      */
     JsonObject inputSchema();
+
+    /**
+     * Returns optional behavioral hints for this tool.
+     *
+     * <p>These hints are informational only — clients may use them for UI decisions
+     * but must not rely on them for security enforcement.
+     *
+     * @return the annotations, or empty if none
+     */
+    default Optional<McpToolAnnotations> annotations() {
+        return Optional.empty();
+    }
 
     /**
      * Invokes this tool with the specified arguments.

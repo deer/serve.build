@@ -27,6 +27,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -132,7 +137,7 @@ class McpServerTests {
                 @Override
                 public McpToolResult call(final JsonValue arguments) {
                     return McpToolResult.withResources("Here is the file.",
-                        List.of(new McpContent.Resource("output.mid", "audio/midi", "TVRoZA==")));
+                        List.of(McpContent.Resource.blob("output.mid", "audio/midi", "TVRoZA==")));
                 }
             })
             .build())) {
@@ -180,8 +185,8 @@ class McpServerTests {
     }
 
     @Test
-    void shouldReturn404ForGetWithoutSession() {
-        client.get("/mcp").send().assertStatus(404);
+    void shouldReturn400ForGetWithoutSession() {
+        client.get("/mcp").send().assertStatus(400);
     }
 
     @Test
@@ -625,6 +630,261 @@ class McpServerTests {
     }
 
     @Test
+    void shouldSerializeAudioContent() {
+        try (final var audioClient = McpTestClient.start(McpServer.builder("audio-server", "1.0.0")
+            .tool(new McpTool() {
+                @Override
+                public String name() {
+                    return "get_audio";
+                }
+
+                @Override
+                public String description() {
+                    return "Returns audio";
+                }
+
+                @Override
+                public JsonObject inputSchema() {
+                    return McpTools.schema(Map.of(), List.of());
+                }
+
+                @Override
+                public McpToolResult call(final JsonValue arguments) {
+                    return new McpToolResult(List.of(new McpContent.Audio("UklGRg==", "audio/wav")), false);
+                }
+            })
+            .build())) {
+
+            audioClient.initialize();
+            final var result = audioClient.call("get_audio", Map.of()).asObject();
+            final var content = ((JsonArray) result.get("content")).values().get(0).asObject();
+            assertThat(content.getString("type")).isEqualTo("audio");
+            assertThat(content.getString("data")).isEqualTo("UklGRg==");
+            assertThat(content.getString("mimeType")).isEqualTo("audio/wav");
+        }
+    }
+
+    @Test
+    void shouldSerializeTextEmbeddedResource() {
+        try (final var textClient = McpTestClient.start(McpServer.builder("text-server", "1.0.0")
+            .tool(new McpTool() {
+                @Override
+                public String name() {
+                    return "get_doc";
+                }
+
+                @Override
+                public String description() {
+                    return "Returns a doc";
+                }
+
+                @Override
+                public JsonObject inputSchema() {
+                    return McpTools.schema(Map.of(), List.of());
+                }
+
+                @Override
+                public McpToolResult call(final JsonValue arguments) {
+                    return McpToolResult.withResources("Here is the doc.",
+                        List.of(McpContent.Resource.text("readme.txt", "text/plain", "Hello!")));
+                }
+            })
+            .build())) {
+
+            textClient.initialize();
+            final var result = textClient.call("get_doc", Map.of()).asObject();
+            final var content = ((JsonArray) result.get("content")).values();
+            final var resource = content.get(1).asObject();
+            assertThat(resource.getString("type")).isEqualTo("resource");
+            final var resourceObj = resource.get("resource").asObject();
+            assertThat(resourceObj.getString("uri")).isEqualTo("readme.txt");
+            assertThat(resourceObj.getString("text")).isEqualTo("Hello!");
+            assertThat(resourceObj.members()).doesNotContainKey("blob");
+        }
+    }
+
+    @Test
+    void shouldAllowRequestWithPermittedOrigin() throws IOException {
+        try (final var originClient = McpTestClient.start(McpServer.builder("origin-server", "1.0.0")
+            .allowOrigin("https://app.example.com")
+            .build())) {
+
+            assertThat(rawPost(originClient.port(), Map.of("Origin", "https://app.example.com"))).isEqualTo(200);
+        }
+    }
+
+    @Test
+    void shouldRejectRequestWithDisallowedOrigin() throws IOException {
+        try (final var originClient = McpTestClient.start(McpServer.builder("origin-server", "1.0.0")
+            .allowOrigin("https://app.example.com")
+            .build())) {
+
+            assertThat(rawPost(originClient.port(), Map.of("Origin", "https://evil.example.com"))).isEqualTo(403);
+        }
+    }
+
+    @Test
+    void shouldAllowRequestWithNoOriginWhenOriginsConfigured() throws IOException {
+        try (final var originClient = McpTestClient.start(McpServer.builder("origin-server", "1.0.0")
+            .allowOrigin("https://app.example.com")
+            .build())) {
+
+            assertThat(rawPost(originClient.port(), Map.of())).isEqualTo(200);
+        }
+    }
+
+    @Test
+    void shouldIncludeInstructionsInInitializeResult() {
+        try (final var instrClient = McpTestClient.start(McpServer.builder("instr-server", "1.0.0")
+            .instructions("Use the get_weather tool to answer weather questions.")
+            .build())) {
+
+            final var result = instrClient.initialize().asObject().get("result").asObject();
+            assertThat(result.getString("instructions")).isEqualTo("Use the get_weather tool to answer weather questions.");
+        }
+    }
+
+    @Test
+    void shouldOmitInstructionsWhenNotSet() {
+        final var result = client.initialize().asObject().get("result").asObject();
+        assertThat(result.members()).doesNotContainKey("instructions");
+    }
+
+    @Test
+    void shouldIncludeAnnotationsInToolsList() {
+        try (final var annClient = McpTestClient.start(McpServer.builder("ann-server", "1.0.0")
+            .tool(new McpTool() {
+                @Override
+                public String name() {
+                    return "delete_record";
+                }
+
+                @Override
+                public String description() {
+                    return "Deletes a record";
+                }
+
+                @Override
+                public JsonObject inputSchema() {
+                    return McpTools.schema(Map.of(), List.of());
+                }
+
+                @Override
+                public McpToolResult call(final JsonValue arguments) {
+                    return McpToolResult.text("deleted");
+                }
+
+                @Override
+                public java.util.Optional<McpToolAnnotations> annotations() {
+                    return java.util.Optional.of(McpToolAnnotations.builder()
+                        .destructiveHint(true)
+                        .idempotentHint(false)
+                        .readOnlyHint(false)
+                        .audience(List.of("assistant"))
+                        .build());
+                }
+            })
+            .build())) {
+
+            annClient.initialize();
+            final var tool = ((JsonArray) annClient.listTools()).values().get(0).asObject();
+            final var ann = tool.get("annotations").asObject();
+            assertThat(ann.get("destructiveHint").asBoolean().value()).isTrue();
+            assertThat(ann.get("idempotentHint").asBoolean().value()).isFalse();
+            assertThat(ann.get("readOnlyHint").asBoolean().value()).isFalse();
+            final var audience = (JsonArray) ann.get("audience");
+            assertThat(audience.values()).hasSize(1);
+            assertThat(audience.values().get(0).asString().value()).isEqualTo("assistant");
+        }
+    }
+
+    @Test
+    void shouldOmitAnnotationsWhenNotSet() {
+        client.initialize();
+        final var tool = ((JsonArray) client.listTools()).values().get(0).asObject();
+        assertThat(tool.members()).doesNotContainKey("annotations");
+    }
+
+    @Test
+    void shouldIncludeSizeInResourcesList() {
+        try (final var sizeClient = McpTestClient.start(McpServer.builder("size-server", "1.0.0")
+            .resource(new McpResource() {
+                @Override
+                public String uri() {
+                    return "file:///data.bin";
+                }
+
+                @Override
+                public String name() {
+                    return "Data";
+                }
+
+                @Override
+                public java.util.Optional<String> description() {
+                    return java.util.Optional.empty();
+                }
+
+                @Override
+                public java.util.Optional<String> mimeType() {
+                    return java.util.Optional.of("application/octet-stream");
+                }
+
+                @Override
+                public java.util.Optional<Long> size() {
+                    return java.util.Optional.of(1024L);
+                }
+
+                @Override
+                public McpResourceContent read() {
+                    return new McpResourceContent.Blob(uri(), "application/octet-stream", "");
+                }
+            })
+            .build())) {
+
+            sizeClient.initialize();
+            final var resource = ((JsonArray) sizeClient.listResources()).values().get(0).asObject();
+            assertThat(resource.get("size").asNumber().toNumber().longValue()).isEqualTo(1024L);
+        }
+    }
+
+    @Test
+    void shouldOmitSizeWhenNotProvided() {
+        try (final var nosizeClient = McpTestClient.start(McpServer.builder("nosize-server", "1.0.0")
+            .resource(new McpResource() {
+                @Override
+                public String uri() {
+                    return "file:///data.bin";
+                }
+
+                @Override
+                public String name() {
+                    return "Data";
+                }
+
+                @Override
+                public java.util.Optional<String> description() {
+                    return java.util.Optional.empty();
+                }
+
+                @Override
+                public java.util.Optional<String> mimeType() {
+                    return java.util.Optional.empty();
+                }
+
+                @Override
+                public McpResourceContent read() {
+                    return new McpResourceContent.Text(uri(), "text/plain", "");
+                }
+            })
+            .build())) {
+
+            nosizeClient.initialize();
+            final var resource = ((JsonArray) nosizeClient.listResources()).values().get(0).asObject();
+            assertThat(resource.members()).doesNotContainKey("size");
+        }
+    }
+
+    @Test
     void shouldEchoStringIdInResponse() {
         final var response = client.post("/mcp")
             .header("Content-Type", "application/json")
@@ -633,5 +893,31 @@ class McpServerTests {
             .assertStatus(200);
         final var json = Json.parse(response.body()).asObject();
         assertThat(json.getString("id")).isEqualTo("req-abc");
+    }
+
+    /**
+     * Sends a raw HTTP POST to /mcp using a plain socket, bypassing Java's restricted-header
+     * filtering so that headers like Origin can be set freely.
+     */
+    private static int rawPost(final int port, final Map<String, String> extraHeaders) throws IOException {
+        final var body = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}";
+        final var bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+        final var sb = new StringBuilder();
+        sb.append("POST /mcp HTTP/1.1\r\n");
+        sb.append("Host: 127.0.0.1:").append(port).append("\r\n");
+        sb.append("Content-Type: application/json\r\n");
+        sb.append("Content-Length: ").append(bodyBytes.length).append("\r\n");
+        for (final var entry : extraHeaders.entrySet()) {
+            sb.append(entry.getKey()).append(": ").append(entry.getValue()).append("\r\n");
+        }
+        sb.append("\r\n").append(body);
+
+        try (var socket = new Socket("127.0.0.1", port);
+             var in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
+            socket.getOutputStream().write(sb.toString().getBytes(StandardCharsets.US_ASCII));
+            socket.getOutputStream().flush();
+            final var statusLine = in.readLine();
+            return Integer.parseInt(statusLine.split(" ")[1]);
+        }
     }
 }

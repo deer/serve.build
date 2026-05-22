@@ -121,6 +121,14 @@ final class McpTestClient implements AutoCloseable {
     }
 
     /**
+     * Returns the port the underlying test server is listening on.
+     * Useful for raw socket connections that need to set restricted HTTP headers.
+     */
+    int port() {
+        return server.port();
+    }
+
+    /**
      * Delegates to the underlying {@link TestServer} for direct HTTP access.
      */
     TestRequest get(final String path) {

@@ -58,6 +58,15 @@ public interface McpResource {
     Optional<String> mimeType();
 
     /**
+     * Returns the size of this resource in bytes, if known.
+     *
+     * @return the size in bytes, or empty if unknown
+     */
+    default Optional<Long> size() {
+        return Optional.empty();
+    }
+
+    /**
      * Reads and returns the content of this resource.
      *
      * @return the resource content
