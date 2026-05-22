@@ -23,6 +23,8 @@ import build.base.json.Json;
 import build.base.json.JsonArray;
 import build.base.json.JsonObject;
 import build.base.json.JsonValue;
+import build.serve.foundation.routing.RouterBuilder;
+import build.serve.testing.TestServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -893,6 +895,95 @@ class McpServerTests {
             .assertStatus(200);
         final var json = Json.parse(response.body()).asObject();
         assertThat(json.getString("id")).isEqualTo("req-abc");
+    }
+
+    @Test
+    void shouldReturn200ForDeleteRegardlessOfSessionId() {
+        final var mcp = McpServer.builder("s", "1").build();
+        final var srv = TestServer.of(
+            RouterBuilder.create()
+                .route("/mcp", mcp.handler()).build());
+        try (srv) {
+            assertThat(srv.delete("/mcp").send().status()).isEqualTo(200);
+            assertThat(srv.delete("/mcp").header("Mcp-Session-Id", "unknown").send().status()).isEqualTo(200);
+        }
+    }
+
+    @Test
+    void shouldRejectDeletedSessionOnNextRequest() {
+        final var mcp = McpServer.builder("s", "1").build();
+        final var srv = TestServer.of(
+            RouterBuilder.create()
+                .route("/mcp", mcp.handler()).build());
+        try (srv) {
+            final var initResp = srv.post("/mcp")
+                .header("Content-Type", "application/json")
+                .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
+                .send();
+            final var sessionId = initResp.header("Mcp-Session-Id");
+
+            srv.delete("/mcp").header("Mcp-Session-Id", sessionId).send().assertStatus(200);
+
+            final var followUp = srv.post("/mcp")
+                .header("Content-Type", "application/json")
+                .header("Mcp-Session-Id", sessionId)
+                .body("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}")
+                .send();
+            assertThat(followUp.status()).isEqualTo(404);
+        }
+    }
+
+    @Test
+    void shouldRejectInitializeWhenSessionCapReached() {
+        final var mcp = McpServer.builder("s", "1").maxSessions(1).build();
+        final var srv = TestServer.of(
+            RouterBuilder.create()
+                .route("/mcp", mcp.handler()).build());
+        try (srv) {
+            srv.post("/mcp")
+                .header("Content-Type", "application/json")
+                .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
+                .send().assertStatus(200);
+            final var second = srv.post("/mcp")
+                .header("Content-Type", "application/json")
+                .body("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"initialize\",\"params\":{}}")
+                .send();
+            assertThat(second.status()).isEqualTo(503);
+        }
+    }
+
+    @Test
+    void shouldSanitizeExceptionMessageInToolError() {
+        final var badTool = new McpTool() {
+            @Override
+            public String name() {
+                return "bad_tool";
+            }
+
+            @Override
+            public String description() {
+                return "throws";
+            }
+
+            @Override
+            public JsonObject inputSchema() {
+                return McpTools.schema(Map.of(), List.of());
+            }
+
+            @Override
+            public McpToolResult call(final JsonValue arguments) throws Exception {
+                throw new RuntimeException("error\r\nX-Injected: evil");
+            }
+        };
+        final var errorServer = McpServer.builder("s", "1").tool(badTool).build();
+        try (var errorClient = McpTestClient.start(errorServer)) {
+            errorClient.initialize();
+            final var result = errorClient.call("bad_tool", Map.of());
+            final var content = ((JsonArray) result.asObject().members().get("content")).values();
+            final var text = content.get(0).asObject().getString("text");
+            assertThat(text).doesNotContain("\r").doesNotContain("\n");
+            assertThat(text).contains("error");
+        }
     }
 
     /**
