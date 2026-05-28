@@ -22,15 +22,12 @@ package build.serve.mcp;
 import build.base.json.Json;
 import build.base.json.JsonArray;
 import build.base.json.JsonObject;
-import build.base.json.JsonValue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -46,31 +43,11 @@ class McpStdioTests {
 
     @BeforeEach
     void setUp() {
+        final var location = ToolParam.string("location", "City name or zip code");
         server = McpServer.builder("test-server", "1.0.0")
-            .tool(new McpTool() {
-                @Override
-                public String name() {
-                    return "get_weather";
-                }
-
-                @Override
-                public String description() {
-                    return "Get weather for a location";
-                }
-
-                @Override
-                public JsonObject inputSchema() {
-                    return McpTools.schema(
-                        Map.of("location", "City name or zip code"),
-                        List.of("location"));
-                }
-
-                @Override
-                public McpToolResult call(final JsonValue arguments) {
-                    final var location = arguments.asObject().getString("location");
-                    return McpToolResult.text("Weather in " + location + ": sunny, 72°F");
-                }
-            })
+            .tool(ToolDef.of("get_weather", "Get weather for a location")
+                .param(location)
+                .handle(args -> McpToolResult.text("Weather in " + location.extract(args) + ": sunny, 72°F")))
             .build();
     }
 

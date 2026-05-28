@@ -51,31 +51,11 @@ class McpServerTests {
 
     @BeforeEach
     void setUp() {
+        final var location = ToolParam.string("location", "City name or zip code");
         final var mcpServer = McpServer.builder("test-server", "1.0.0")
-            .tool(new McpTool() {
-                @Override
-                public String name() {
-                    return "get_weather";
-                }
-
-                @Override
-                public String description() {
-                    return "Get weather for a location";
-                }
-
-                @Override
-                public JsonObject inputSchema() {
-                    return McpTools.schema(
-                        Map.of("location", "City name or zip code"),
-                        List.of("location"));
-                }
-
-                @Override
-                public McpToolResult call(final JsonValue arguments) {
-                    final var location = arguments.asObject().getString("location");
-                    return McpToolResult.text("Weather in " + location + ": sunny, 72°F");
-                }
-            })
+            .tool(ToolDef.of("get_weather", "Get weather for a location")
+                .param(location)
+                .handle(args -> McpToolResult.text("Weather in " + location.extract(args) + ": sunny, 72°F")))
             .build();
 
         client = McpTestClient.start(mcpServer);
@@ -120,28 +100,9 @@ class McpServerTests {
     @Test
     void shouldSerializeResourceContent() {
         try (final var resourceClient = McpTestClient.start(McpServer.builder("res-server", "1.0.0")
-            .tool(new McpTool() {
-                @Override
-                public String name() {
-                    return "get_file";
-                }
-
-                @Override
-                public String description() {
-                    return "Returns a binary file";
-                }
-
-                @Override
-                public JsonObject inputSchema() {
-                    return McpTools.schema(Map.of(), List.of());
-                }
-
-                @Override
-                public McpToolResult call(final JsonValue arguments) {
-                    return McpToolResult.withResources("Here is the file.",
-                        List.of(McpContent.Resource.blob("output.mid", "audio/midi", "TVRoZA==")));
-                }
-            })
+            .tool(ToolDef.of("get_file", "Returns a binary file")
+                .handle(args -> McpToolResult.withResources("Here is the file.",
+                    List.of(McpContent.Resource.blob("output.mid", "audio/midi", "TVRoZA==")))))
             .build())) {
 
             resourceClient.initialize();
@@ -634,27 +595,8 @@ class McpServerTests {
     @Test
     void shouldSerializeAudioContent() {
         try (final var audioClient = McpTestClient.start(McpServer.builder("audio-server", "1.0.0")
-            .tool(new McpTool() {
-                @Override
-                public String name() {
-                    return "get_audio";
-                }
-
-                @Override
-                public String description() {
-                    return "Returns audio";
-                }
-
-                @Override
-                public JsonObject inputSchema() {
-                    return McpTools.schema(Map.of(), List.of());
-                }
-
-                @Override
-                public McpToolResult call(final JsonValue arguments) {
-                    return new McpToolResult(List.of(new McpContent.Audio("UklGRg==", "audio/wav")), false);
-                }
-            })
+            .tool(ToolDef.of("get_audio", "Returns audio")
+                .handle(args -> new McpToolResult(List.of(new McpContent.Audio("UklGRg==", "audio/wav")), false)))
             .build())) {
 
             audioClient.initialize();
@@ -669,28 +611,9 @@ class McpServerTests {
     @Test
     void shouldSerializeTextEmbeddedResource() {
         try (final var textClient = McpTestClient.start(McpServer.builder("text-server", "1.0.0")
-            .tool(new McpTool() {
-                @Override
-                public String name() {
-                    return "get_doc";
-                }
-
-                @Override
-                public String description() {
-                    return "Returns a doc";
-                }
-
-                @Override
-                public JsonObject inputSchema() {
-                    return McpTools.schema(Map.of(), List.of());
-                }
-
-                @Override
-                public McpToolResult call(final JsonValue arguments) {
-                    return McpToolResult.withResources("Here is the doc.",
-                        List.of(McpContent.Resource.text("readme.txt", "text/plain", "Hello!")));
-                }
-            })
+            .tool(ToolDef.of("get_doc", "Returns a doc")
+                .handle(args -> McpToolResult.withResources("Here is the doc.",
+                    List.of(McpContent.Resource.text("readme.txt", "text/plain", "Hello!")))))
             .build())) {
 
             textClient.initialize();
@@ -755,37 +678,14 @@ class McpServerTests {
     @Test
     void shouldIncludeAnnotationsInToolsList() {
         try (final var annClient = McpTestClient.start(McpServer.builder("ann-server", "1.0.0")
-            .tool(new McpTool() {
-                @Override
-                public String name() {
-                    return "delete_record";
-                }
-
-                @Override
-                public String description() {
-                    return "Deletes a record";
-                }
-
-                @Override
-                public JsonObject inputSchema() {
-                    return McpTools.schema(Map.of(), List.of());
-                }
-
-                @Override
-                public McpToolResult call(final JsonValue arguments) {
-                    return McpToolResult.text("deleted");
-                }
-
-                @Override
-                public java.util.Optional<McpToolAnnotations> annotations() {
-                    return java.util.Optional.of(McpToolAnnotations.builder()
-                        .destructiveHint(true)
-                        .idempotentHint(false)
-                        .readOnlyHint(false)
-                        .audience(List.of("assistant"))
-                        .build());
-                }
-            })
+            .tool(ToolDef.of("delete_record", "Deletes a record")
+                .annotations(McpToolAnnotations.builder()
+                    .destructiveHint(true)
+                    .idempotentHint(false)
+                    .readOnlyHint(false)
+                    .audience(List.of("assistant"))
+                    .build())
+                .handle(args -> McpToolResult.text("deleted")))
             .build())) {
 
             annClient.initialize();
@@ -954,6 +854,8 @@ class McpServerTests {
 
     @Test
     void shouldSanitizeExceptionMessageInToolError() {
+        // Raw McpTool intentionally — tests server-level CRLF sanitization of thrown exceptions,
+        // which ToolDef.call() would swallow before the server sees them.
         final var badTool = new McpTool() {
             @Override
             public String name() {
@@ -967,7 +869,7 @@ class McpServerTests {
 
             @Override
             public JsonObject inputSchema() {
-                return McpTools.schema(Map.of(), List.of());
+                return ToolDef.of("bad_tool", "throws").handle(a -> null).inputSchema();
             }
 
             @Override
