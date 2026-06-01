@@ -23,6 +23,7 @@ import build.base.json.JsonNull;
 import build.base.json.JsonObject;
 import build.base.json.JsonValue;
 
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 sealed abstract class ToolParamBase<T, Self extends ToolParamBase<T, Self>>
@@ -114,16 +115,25 @@ sealed abstract class ToolParamBase<T, Self extends ToolParamBase<T, Self>>
             propertySchema);
     }
 
+    public <U> ToolParam<U> map(final Function<T, U> transform) {
+        final U mappedDefault = defaultValue != null ? transform.apply(defaultValue) : null;
+        final var outer = extractor;
+        return new GenericParam<>(name, description, required, mappedDefault,
+            val -> transform.apply(outer.extract(val)),
+            propertySchema);
+    }
+
     final JsonObject.Builder schemaBuilder() {
         final var b = JsonObject.builder();
         propertySchema.members().forEach((k, v) -> b.put(k, v));
         return b;
     }
 
-    T extractValue(final JsonValue value) {
+    @Override
+    public T extractSelf(final JsonValue value) {
         if (value instanceof JsonNull) {
             if (required) {
-                throw new IllegalArgumentException("Array item must not be null.");
+                throw new IllegalArgumentException("Value must not be null.");
             }
             return defaultValue;
         }

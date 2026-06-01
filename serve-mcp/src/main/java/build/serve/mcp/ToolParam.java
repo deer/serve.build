@@ -23,9 +23,12 @@ import build.base.json.JsonArray;
 import build.base.json.JsonObject;
 import build.base.json.JsonValue;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * A typed tool parameter declaration that drives both JSON Schema generation and type-safe argument extraction.
@@ -64,7 +67,19 @@ public interface ToolParam<T> {
 
     JsonObject propertySchema();
 
+    /**
+     * Returns the {@code $defs} entries that must be hoisted into the root schema. Empty by default.
+     */
+    default Map<String, JsonObject> defs() {
+        return Map.of();
+    }
+
     T extract(JsonValue args);
+
+    /**
+     * Extracts a value directly from {@code value} without looking it up by name in a parent object.
+     */
+    T extractSelf(JsonValue value);
 
     ToolParam<T> optional();
 
@@ -126,9 +141,8 @@ public interface ToolParam<T> {
     static <T> ArrayParam<T> array(final String name,
                                    final String description,
                                    final ToolParam<T> itemSchema) {
-        final var impl = (ToolParamBase<T, ?>) itemSchema;
         return new ArrayParam<>(name, description, true, null,
-            val -> val.asArray().values().stream().map(impl::extractValue).toList(),
+            val -> val.asArray().values().stream().map(itemSchema::extractSelf).toList(),
             JsonObject.builder()
                 .put("type", "array")
                 .put("description", description)
@@ -169,6 +183,138 @@ public interface ToolParam<T> {
                                final JsonObject schema,
                                final Extractor<T> extractor) {
         return new GenericParam<>(name, description, true, null, extractor, schema);
+    }
+
+    /**
+     * A string-keyed enum that maps JSON string values to typed Java objects.
+     *
+     * <p>The generated schema is a {@code string} with an {@code enum} array of the entry keys.
+     * Extraction looks up the incoming string in the entry list and returns the paired Java value.
+     */
+    static <T> ToolParam<T> enumParam(final String name,
+                                      final String description,
+                                      final List<Map.Entry<String, T>> entries) {
+        final var enumArray = JsonArray.builder();
+        entries.forEach(e -> enumArray.add(e.getKey()));
+        final var schema = JsonObject.builder()
+            .put("type", "string")
+            .put("description", description)
+            .put("enum", enumArray.build())
+            .build();
+        return new GenericParam<>(name, description, true, null,
+            val -> {
+                final var key = val.asString().value();
+                for (final var entry : entries) {
+                    if (entry.getKey().equals(key)) {
+                        return entry.getValue();
+                    }
+                }
+                throw new IllegalArgumentException(
+                    "'" + name + "' has unknown value '" + key + "'.");
+            },
+            schema);
+    }
+
+    /**
+     * An untyped {@code oneOf} — emits a JSON Schema {@code oneOf} hint and returns the raw object.
+     *
+     * <p>Use when dispatch logic is handled by the caller. For typed dispatch keyed on a discriminator
+     * field, use {@link #oneOf(String, String, String, List)} instead.
+     */
+    static ToolParam<JsonObject> oneOf(final String name,
+                                       final String description,
+                                       final List<ObjectParam> variants) {
+        final var oneOfArray = JsonArray.builder();
+        variants.forEach(v -> oneOfArray.add(v.propertySchema()));
+        final var schema = JsonObject.builder()
+            .put("description", description)
+            .put("oneOf", oneOfArray.build())
+            .build();
+        return new GenericParam<>(name, description, true, null,
+            val -> val.asObject(),
+            schema);
+    }
+
+    /**
+     * A typed discriminated {@code oneOf} — injects a {@code const} for the discriminator field into
+     * each variant's schema, then dispatches extraction to the matching variant at runtime.
+     *
+     * <p>Each entry pairs a discriminator string value with the param that handles that variant.
+     * Use {@link ToolParamBase#map(java.util.function.Function)} on a variant param to convert its
+     * raw extraction result to a shared type {@code T}.
+     *
+     * @throws IllegalArgumentException if a variant schema has no {@code properties} block
+     */
+    static <T> ToolParam<T> oneOf(final String name,
+                                  final String description,
+                                  final String discriminator,
+                                  final List<Map.Entry<String, ToolParam<T>>> variants) {
+        final var oneOfArray = JsonArray.builder();
+        final var lookup = new LinkedHashMap<String, ToolParam<T>>();
+        for (final var entry : variants) {
+            oneOfArray.add(injectDiscriminator(entry.getValue().propertySchema(), discriminator, entry.getKey()));
+            lookup.put(entry.getKey(), entry.getValue());
+        }
+        final var schema = JsonObject.builder()
+            .put("description", description)
+            .put("oneOf", oneOfArray.build())
+            .build();
+        return new GenericParam<>(name, description, true, null,
+            val -> {
+                final var obj = val.asObject();
+                final var discValue = obj.getString(discriminator);
+                final var variant = lookup.get(discValue);
+                if (variant == null) {
+                    throw new IllegalArgumentException(
+                        "Unknown '" + discriminator + "' value '" + discValue + "'.");
+                }
+                return variant.extractSelf(val);
+            },
+            schema);
+    }
+
+    /**
+     * A lazy reference for recursive schemas — emits {@code {"$ref":"#/$defs/<defName>"}} as the
+     * property schema, and resolves the supplier on first use to populate the {@code $defs} entry.
+     *
+     * <p><b>Transitivity limitation:</b> only top-level params in {@code ToolDef.params()} have their
+     * {@code defs()} hoisted by {@code inputSchema()}. Nested {@code $defs} (defs of defs) are not
+     * collected automatically — avoid nesting {@code lazy} params inside other lazy suppliers.
+     */
+    static <T> ToolParam<T> lazy(final String name,
+                                 final String description,
+                                 final String defName,
+                                 final Supplier<ToolParam<T>> supplier) {
+        return new LazyParam<>(name, description, defName, supplier);
+    }
+
+    private static JsonObject injectDiscriminator(final JsonObject schema,
+                                                  final String discriminator,
+                                                  final String value) {
+        final var members = schema.members();
+        final var propsValue = members.get("properties");
+        if (propsValue == null) {
+            throw new IllegalArgumentException(
+                "Variant schema for discriminated oneOf must have 'properties'.");
+        }
+        final var newProps = JsonObject.builder();
+        propsValue.asObject().members().forEach((k, v) -> newProps.put(k, v));
+        newProps.put(discriminator, JsonObject.builder().put("const", value).build());
+        final var newRequired = JsonArray.builder();
+        final var existingRequired = members.get("required");
+        if (existingRequired != null) {
+            existingRequired.asArray().values().forEach(v -> newRequired.add(v.asString().value()));
+        }
+        newRequired.add(discriminator);
+        final var builder = JsonObject.builder();
+        members.forEach((k, v) -> {
+            if (!k.equals("properties") && !k.equals("required")) {
+                builder.put(k, v);
+            }
+        });
+        builder.put("properties", newProps.build());
+        builder.put("required", newRequired.build());
+        return builder.build();
     }
 
     // --- Extractor ---

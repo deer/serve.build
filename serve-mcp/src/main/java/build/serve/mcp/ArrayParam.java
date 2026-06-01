@@ -40,6 +40,11 @@ public final class ArrayParam<E> extends ToolParamBase<List<E>, ArrayParam<E>> {
         return new ArrayParam<>(name, description, required, defaultValue, extractor, propertySchema);
     }
 
+    @Override
+    public ArrayParam<E> optional() {
+        return copy(false, List.of(), extractor, propertySchema);
+    }
+
     public ArrayParam<E> minItems(final int min) {
         final var schema = schemaBuilder().put("minItems", min).build();
         final var outer = extractor;

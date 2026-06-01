@@ -24,6 +24,7 @@ import build.base.json.JsonObject;
 import build.base.json.JsonValue;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
 
@@ -73,17 +74,24 @@ public interface ToolDef extends McpTool {
     default JsonObject inputSchema() {
         final var props = JsonObject.builder();
         final var required = JsonArray.builder();
+        final var allDefs = new LinkedHashMap<String, JsonObject>();
         for (final ToolParam<?> param : params()) {
             props.put(param.name(), param.propertySchema());
             if (param.isRequired()) {
                 required.add(param.name());
             }
+            allDefs.putAll(param.defs());
         }
-        return JsonObject.builder()
+        final var builder = JsonObject.builder()
             .put("type", "object")
             .put("properties", props.build())
-            .put("required", required.build())
-            .build();
+            .put("required", required.build());
+        if (!allDefs.isEmpty()) {
+            final var defsBuilder = JsonObject.builder();
+            allDefs.forEach(defsBuilder::put);
+            builder.put("$defs", defsBuilder.build());
+        }
+        return builder.build();
     }
 
     @Override

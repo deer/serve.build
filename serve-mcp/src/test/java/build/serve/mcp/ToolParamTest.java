@@ -24,6 +24,8 @@ import build.base.json.JsonObject;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -443,5 +445,242 @@ class ToolParamTest {
     void shouldProduceMinItemsInSchema() {
         final var schema = ToolParam.array("tags", "Tags").minItems(1).propertySchema();
         assertThat(schema.get("minItems").asNumber().toNumber().intValue()).isEqualTo(1);
+    }
+
+    // --- ArrayParam.optional() defaults to List.of() ---
+
+    @Test
+    void shouldReturnEmptyListWhenOptionalArrayMissing() {
+        final var param = ToolParam.array("tags", "Tags").optional();
+        assertThat(param.extract(Json.parse("{}"))).isEmpty();
+    }
+
+    @Test
+    void shouldReturnEmptyListWhenOptionalArrayNull() {
+        final var param = ToolParam.array("tags", "Tags").optional();
+        assertThat(param.extract(Json.parse("{\"tags\":null}"))).isEmpty();
+    }
+
+    // --- map ---
+
+    @Test
+    void shouldTransformExtractedValueWithMap() {
+        final var param = ToolParam.integer("count", "Count").map(n -> n * 2);
+        assertThat(param.extract(Json.parse("{\"count\":5}"))).isEqualTo(10);
+    }
+
+    @Test
+    void shouldPreserveSchemaAfterMap() {
+        final var param = ToolParam.integer("count", "Count").map(n -> n * 2);
+        assertThat(param.propertySchema().getString("type")).isEqualTo("integer");
+    }
+
+    @Test
+    void shouldMapToStringType() {
+        final var param = ToolParam.integer("n", "Number").map(Object::toString);
+        assertThat(param.extract(Json.parse("{\"n\":42}"))).isEqualTo("42");
+    }
+
+    // --- enumParam ---
+
+    @Test
+    void shouldExtractTypedValueFromEnumParam() {
+        final var param = ToolParam.enumParam("dir", "Direction", List.of(
+            Map.entry("up", 1),
+            Map.entry("down", -1)
+        ));
+        assertThat(param.extract(Json.parse("{\"dir\":\"down\"}"))).isEqualTo(-1);
+    }
+
+    @Test
+    void shouldThrowForUnknownEnumValue() {
+        final var param = ToolParam.enumParam("dir", "Direction", List.of(
+            Map.entry("up", 1),
+            Map.entry("down", -1)
+        ));
+        assertThatThrownBy(() -> param.extract(Json.parse("{\"dir\":\"left\"}")))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("dir");
+    }
+
+    @Test
+    void shouldProduceEnumSchemaFromEnumParam() {
+        final var schema = ToolParam.enumParam("dir", "Direction", List.of(
+            Map.entry("up", 1),
+            Map.entry("down", -1)
+        )).propertySchema();
+        assertThat(schema.getString("type")).isEqualTo("string");
+        assertThat(schema.get("enum").asArray().values()).hasSize(2);
+        assertThat(schema.get("enum").asArray().element(0).asString().value()).isEqualTo("up");
+    }
+
+    // --- oneOf (untyped) ---
+
+    @Test
+    void shouldExtractRawObjectFromUntypedOneOf() {
+        final var circleParam = ToolParam.object("shape", "Circle", List.of(ToolParam.number("r", "Radius")));
+        final var rectParam = ToolParam.object("shape", "Rect", List.of(ToolParam.number("w", "Width")));
+        final var param = ToolParam.oneOf("shape", "A shape", List.of(circleParam, rectParam));
+        final var result = param.extract(Json.parse("{\"shape\":{\"r\":5}}"));
+        assertThat(result.get("r").asNumber().toNumber().doubleValue()).isEqualTo(5.0);
+    }
+
+    @Test
+    void shouldProduceOneOfSchemaFromUntypedOneOf() {
+        final var p1 = ToolParam.object("s", "A", List.of());
+        final var p2 = ToolParam.object("s", "B", List.of());
+        final var schema = ToolParam.oneOf("s", "One of", List.of(p1, p2)).propertySchema();
+        assertThat(schema.has("oneOf")).isTrue();
+        assertThat(schema.get("oneOf").asArray().values()).hasSize(2);
+    }
+
+    // --- oneOf (discriminated) ---
+
+    private record Shape(String kind, double value) {
+    }
+
+    private static final StringParam KIND = ToolParam.string("kind", "Kind");
+    private static final ToolParam<Shape> CIRCLE_VARIANT =
+        ToolParam.object("shape", "Circle", List.of(KIND, ToolParam.number("r", "Radius")))
+            .map(o -> new Shape("circle", o.get("r").asNumber().toNumber().doubleValue()));
+    private static final ToolParam<Shape> RECT_VARIANT =
+        ToolParam.object("shape", "Rect", List.of(KIND, ToolParam.number("w", "Width")))
+            .map(o -> new Shape("rect", o.get("w").asNumber().toNumber().doubleValue()));
+    private static final ToolParam<Shape> SHAPE_PARAM = ToolParam.oneOf("shape", "A shape", "kind", List.of(
+        Map.entry("circle", CIRCLE_VARIANT),
+        Map.entry("rect", RECT_VARIANT)
+    ));
+
+    @Test
+    void shouldDispatchToCircleVariant() {
+        final var shape = SHAPE_PARAM.extract(Json.parse("{\"shape\":{\"kind\":\"circle\",\"r\":3.0}}"));
+        assertThat(shape.kind()).isEqualTo("circle");
+        assertThat(shape.value()).isEqualTo(3.0);
+    }
+
+    @Test
+    void shouldDispatchToRectVariant() {
+        final var shape = SHAPE_PARAM.extract(Json.parse("{\"shape\":{\"kind\":\"rect\",\"w\":10.0}}"));
+        assertThat(shape.kind()).isEqualTo("rect");
+        assertThat(shape.value()).isEqualTo(10.0);
+    }
+
+    @Test
+    void shouldThrowForUnknownDiscriminatorValue() {
+        assertThatThrownBy(() -> SHAPE_PARAM.extract(Json.parse("{\"shape\":{\"kind\":\"triangle\"}}")))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("kind");
+    }
+
+    @Test
+    void shouldInjectDiscriminatorConstIntoVariantSchemas() {
+        final var schema = SHAPE_PARAM.propertySchema();
+        final var circleSchema = schema.get("oneOf").asArray().element(0).asObject();
+        assertThat(circleSchema.get("properties").asObject().get("kind").asObject().getString("const"))
+            .isEqualTo("circle");
+    }
+
+    @Test
+    void shouldThrowWhenVariantSchemaHasNoProperties() {
+        final var bare = ToolParam.of("x", "x", JsonObject.builder().put("type", "string").build(), v -> v.asObject());
+        assertThatThrownBy(() -> ToolParam.oneOf("x", "x", "kind", List.of(Map.entry("a", bare))))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("properties");
+    }
+
+    // --- lazy ---
+
+    @Test
+    void shouldProduceRefSchemaForLazyParam() {
+        final var param = ToolParam.lazy("node", "A node", "Node", () -> ToolParam.string("node", "A node"));
+        assertThat(param.propertySchema().getString("$ref")).isEqualTo("#/$defs/Node");
+    }
+
+    @Test
+    void shouldNotCallSupplierUntilExtractOrDefs() {
+        final var calls = new AtomicInteger();
+        final var param = ToolParam.lazy("x", "x", "X", () -> {
+            calls.incrementAndGet();
+            return ToolParam.string("x", "x");
+        });
+        param.propertySchema();
+        assertThat(calls.get()).isZero();
+        param.extract(Json.parse("{\"x\":\"hello\"}"));
+        assertThat(calls.get()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldCallSupplierOnlyOnce() {
+        final var calls = new AtomicInteger();
+        final var param = ToolParam.lazy("x", "x", "X", () -> {
+            calls.incrementAndGet();
+            return ToolParam.string("x", "x");
+        });
+        param.extract(Json.parse("{\"x\":\"a\"}"));
+        param.extract(Json.parse("{\"x\":\"b\"}"));
+        param.defs();
+        assertThat(calls.get()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldExtractValueViaLazyParam() {
+        final var param = ToolParam.lazy("msg", "Message", "Msg", () -> ToolParam.string("msg", "Message"));
+        assertThat(param.extract(Json.parse("{\"msg\":\"hello\"}"))).isEqualTo("hello");
+    }
+
+    @Test
+    void shouldSupportSelfReferentialRecursiveSchema() {
+        // node = {value: string, child?: <lazy ref to node>}
+        final var value = ToolParam.string("value", "Node value");
+        final ToolParam<JsonObject>[] holder = new ToolParam[1];
+        final var child = ToolParam.lazy("child", "Child node", "Node", () -> holder[0]);
+        final var node = ToolParam.object("node", "A tree node", List.of(value, child.optional()));
+        holder[0] = node;
+        final var defs = child.defs();
+        assertThat(defs).containsKey("Node");
+        assertThat(defs.get("Node").getString("type")).isEqualTo("object");
+    }
+
+    @Test
+    void shouldReturnNullWhenOptionalLazyParamMissing() {
+        final var param = ToolParam.lazy("node", "Node", "Node", () -> ToolParam.object("node", "Node", List.of()));
+        assertThat(param.optional().extract(Json.parse("{}"))).isNull();
+    }
+
+    @Test
+    void shouldReturnDefaultWhenOptionalLazyParamMissing() {
+        final var fallback = Json.parse("{\"ok\":true}").asObject();
+        final var param = ToolParam.lazy("node", "Node", "Node", () -> ToolParam.object("node", "Node", List.of()))
+            .optional(fallback);
+        assertThat(param.extract(Json.parse("{}"))).isSameAs(fallback);
+    }
+
+    @Test
+    void shouldNotBeRequiredAfterLazyOptional() {
+        final var param = ToolParam.lazy("x", "x", "X", () -> ToolParam.string("x", "x"));
+        assertThat(param.isRequired()).isTrue();
+        assertThat(param.optional().isRequired()).isFalse();
+    }
+
+    // --- ToolDef.inputSchema() with $defs ---
+
+    @Test
+    void shouldEmitDefsBlockWhenLazyParamPresent() {
+        final var value = ToolParam.string("value", "Value");
+        final ToolParam<JsonObject>[] holder = new ToolParam[1];
+        final var nodeParam = ToolParam.lazy("node", "Node", "Node", () -> holder[0]);
+        holder[0] = ToolParam.object("node", "Node", List.of(value));
+        final var tool = ToolDef.of("t", "t").param(nodeParam).handle(args -> McpToolResult.text("ok"));
+        final var schema = tool.inputSchema();
+        assertThat(schema.has("$defs")).isTrue();
+        assertThat(schema.get("$defs").asObject().has("Node")).isTrue();
+    }
+
+    @Test
+    void shouldNotEmitDefsBlockWhenNoLazyParams() {
+        final var tool = ToolDef.of("t", "t")
+            .param(ToolParam.string("x", "x"))
+            .handle(args -> McpToolResult.text("ok"));
+        assertThat(tool.inputSchema().has("$defs")).isFalse();
     }
 }
