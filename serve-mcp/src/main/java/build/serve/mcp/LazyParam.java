@@ -56,15 +56,15 @@ final class LazyParam<T> implements ToolParam<T> {
               final String description,
               final String defName,
               final Supplier<ToolParam<T>> supplier) {
-        this(name, description, defName, supplier, true, null);
+        this(name, description, defName, true, null, supplier);
     }
 
     private LazyParam(final String name,
                       final String description,
                       final String defName,
-                      final Supplier<ToolParam<T>> supplier,
                       final boolean required,
-                      final T defaultValue) {
+                      final T defaultValue,
+                      final Supplier<ToolParam<T>> supplier) {
         this.name = name;
         this.description = description;
         this.defName = defName;
@@ -123,18 +123,19 @@ final class LazyParam<T> implements ToolParam<T> {
     }
 
     @Override
-    public ToolParam<T> optional() {
-        return new LazyParam<>(name, description, defName, supplier, false, null);
+    public LazyParam<T> optional() {
+        return new LazyParam<>(name, description, defName, false, null, supplier);
     }
 
     @Override
-    public ToolParam<T> optional(final T defaultValue) {
-        return new LazyParam<>(name, description, defName, supplier, false, defaultValue);
+    public LazyParam<T> optional(final T defaultValue) {
+        return new LazyParam<>(name, description, defName, false, defaultValue, supplier);
     }
 
     @Override
     public ToolParam<T> refine(final Predicate<T> predicate, final String message) {
-        throw new UnsupportedOperationException("LazyParam does not support refine().");
+        return new LazyParam<>(name, description, defName, required, defaultValue,
+            () -> resolve().refine(predicate, message));
     }
 
     private ToolParam<T> resolve() {

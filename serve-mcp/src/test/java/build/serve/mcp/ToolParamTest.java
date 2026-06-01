@@ -662,6 +662,41 @@ class ToolParamTest {
         assertThat(param.optional().isRequired()).isFalse();
     }
 
+    @Test
+    void shouldExtractWhenLazyRefinePredicatePasses() {
+        final var param = ToolParam.lazy("x", "x", "X", () -> ToolParam.integer("x", "x"))
+            .refine(n -> n > 0, "must be positive");
+        assertThat(param.extract(Json.parse("{\"x\":5}"))).isEqualTo(5);
+    }
+
+    @Test
+    void shouldThrowWhenLazyRefinePredicateFails() {
+        final var param = ToolParam.lazy("x", "x", "X", () -> ToolParam.integer("x", "x"))
+            .refine(n -> n > 0, "must be positive");
+        assertThatThrownBy(() -> param.extract(Json.parse("{\"x\":-1}")))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("must be positive");
+    }
+
+    @Test
+    void shouldPreserveSchemaAfterLazyRefine() {
+        final var param = ToolParam.lazy("x", "x", "X", () -> ToolParam.integer("x", "x"))
+            .refine(n -> n > 0, "must be positive");
+        assertThat(param.propertySchema().getString("$ref")).isEqualTo("#/$defs/X");
+    }
+
+    @Test
+    void shouldCallOriginalSupplierOnceAfterRefine() {
+        final var calls = new AtomicInteger();
+        final var param = ToolParam.lazy("x", "x", "X", () -> {
+            calls.incrementAndGet();
+            return ToolParam.integer("x", "x");
+        }).refine(n -> n > 0, "must be positive");
+        param.extract(Json.parse("{\"x\":1}"));
+        param.extract(Json.parse("{\"x\":2}"));
+        assertThat(calls.get()).isEqualTo(1);
+    }
+
     // --- ToolDef.inputSchema() with $defs ---
 
     @Test
