@@ -853,6 +853,16 @@ class McpServerTests {
     }
 
     @Test
+    void shouldRejectInitializeWhenSessionIdPresent() {
+        final var response = client.post("/mcp")
+            .header("Content-Type", "application/json")
+            .header("Mcp-Session-Id", "any-value")
+            .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
+            .send();
+        assertThat(response.status()).isEqualTo(400);
+    }
+
+    @Test
     void shouldSanitizeExceptionMessageInToolError() {
         // Raw McpTool intentionally — tests server-level CRLF sanitization of thrown exceptions,
         // which ToolDef.call() would swallow before the server sees them.

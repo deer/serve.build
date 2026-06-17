@@ -22,6 +22,7 @@ package build.serve.sse;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * Internal implementation of {@link SseEmitter} that writes SSE-formatted events
@@ -34,6 +35,7 @@ final class SseEmitterImpl implements SseEmitter {
 
     private final OutputStream out;
     private volatile boolean open = true;
+    private final CountDownLatch closeLatch = new CountDownLatch(1);
 
     /**
      * Creates a new emitter writing to the given output stream.
@@ -59,6 +61,7 @@ final class SseEmitterImpl implements SseEmitter {
             out.flush();
         } catch (final IOException e) {
             open = false;
+            closeLatch.countDown();
             throw e;
         }
     }
@@ -69,9 +72,15 @@ final class SseEmitterImpl implements SseEmitter {
     }
 
     @Override
+    public void awaitClose() throws InterruptedException {
+        closeLatch.await();
+    }
+
+    @Override
     public synchronized void close() {
         if (open) {
             open = false;
+            closeLatch.countDown();
             try {
                 out.close();
             } catch (final IOException ignored) {
