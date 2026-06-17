@@ -54,6 +54,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 /**
@@ -63,6 +65,8 @@ import java.util.regex.Pattern;
  * @since Mar-2026
  */
 public final class McpServer {
+
+    private static final Logger LOGGER = Logger.getLogger(McpServer.class.getName());
 
     /**
      * ScopedValue bound to the current MCP session ID for the duration of each tool call.
@@ -173,14 +177,25 @@ public final class McpServer {
             }
 
             final var sessionId = exchange.request().header("Mcp-Session-Id");
+
+            final var body = exchange.request().bodyAsString();
+            final var request = Json.parse(body).asObject();
+            final var isInitialize = "initialize".equals(getString(request, "method"));
+
+            if (isInitialize && sessionId.isPresent()) {
+                exchange.response().status(400).send("Bad Request");
+                return;
+            }
+
             if (sessionId.isPresent() && !sessions.containsKey(sessionId.get())) {
                 exchange.response().status(404).send("Session not found");
                 return;
             }
 
-            final var body = exchange.request().bodyAsString();
-            final var request = Json.parse(body).asObject();
-            final var isInitialize = "initialize".equals(getString(request, "method"));
+            if (isInitialize && sessions.size() >= maxSessions) {
+                exchange.response().status(503).send("Too many sessions");
+                return;
+            }
 
             final var maybeResponse = dispatch(request, sessionId.orElse("local"));
 
@@ -190,10 +205,6 @@ public final class McpServer {
             }
 
             if (isInitialize) {
-                if (sessions.size() >= maxSessions) {
-                    exchange.response().status(503).send("Too many sessions");
-                    return;
-                }
                 final var newSessionId = UUID.randomUUID().toString();
                 sessions.put(newSessionId, new SessionState());
                 exchange.response().header("Mcp-Session-Id", newSessionId);
@@ -236,8 +247,12 @@ public final class McpServer {
                 if (line.isBlank()) {
                     continue;
                 }
-                final var request = Json.parse(line).asObject();
-                dispatch(request, "local").ifPresent(response -> writer.println(response.toJsonString()));
+                try {
+                    final var request = Json.parse(line).asObject();
+                    dispatch(request, "local").ifPresent(response -> writer.println(response.toJsonString()));
+                } catch (final RuntimeException e) {
+                    LOGGER.log(Level.WARNING, "Discarding malformed stdio line: {0}", e.getMessage());
+                }
             }
         } catch (final IOException e) {
             // EOF or closed stream — exit normally
@@ -399,17 +414,15 @@ public final class McpServer {
             exchange.response().status(400).send("Mcp-Session-Id header required");
             return;
         }
-        if (!sessions.containsKey(sessionId)) {
+        final var state = sessions.get(sessionId);
+        if (state == null) {
             exchange.response().status(404).send("Session not found");
             return;
         }
-        final var state = sessions.get(sessionId);
         SseUpgrade.sse(emitter -> {
             state.emitter = emitter;
             try {
-                while (emitter.isOpen()) {
-                    Thread.sleep(500);
-                }
+                emitter.awaitClose();
             } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
             } finally {
@@ -439,7 +452,9 @@ public final class McpServer {
                 if (emitter != null && emitter.isOpen()) {
                     try {
                         emitter.send(event);
-                    } catch (final IOException ignored) {
+                    } catch (final IOException e) {
+                        LOGGER.log(Level.WARNING, "Failed to push resource notification for URI {0}: {1}",
+                            new Object[]{uri, e.getMessage()});
                     }
                 }
             }

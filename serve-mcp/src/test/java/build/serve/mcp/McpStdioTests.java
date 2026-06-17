@@ -86,6 +86,26 @@ class McpStdioTests {
     }
 
     @Test
+    void shouldContinueAfterMalformedJsonLine() {
+        final var lines = String.join("\n",
+            "not valid json at all",
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{}}"
+        ) + "\n";
+
+        final var out = new ByteArrayOutputStream();
+        server.stdioLoop(toStream(lines), out);
+
+        final var responses = out.toString(StandardCharsets.UTF_8).lines()
+            .filter(l -> !l.isBlank())
+            .map(Json::parse)
+            .toList();
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).asObject().get("result").asObject()
+            .get("tools")).isInstanceOf(JsonArray.class);
+    }
+
+    @Test
     void shouldSilentlyIgnoreNotifications() {
         final var out = new ByteArrayOutputStream();
         final var input = "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n";

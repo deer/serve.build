@@ -52,6 +52,13 @@ public interface SseEmitter extends AutoCloseable {
      */
     boolean isOpen();
 
+    /**
+     * Blocks until this emitter is closed, either by {@link #close()} or a failed {@link #send}.
+     *
+     * @throws InterruptedException if the calling thread is interrupted while waiting
+     */
+    void awaitClose() throws InterruptedException;
+
     @Override
     void close();
 }
