@@ -123,8 +123,9 @@ class McpStdioTests {
         sendOne("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\","
             + "\"params\":{\"name\":\"get_weather\",\"arguments\":{\"location\":\"Paris\"}}}");
 
-        assertThat(received).hasSize(1);
+        assertThat(received).hasSize(2);
         assertThat(received.get(0).sessionId()).isEqualTo("local");
+        assertThat(received.get(1).sessionId()).isEqualTo("local");
     }
 
     private JsonObject sendOne(final String line) {

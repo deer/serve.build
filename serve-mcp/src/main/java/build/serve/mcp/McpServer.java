@@ -42,6 +42,8 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -51,6 +53,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 
 /**
@@ -77,6 +80,7 @@ public final class McpServer {
     private final int maxSubscriptionsPerSession;
     private final SubscriberRegistry<ToolCallEvent> toolCallEvents = new SubscriberRegistry<>();
     private final ConcurrentHashMap<String, SessionState> sessions = new ConcurrentHashMap<>();
+    private final AtomicLong invocationCounter = new AtomicLong();
 
     private McpServer(final Builder builder) {
         this.info = new McpServerInfo(builder.name, builder.version);
@@ -374,15 +378,17 @@ public final class McpServer {
             return errorEnvelope(id, -32602, "Unknown tool: " + toolName);
         }
 
-        final var start = System.currentTimeMillis();
+        final var invocationId = invocationCounter.incrementAndGet();
+        toolCallEvents.publish(ToolCallEvent.started(invocationId, sessionId, toolName, arguments));
+        final var start = Instant.now();
         try {
             final var toolResult = ScopedValue.where(SESSION_ID, sessionId).call(() -> tool.call(arguments));
-            final var duration = System.currentTimeMillis() - start;
-            toolCallEvents.publish(ToolCallEvent.success(sessionId, toolName, arguments, toolResult, duration));
+            final var duration = Duration.between(start, Instant.now());
+            toolCallEvents.publish(ToolCallEvent.succeeded(invocationId, sessionId, toolName, arguments, toolResult, duration));
             return envelope(id, buildToolResultJson(toolResult));
-        } catch (final Exception e) {
-            final var duration = System.currentTimeMillis() - start;
-            toolCallEvents.publish(ToolCallEvent.failure(sessionId, toolName, arguments, e, duration));
+        } catch (final Throwable e) {
+            final var duration = Duration.between(start, Instant.now());
+            toolCallEvents.publish(ToolCallEvent.failed(invocationId, sessionId, toolName, arguments, e, duration));
             return envelope(id, buildToolResultJson(McpToolResult.error(sanitizeMessage(e.getMessage()))));
         }
     }

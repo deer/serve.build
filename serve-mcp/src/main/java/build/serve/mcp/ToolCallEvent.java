@@ -21,92 +21,149 @@ package build.serve.mcp;
 
 import build.base.json.JsonValue;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 
 /**
- * An event published after each MCP tool invocation, regardless of outcome.
+ * An event published on each MCP tool invocation — once before the call (STARTED) and once
+ * after it completes (SUCCEEDED or FAILED).
  *
  * <p>Subscribers attached via {@link build.base.flow.Publisher#subscribe} on
- * {@link McpServer#toolCallEvents()} receive one event per tool call.
- * The event carries the tool name, arguments, elapsed time, and either the
- * successful result or the thrown error.
+ * {@link McpServer#toolCallEvents()} receive two events per tool call. Both events carry the
+ * same {@link #invocationId()}, allowing subscribers to correlate start and completion even
+ * when concurrent calls share the same tool, session, or arguments.
  *
- * @param timestamp  the instant the invocation completed
- * @param sessionId  the MCP session ID that originated this call; {@code "local"} for sessionless calls
- * @param toolName   the name of the invoked tool
- * @param arguments  the raw JSON arguments passed to the tool
- * @param result     the tool result on success; empty on failure
- * @param durationMs wall-clock milliseconds from call start to finish
- * @param error      the thrown exception on failure; empty on success
+ * @param invocationId monotonically increasing counter — unique per call within a server instance
+ * @param phase        lifecycle phase of this event
+ * @param timestamp    the instant this event was created
+ * @param sessionId    the MCP session ID that originated this call; {@code "local"} for sessionless calls
+ * @param toolName     the name of the invoked tool
+ * @param arguments    the raw JSON arguments passed to the tool
+ * @param result       the tool result on success; empty otherwise
+ * @param duration     wall-clock duration of the call; empty on STARTED events
+ * @param error        the thrown exception on failure; empty otherwise
  * @author reed.vonredwitz
  * @since Apr-2026
  */
-public record ToolCallEvent(Instant timestamp,
+public record ToolCallEvent(long invocationId,
+                            Phase phase,
+                            Instant timestamp,
                             String sessionId,
                             String toolName,
                             JsonValue arguments,
                             Optional<McpToolResult> result,
-                            long durationMs,
+                            Optional<Duration> duration,
                             Optional<Throwable> error) {
 
     /**
-     * Creates a successful tool call event.
-     *
-     * @param sessionId  the MCP session ID; {@code "local"} for sessionless calls
-     * @param toolName   the tool name
-     * @param arguments  the arguments passed to the tool
-     * @param result     the successful result
-     * @param durationMs elapsed milliseconds
-     * @return the event
+     * Lifecycle phase of a {@link ToolCallEvent}.
      */
-    public static ToolCallEvent success(final String sessionId,
-                                        final String toolName,
-                                        final JsonValue arguments,
-                                        final McpToolResult result,
-                                        final long durationMs) {
-        Objects.requireNonNull(sessionId, "sessionId must not be null");
-        Objects.requireNonNull(toolName, "toolName must not be null");
-        Objects.requireNonNull(arguments, "arguments must not be null");
-        Objects.requireNonNull(result, "result must not be null");
-        return new ToolCallEvent(
-            Instant.now(),
-            sessionId,
-            toolName,
-            arguments,
-            Optional.of(result),
-            durationMs,
-            Optional.empty()
-        );
+    public enum Phase {
+        /** Published immediately before the tool handler is invoked. */
+        STARTED,
+        /** Published after the tool handler returns successfully. */
+        SUCCEEDED,
+        /** Published after the tool handler throws an exception. */
+        FAILED
     }
 
     /**
-     * Creates a failed tool call event.
+     * Creates a STARTED event published before the tool is invoked.
      *
-     * @param sessionId  the MCP session ID; {@code "local"} for sessionless calls
-     * @param toolName   the tool name
-     * @param arguments  the arguments passed to the tool
-     * @param error      the exception thrown by the tool
-     * @param durationMs elapsed milliseconds
+     * @param invocationId the invocation ID shared with the completion event
+     * @param sessionId    the MCP session ID; {@code "local"} for sessionless calls
+     * @param toolName     the tool name
+     * @param arguments    the arguments passed to the tool
      * @return the event
      */
-    public static ToolCallEvent failure(final String sessionId,
+    public static ToolCallEvent started(final long invocationId,
+                                        final String sessionId,
                                         final String toolName,
-                                        final JsonValue arguments,
-                                        final Throwable error,
-                                        final long durationMs) {
+                                        final JsonValue arguments) {
         Objects.requireNonNull(sessionId, "sessionId must not be null");
         Objects.requireNonNull(toolName, "toolName must not be null");
         Objects.requireNonNull(arguments, "arguments must not be null");
-        Objects.requireNonNull(error, "error must not be null");
         return new ToolCallEvent(
+            invocationId,
+            Phase.STARTED,
             Instant.now(),
             sessionId,
             toolName,
             arguments,
             Optional.empty(),
-            durationMs,
+            Optional.empty(),
+            Optional.empty()
+        );
+    }
+
+    /**
+     * Creates a SUCCEEDED event published after the tool returns successfully.
+     *
+     * @param invocationId the invocation ID matching the corresponding STARTED event
+     * @param sessionId    the MCP session ID; {@code "local"} for sessionless calls
+     * @param toolName     the tool name
+     * @param arguments    the arguments passed to the tool
+     * @param result       the successful result
+     * @param duration     elapsed time from call start to finish
+     * @return the event
+     */
+    public static ToolCallEvent succeeded(final long invocationId,
+                                          final String sessionId,
+                                          final String toolName,
+                                          final JsonValue arguments,
+                                          final McpToolResult result,
+                                          final Duration duration) {
+        Objects.requireNonNull(sessionId, "sessionId must not be null");
+        Objects.requireNonNull(toolName, "toolName must not be null");
+        Objects.requireNonNull(arguments, "arguments must not be null");
+        Objects.requireNonNull(result, "result must not be null");
+        Objects.requireNonNull(duration, "duration must not be null");
+        return new ToolCallEvent(
+            invocationId,
+            Phase.SUCCEEDED,
+            Instant.now(),
+            sessionId,
+            toolName,
+            arguments,
+            Optional.of(result),
+            Optional.of(duration),
+            Optional.empty()
+        );
+    }
+
+    /**
+     * Creates a FAILED event published after the tool throws an exception.
+     *
+     * @param invocationId the invocation ID matching the corresponding STARTED event
+     * @param sessionId    the MCP session ID; {@code "local"} for sessionless calls
+     * @param toolName     the tool name
+     * @param arguments    the arguments passed to the tool
+     * @param error        the exception thrown by the tool
+     * @param duration     elapsed time from call start to finish
+     * @return the event
+     */
+    public static ToolCallEvent failed(final long invocationId,
+                                       final String sessionId,
+                                       final String toolName,
+                                       final JsonValue arguments,
+                                       final Throwable error,
+                                       final Duration duration) {
+        Objects.requireNonNull(sessionId, "sessionId must not be null");
+        Objects.requireNonNull(toolName, "toolName must not be null");
+        Objects.requireNonNull(arguments, "arguments must not be null");
+        Objects.requireNonNull(error, "error must not be null");
+        Objects.requireNonNull(duration, "duration must not be null");
+        return new ToolCallEvent(
+            invocationId,
+            Phase.FAILED,
+            Instant.now(),
+            sessionId,
+            toolName,
+            arguments,
+            Optional.empty(),
+            Optional.of(duration),
             Optional.of(error)
         );
     }
