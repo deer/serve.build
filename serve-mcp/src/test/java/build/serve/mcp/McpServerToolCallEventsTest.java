@@ -33,7 +33,7 @@ class McpServerToolCallEventsTest {
     }
 
     @Test
-    void shouldPublishToolCallEventOnSuccessfulInvocation() {
+    void shouldPublishStartedThenSucceededEventsOnSuccessfulInvocation() {
         final var mcpServer = McpServer.builder("test", "1.0")
             .tool(new EchoTool())
             .build();
@@ -48,19 +48,30 @@ class McpServerToolCallEventsTest {
             .send()
             .assertStatus(200);
 
-        assertThat(received).hasSize(1);
-        final var event = received.get(0);
-        assertThat(event.toolName()).isEqualTo("echo");
-        assertThat(event.arguments().asObject().getString("text")).isEqualTo("hello");
-        assertThat(event.result()).isPresent();
-        assertThat(event.result().get().isError()).isFalse();
-        assertThat(event.error()).isEmpty();
-        assertThat(event.durationMs()).isGreaterThanOrEqualTo(0L);
-        assertThat(event.timestamp()).isNotNull();
+        assertThat(received).hasSize(2);
+
+        final var started = received.get(0);
+        assertThat(started.phase()).isEqualTo(ToolCallEvent.Phase.STARTED);
+        assertThat(started.toolName()).isEqualTo("echo");
+        assertThat(started.arguments().asObject().getString("text")).isEqualTo("hello");
+        assertThat(started.result()).isEmpty();
+        assertThat(started.duration()).isEmpty();
+        assertThat(started.error()).isEmpty();
+        assertThat(started.timestamp()).isNotNull();
+
+        final var succeeded = received.get(1);
+        assertThat(succeeded.phase()).isEqualTo(ToolCallEvent.Phase.SUCCEEDED);
+        assertThat(succeeded.toolName()).isEqualTo("echo");
+        assertThat(succeeded.invocationId()).isEqualTo(started.invocationId());
+        assertThat(succeeded.result()).isPresent();
+        assertThat(succeeded.result().get().isError()).isFalse();
+        assertThat(succeeded.duration()).isPresent();
+        assertThat(succeeded.duration().get().toMillis()).isGreaterThanOrEqualTo(0L);
+        assertThat(succeeded.error()).isEmpty();
     }
 
     @Test
-    void shouldPublishToolCallEventOnToolFailure() {
+    void shouldPublishStartedThenFailedEventsOnToolFailure() {
         final var mcpServer = McpServer.builder("test", "1.0")
             .tool(new ThrowingTool())
             .build();
@@ -75,13 +86,20 @@ class McpServerToolCallEventsTest {
             .send()
             .assertStatus(200);
 
-        assertThat(received).hasSize(1);
-        final var event = received.get(0);
-        assertThat(event.toolName()).isEqualTo("thrower");
-        assertThat(event.result()).isEmpty();
-        assertThat(event.error()).isPresent();
-        assertThat(event.error().get()).isInstanceOf(RuntimeException.class);
-        assertThat(event.durationMs()).isGreaterThanOrEqualTo(0L);
+        assertThat(received).hasSize(2);
+
+        final var started = received.get(0);
+        assertThat(started.phase()).isEqualTo(ToolCallEvent.Phase.STARTED);
+        assertThat(started.toolName()).isEqualTo("thrower");
+
+        final var failed = received.get(1);
+        assertThat(failed.phase()).isEqualTo(ToolCallEvent.Phase.FAILED);
+        assertThat(failed.invocationId()).isEqualTo(started.invocationId());
+        assertThat(failed.result()).isEmpty();
+        assertThat(failed.error()).isPresent();
+        assertThat(failed.error().get()).isInstanceOf(RuntimeException.class);
+        assertThat(failed.duration()).isPresent();
+        assertThat(failed.duration().get().toMillis()).isGreaterThanOrEqualTo(0L);
     }
 
     @Test
@@ -124,7 +142,7 @@ class McpServerToolCallEventsTest {
     }
 
     @Test
-    void shouldCarrySessionIdOnEvent() {
+    void shouldCarrySessionIdOnEvents() {
         final var mcpServer = McpServer.builder("test", "1.0")
             .tool(new EchoTool())
             .build();
@@ -136,8 +154,9 @@ class McpServerToolCallEventsTest {
             client.call("echo", java.util.Map.of("text", "hi"));
         }
 
-        assertThat(received).hasSize(1);
+        assertThat(received).hasSize(2);
         assertThat(received.get(0).sessionId()).isNotNull().isNotBlank().isNotEqualTo("local");
+        assertThat(received.get(1).sessionId()).isEqualTo(received.get(0).sessionId());
     }
 
     @Test
@@ -156,8 +175,9 @@ class McpServerToolCallEventsTest {
             .send()
             .assertStatus(200);
 
-        assertThat(received).hasSize(1);
+        assertThat(received).hasSize(2);
         assertThat(received.get(0).sessionId()).isEqualTo("local");
+        assertThat(received.get(1).sessionId()).isEqualTo("local");
     }
 
     @Test
@@ -178,10 +198,62 @@ class McpServerToolCallEventsTest {
             .send()
             .assertStatus(200);
 
-        assertThat(first).hasSize(1);
-        assertThat(second).hasSize(1);
+        assertThat(first).hasSize(2);
+        assertThat(second).hasSize(2);
         assertThat(first.get(0).toolName()).isEqualTo("echo");
         assertThat(second.get(0).toolName()).isEqualTo("echo");
+        assertThat(first.get(0).invocationId()).isEqualTo(second.get(0).invocationId());
+    }
+
+    @Test
+    void shouldAssignDistinctInvocationIdsToConsecutiveCalls() {
+        final var mcpServer = McpServer.builder("test", "1.0")
+            .tool(new EchoTool())
+            .build();
+        final var received = new CopyOnWriteArrayList<ToolCallEvent>();
+        mcpServer.toolCallEvents().subscribe(received::add);
+        server = TestServer.of(RouterBuilder.create().route("/mcp", mcpServer.handler()).build());
+
+        for (int i = 0; i < 2; i++) {
+            server.post("/mcp")
+                .header("Content-Type", "application/json")
+                .body("{\"jsonrpc\":\"2.0\",\"id\":" + i + ",\"method\":\"tools/call\","
+                    + "\"params\":{\"name\":\"echo\",\"arguments\":{\"text\":\"x\"}}}")
+                .send()
+                .assertStatus(200);
+        }
+
+        assertThat(received).hasSize(4);
+        final var firstId = received.get(0).invocationId();
+        final var secondId = received.get(2).invocationId();
+        assertThat(firstId).isNotEqualTo(secondId);
+        assertThat(received.get(1).invocationId()).isEqualTo(firstId);
+        assertThat(received.get(3).invocationId()).isEqualTo(secondId);
+    }
+
+    @Test
+    void shouldPublishFailedEventWhenToolThrowsError() {
+        final var mcpServer = McpServer.builder("test", "1.0")
+            .tool(new ErrorTool())
+            .build();
+        final var received = new CopyOnWriteArrayList<ToolCallEvent>();
+        mcpServer.toolCallEvents().subscribe(received::add);
+        server = TestServer.of(RouterBuilder.create().route("/mcp", mcpServer.handler()).build());
+
+        server.post("/mcp")
+            .header("Content-Type", "application/json")
+            .body("{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\","
+                + "\"params\":{\"name\":\"error-thrower\",\"arguments\":{}}}")
+            .send()
+            .assertStatus(200);
+
+        assertThat(received).hasSize(2);
+        assertThat(received.get(0).phase()).isEqualTo(ToolCallEvent.Phase.STARTED);
+        final var failed = received.get(1);
+        assertThat(failed.phase()).isEqualTo(ToolCallEvent.Phase.FAILED);
+        assertThat(failed.invocationId()).isEqualTo(received.get(0).invocationId());
+        assertThat(failed.error()).isPresent();
+        assertThat(failed.error().get()).isInstanceOf(AssertionError.class);
     }
 
     private static final class EchoTool implements McpTool {
@@ -207,6 +279,29 @@ class McpServerToolCallEventsTest {
                 JsonNull.INSTANCE);
             final var textStr = text instanceof JsonString s ? s.value() : "";
             return McpToolResult.text("echo: " + textStr);
+        }
+    }
+
+    private static final class ErrorTool implements McpTool {
+
+        @Override
+        public String name() {
+            return "error-thrower";
+        }
+
+        @Override
+        public String description() {
+            return "Throws an Error (not Exception)";
+        }
+
+        @Override
+        public JsonObject inputSchema() {
+            return JsonObject.builder().build();
+        }
+
+        @Override
+        public McpToolResult call(final JsonValue arguments) {
+            throw new AssertionError("fatal error");
         }
     }
 
