@@ -33,7 +33,6 @@ module build.serve.application {
     requires build.base.logging;
     requires build.base.telemetry;
     requires build.base.telemetry.foundation;
-    requires java.net.http;
 
     exports build.serve.application;
     opens build.serve.application to build.codemodel.injection;

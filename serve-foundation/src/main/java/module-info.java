@@ -24,13 +24,8 @@
  * @since Mar-2026
  */
 module build.serve.foundation {
-    requires build.base.foundation;
     requires transitive build.base.json;
     requires transitive build.base.configuration;
-    requires build.base.option;
-    requires build.base.network;
-    requires build.base.flow;
-    requires build.base.logging;
     requires transitive build.base.telemetry;
     requires java.logging;
 

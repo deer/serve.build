@@ -52,31 +52,14 @@ class WebSocketTests {
     }
 
     @Test
-    void pingPong() throws Exception {
+    void pingPong() {
         try (var server = TestServer.of(RouterBuilder.create()
             .route("/ws", WebSocketUpgrade.upgrade(ws -> {
             }))
-            .build())) {
-            // Use the raw JDK WebSocket to send a ping and verify the server auto-pongs
-            var received = new java.util.concurrent.CompletableFuture<String>();
-            var client = java.net.http.HttpClient.newHttpClient();
-            var rawWs = client.newWebSocketBuilder()
-                .buildAsync(
-                    java.net.URI.create("ws://127.0.0.1:" + server.port() + "/ws"),
-                    new java.net.http.WebSocket.Listener() {
-                        @Override
-                        public java.util.concurrent.CompletionStage<?> onPong(
-                            java.net.http.WebSocket ws, java.nio.ByteBuffer msg) {
-                            var bytes = new byte[msg.remaining()];
-                            msg.get(bytes);
-                            received.complete(new String(bytes));
-                            return null;
-                        }
-                    })
-                .get(5, TimeUnit.SECONDS);
-            rawWs.sendPing(java.nio.ByteBuffer.wrap("ping".getBytes()));
-            assertThat(received.get(5, TimeUnit.SECONDS)).isEqualTo("ping");
-            rawWs.sendClose(java.net.http.WebSocket.NORMAL_CLOSURE, "done");
+            .build());
+             var ws = server.connectWebSocket("/ws")) {
+            var pong = ws.sendPingAndAwaitPong("ping".getBytes());
+            assertThat(new String(pong)).isEqualTo("ping");
         }
     }
 

@@ -18,7 +18,6 @@
  * #L%
  */
 module build.serve.lsp {
-    requires build.serve.foundation;
     requires build.base.json;
 
     exports build.serve.lsp;

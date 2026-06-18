@@ -28,12 +28,6 @@ import build.serve.testing.TestServer;
 import build.serve.transport.json.JsonMiddleware;
 import org.junit.jupiter.api.Test;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.WebSocket;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 class TaskWebSocketTests {
@@ -50,38 +44,15 @@ class TaskWebSocketTests {
             .get("/ws/tasks", broadcaster.handler())
             .build();
 
-        try (final var server = TestServer.of(router)) {
-            final var received = new CompletableFuture<String>();
-
-            HttpClient.newHttpClient()
-                .newWebSocketBuilder()
-                .buildAsync(
-                    URI.create("ws://127.0.0.1:" + server.port() + "/ws/tasks"),
-                    new WebSocket.Listener() {
-                        @Override
-                        public void onOpen(final WebSocket ws) {
-                            ws.request(1);
-                        }
-
-                        @Override
-                        public java.util.concurrent.CompletionStage<?> onText(
-                            final WebSocket ws,
-                            final CharSequence data,
-                            final boolean last) {
-                            received.complete(data.toString());
-                            return null;
-                        }
-                    })
-                .get(5, TimeUnit.SECONDS);
-
-            Thread.sleep(100);
+        try (final var server = TestServer.of(router);
+             final var ws = server.connectWebSocket("/ws/tasks")) {
 
             server.post("/api/tasks")
                 .jsonBody(JsonObject.builder().put("title", "WebSocket test").build())
                 .send()
                 .assertStatus(201);
 
-            final var message = received.get(5, TimeUnit.SECONDS);
+            final var message = ws.nextText();
             assertThat(message).contains("\"event\":\"created\"");
             assertThat(message).contains("\"title\":\"WebSocket test\"");
         }
@@ -105,37 +76,14 @@ class TaskWebSocketTests {
                 .send()
                 .bodyAsJson().asObject();
 
-            final var received = new CompletableFuture<String>();
+            try (final var ws = server.connectWebSocket("/ws/tasks")) {
+                server.delete("/api/tasks/" + created.get("id").asNumber().toNumber().longValue())
+                    .send()
+                    .assertStatus(204);
 
-            HttpClient.newHttpClient()
-                .newWebSocketBuilder()
-                .buildAsync(
-                    URI.create("ws://127.0.0.1:" + server.port() + "/ws/tasks"),
-                    new WebSocket.Listener() {
-                        @Override
-                        public void onOpen(final WebSocket ws) {
-                            ws.request(1);
-                        }
-
-                        @Override
-                        public java.util.concurrent.CompletionStage<?> onText(
-                            final WebSocket ws,
-                            final CharSequence data,
-                            final boolean last) {
-                            received.complete(data.toString());
-                            return null;
-                        }
-                    })
-                .get(5, TimeUnit.SECONDS);
-
-            Thread.sleep(100);
-
-            server.delete("/api/tasks/" + created.get("id").asNumber().toNumber().longValue())
-                .send()
-                .assertStatus(204);
-
-            final var message = received.get(5, TimeUnit.SECONDS);
-            assertThat(message).contains("\"event\":\"deleted\"");
+                final var message = ws.nextText();
+                assertThat(message).contains("\"event\":\"deleted\"");
+            }
         }
     }
 
@@ -157,38 +105,15 @@ class TaskWebSocketTests {
                 .send()
                 .bodyAsJson().asObject();
 
-            final var received = new CompletableFuture<String>();
+            try (final var ws = server.connectWebSocket("/ws/tasks")) {
+                server.put("/api/tasks/" + created.get("id").asNumber().toNumber().longValue())
+                    .send()
+                    .assertStatus(200);
 
-            HttpClient.newHttpClient()
-                .newWebSocketBuilder()
-                .buildAsync(
-                    URI.create("ws://127.0.0.1:" + server.port() + "/ws/tasks"),
-                    new WebSocket.Listener() {
-                        @Override
-                        public void onOpen(final WebSocket ws) {
-                            ws.request(1);
-                        }
-
-                        @Override
-                        public java.util.concurrent.CompletionStage<?> onText(
-                            final WebSocket ws,
-                            final CharSequence data,
-                            final boolean last) {
-                            received.complete(data.toString());
-                            return null;
-                        }
-                    })
-                .get(5, TimeUnit.SECONDS);
-
-            Thread.sleep(100);
-
-            server.put("/api/tasks/" + created.get("id").asNumber().toNumber().longValue())
-                .send()
-                .assertStatus(200);
-
-            final var message = received.get(5, TimeUnit.SECONDS);
-            assertThat(message).contains("\"event\":\"updated\"");
-            assertThat(message).contains("\"done\":true");
+                final var message = ws.nextText();
+                assertThat(message).contains("\"event\":\"updated\"");
+                assertThat(message).contains("\"done\":true");
+            }
         }
     }
 }

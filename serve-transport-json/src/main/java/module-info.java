@@ -25,7 +25,6 @@
  */
 module build.serve.transport.json {
     requires transitive build.serve.foundation;
-    requires build.base.transport.json;
     requires transitive build.base.json;
     requires java.logging;
 
