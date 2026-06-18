@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -146,6 +147,28 @@ class McpStdioTests {
         assertThat(received).hasSize(2);
         assertThat(received.get(0).sessionId()).isEqualTo("local");
         assertThat(received.get(1).sessionId()).isEqualTo("local");
+    }
+
+    @Test
+    void shouldRoundTripJsonThroughToolResult() {
+        final var jsonServer = McpServer.builder("json-server", "1.0.0")
+            .tool(ToolDef.of("list_users", "Returns a list of users")
+                .handle(args -> McpToolResult.json(
+                    JsonObject.builder()
+                        .put("users", JsonArray.builder()
+                            .add("alice")
+                            .add("bob")
+                            .build())
+                        .build())))
+            .build();
+
+        try (var client = McpStdioClient.of(jsonServer)) {
+            final var users = client.call("list_users", Map.of())
+                .json().asObject().get("users").asArray();
+            assertThat(users.values()).hasSize(2);
+            assertThat(users.values().get(0).asString().value()).isEqualTo("alice");
+            assertThat(users.values().get(1).asString().value()).isEqualTo("bob");
+        }
     }
 
     private JsonObject sendOne(final String line) {

@@ -33,6 +33,17 @@ public sealed interface McpContent permits McpContent.Text, McpContent.Image, Mc
      * @param text the text
      */
     record Text(String text) implements McpContent {
+
+        /**
+         * Parses the text as a JSON value.
+         * Pairs with {@link McpToolResult#json(build.base.json.JsonValue)} for round-trip use.
+         *
+         * @return the parsed value
+         * @throws build.base.json.JsonParseException if the text is not valid JSON
+         */
+        public build.base.json.JsonValue json() {
+            return build.base.json.Json.parse(text);
+        }
     }
 
     /**
