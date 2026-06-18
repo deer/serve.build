@@ -10,10 +10,8 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -37,8 +35,8 @@ class DependencyInjectionTests {
         var response = get("/port");
 
         // The handler returns the injected Port value
-        assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.body()).isEqualTo("0");
+        assertThat(response.getResponseCode()).isEqualTo(200);
+        assertThat(new String(response.getInputStream().readAllBytes())).isEqualTo("0");
     }
 
     @Test
@@ -49,8 +47,8 @@ class DependencyInjectionTests {
 
         var response = get("/greeting");
 
-        assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.body()).isEqualTo("Hello from GreetingService");
+        assertThat(response.getResponseCode()).isEqualTo(200);
+        assertThat(new String(response.getInputStream().readAllBytes())).isEqualTo("Hello from GreetingService");
     }
 
     // --- Test classes ---
@@ -98,12 +96,11 @@ class DependencyInjectionTests {
 
     // --- Helpers ---
 
-    private HttpResponse<String> get(String path) throws Exception {
+    private HttpURLConnection get(String path) throws Exception {
         var port = server.boundAddress().getPort();
-        try (var client = HttpClient.newHttpClient()) {
-            var req = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path))
-                .GET().build();
-            return client.send(req, HttpResponse.BodyHandlers.ofString());
-        }
+        var conn = (HttpURLConnection) URI.create("http://127.0.0.1:" + port + path).toURL().openConnection();
+        conn.setRequestMethod("GET");
+        conn.connect();
+        return conn;
     }
 }

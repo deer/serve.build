@@ -26,7 +26,6 @@
 module build.serve.websocket {
     requires transitive build.serve.foundation;
     requires jdk.httpserver;
-    requires java.net.http;
 
     exports build.serve.websocket;
 }

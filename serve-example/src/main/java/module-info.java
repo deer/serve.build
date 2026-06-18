@@ -28,7 +28,6 @@ module build.serve.example {
     requires build.serve.application;
     requires build.serve.transport.json;
     requires build.serve.websocket;
-    requires build.serve.htmx;
     requires build.serve.cors;
     requires build.serve.security;
     requires build.serve.compression;
@@ -43,7 +42,6 @@ module build.serve.example {
     requires build.base.network;
     requires build.base.template;
     requires build.base.json;
-    requires java.net.http;
 
     requires static build.base.template.processor;
 

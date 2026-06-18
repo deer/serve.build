@@ -52,6 +52,9 @@ public final class TestWebSocket implements AutoCloseable {
 
         record Binary(byte[] data) implements Frame {
         }
+
+        record Pong(byte[] data) implements Frame {
+        }
     }
 
     private final WebSocket ws;
@@ -102,6 +105,15 @@ public final class TestWebSocket implements AutoCloseable {
             }
 
             @Override
+            public CompletionStage<?> onPong(final WebSocket ws, final ByteBuffer data) {
+                final var bytes = new byte[data.remaining()];
+                data.get(bytes);
+                inbox.add(new Frame.Pong(bytes));
+                ws.request(1);
+                return null;
+            }
+
+            @Override
             public CompletionStage<?> onClose(final WebSocket ws, final int statusCode, final String reason) {
                 closed.complete(null);
                 return null;
@@ -131,6 +143,19 @@ public final class TestWebSocket implements AutoCloseable {
     public TestWebSocket sendBinary(final byte[] data) {
         ws.sendBinary(ByteBuffer.wrap(data), true).join();
         return this;
+    }
+
+    /**
+     * Sends a ping with the given payload and blocks until the server pong arrives (5-second timeout).
+     *
+     * @param payload the ping payload
+     * @return the pong payload
+     */
+    public byte[] sendPingAndAwaitPong(final byte[] payload) {
+        ws.sendPing(ByteBuffer.wrap(payload)).join();
+        final var frame = poll(Duration.ofSeconds(5));
+        assertThat(frame).as("expected a pong frame").isInstanceOf(Frame.Pong.class);
+        return ((Frame.Pong) frame).data();
     }
 
     /**
