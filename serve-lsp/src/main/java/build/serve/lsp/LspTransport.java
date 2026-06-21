@@ -70,18 +70,22 @@ public final class LspTransport {
     public static void tcp(final LspServer server, final int port) throws IOException {
         try (var serverSocket = new java.net.ServerSocket(port)) {
             while (true) {
-                final var socket = serverSocket.accept();
-                Thread.ofVirtual().start(() -> {
-                    try {
-                        run(server, socket.getInputStream(), socket.getOutputStream());
-                    } catch (final Exception ignored) {
-                    } finally {
+                try {
+                    final var socket = serverSocket.accept();
+                    Thread.ofVirtual().start(() -> {
                         try {
-                            socket.close();
-                        } catch (final IOException ignored) {
+                            run(server, socket.getInputStream(), socket.getOutputStream());
+                        } catch (final Exception ignored) {
+                        } finally {
+                            try {
+                                socket.close();
+                            } catch (final IOException ignored) {
+                            }
                         }
-                    }
-                });
+                    });
+                } catch (final java.net.SocketException e) {
+                    break;
+                }
             }
         }
     }

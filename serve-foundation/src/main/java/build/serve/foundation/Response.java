@@ -56,6 +56,14 @@ public interface Response {
     Response header(String name, String value);
 
     /**
+     * Removes a response header so it is not sent to the client.
+     *
+     * @param name the header name to remove
+     */
+    default void removeHeader(final String name) {
+    }
+
+    /**
      * Sends a plain text body and closes the response.
      *
      * @param body the response body as a {@link String}

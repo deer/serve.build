@@ -39,6 +39,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AuthMiddlewareTests {
 
@@ -187,6 +188,18 @@ class AuthMiddlewareTests {
             .isEqualTo("Basic realm=\"myapp\"");
     }
 
+    @Test
+    void shouldRejectRealmWithQuote() {
+        assertThatThrownBy(() -> BasicAuthStrategy.of("my\"app", (u, p) -> Optional.empty()))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void shouldRejectRealmWithCrlf() {
+        assertThatThrownBy(() -> BasicAuthStrategy.of("app\r\nX-Injected: val", (u, p) -> Optional.empty()))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
     // --- ApiKeyStrategy ---
 
     @Test
@@ -231,6 +244,16 @@ class AuthMiddlewareTests {
         );
 
         assertThat(strategy.authenticate(request("X-None", ""))).isEmpty();
+    }
+
+    @Test
+    void shouldJoinDelegateChallengesInAnyOf() {
+        var basic = BasicAuthStrategy.of("myapp", (u, p) -> Optional.empty());
+        var bearer = BearerTokenStrategy.of(t -> Optional.empty());
+        var strategy = AuthStrategy.anyOf(basic, bearer);
+
+        assertThat(strategy.challenge())
+            .isEqualTo("Basic realm=\"myapp\", Bearer");
     }
 
     // --- helpers ---

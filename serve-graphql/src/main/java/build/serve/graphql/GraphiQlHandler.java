@@ -71,6 +71,13 @@ public final class GraphiQlHandler {
     private GraphiQlHandler() {
     }
 
+    private static String escapeJs(final String s) {
+        return s.replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\r", "\\r")
+            .replace("\n", "\\n");
+    }
+
     /**
      * Creates a {@link Handler} that serves the GraphiQL IDE, configured to send
      * queries to the given GraphQL endpoint.
@@ -81,7 +88,7 @@ public final class GraphiQlHandler {
     public static Handler graphiql(final String endpoint) {
         Objects.requireNonNull(endpoint, "endpoint must not be null");
 
-        final var html = TEMPLATE.replace("{{ENDPOINT}}", endpoint)
+        final var html = TEMPLATE.replace("{{ENDPOINT}}", escapeJs(endpoint))
             .getBytes(StandardCharsets.UTF_8);
 
         return exchange -> {

@@ -28,6 +28,7 @@ module build.serve.devtools {
     requires transitive build.serve.foundation;
     requires build.serve.websocket;
     requires build.base.logging;
+    requires java.logging;
 
     exports build.serve.devtools;
 }

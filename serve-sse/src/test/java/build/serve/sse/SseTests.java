@@ -11,6 +11,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 class SseTests {
 
@@ -105,5 +106,12 @@ class SseTests {
         }
 
         assertThat(detected.get(5, TimeUnit.SECONDS)).isTrue();
+    }
+
+    @Test
+    void shouldRejectNullData() {
+        assertThatNullPointerException()
+            .isThrownBy(() -> new SseEvent(null, null, null, null))
+            .withMessage("data must not be null");
     }
 }

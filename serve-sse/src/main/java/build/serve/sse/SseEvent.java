@@ -38,6 +38,10 @@ public record SseEvent(
     Integer retry
 ) {
 
+    public SseEvent {
+        Objects.requireNonNull(data, "data must not be null");
+    }
+
     /**
      * Creates an {@link SseEvent} with only data.
      *

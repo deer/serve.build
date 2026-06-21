@@ -101,7 +101,7 @@ public final class SecurityHeadersMiddleware implements Middleware {
             setIfNonNull(response, "Cross-Origin-Resource-Policy", crossOriginResourcePolicy);
 
             for (final var header : removeHeaders) {
-                response.header(header, "");
+                response.removeHeader(header);
             }
         };
     }

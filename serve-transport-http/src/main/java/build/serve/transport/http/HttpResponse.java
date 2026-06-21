@@ -93,6 +93,11 @@ public class HttpResponse
     }
 
     @Override
+    public void removeHeader(final String name) {
+        httpExchange.getResponseHeaders().remove(name);
+    }
+
+    @Override
     public void cookie(final Cookie cookie) {
         httpExchange.getResponseHeaders().add("Set-Cookie", cookie.toSetCookieHeader());
     }

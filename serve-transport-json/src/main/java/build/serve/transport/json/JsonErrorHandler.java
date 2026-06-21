@@ -47,7 +47,7 @@ public class JsonErrorHandler implements ErrorHandler {
 
         if (error instanceof HttpException httpException) {
             statusCode = httpException.statusCode();
-            message = httpException.getMessage();
+            message = stripControlChars(httpException.getMessage());
         } else {
             statusCode = 500;
             message = "Internal Server Error";
@@ -81,8 +81,17 @@ public class JsonErrorHandler implements ErrorHandler {
             case 403 -> "Forbidden";
             case 404 -> "Not Found";
             case 409 -> "Conflict";
+            case 413 -> "Payload Too Large";
+            case 429 -> "Too Many Requests";
             case 500 -> "Internal Server Error";
             default -> "Error";
         };
+    }
+
+    private static String stripControlChars(final String s) {
+        if (s == null) {
+            return "";
+        }
+        return s.replaceAll("[\\r\\n\\t\\x00-\\x1F\\x7F]", " ");
     }
 }
