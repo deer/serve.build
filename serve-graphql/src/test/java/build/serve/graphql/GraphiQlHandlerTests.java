@@ -74,4 +74,19 @@ class GraphiQlHandlerTests {
             .contains("graphiql")
             .contains("GraphiQL");
     }
+
+    @Test
+    void shouldEscapeEndpointInJsStringLiteral() throws Exception {
+        final var dangerousServer = TestServer.of(GraphiQlHandler.graphiql("/gql?a=1&b='x'\\y"));
+
+        try {
+            final var body = dangerousServer.get("/").send().assertStatus(200).body();
+            assertThat(body)
+                .doesNotContain("'x'")
+                .contains("\\'x\\'")
+                .contains("\\\\y");
+        } finally {
+            dangerousServer.close();
+        }
+    }
 }

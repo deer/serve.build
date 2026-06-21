@@ -21,7 +21,9 @@ package build.serve.auth;
 
 import build.serve.foundation.Request;
 
+import java.util.Arrays;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * A strategy for authenticating an inbound {@link Request}.
@@ -69,14 +71,25 @@ public interface AuthStrategy {
      * @return a composite {@link AuthStrategy}
      */
     static AuthStrategy anyOf(final AuthStrategy... strategies) {
-        return request -> {
-            for (final var strategy : strategies) {
-                final var result = strategy.authenticate(request);
-                if (result.isPresent()) {
-                    return result;
+        final var compositeChallenge = Arrays.stream(strategies)
+            .map(AuthStrategy::challenge)
+            .collect(Collectors.joining(", "));
+        return new AuthStrategy() {
+            @Override
+            public Optional<Principal> authenticate(final Request request) {
+                for (final var strategy : strategies) {
+                    final var result = strategy.authenticate(request);
+                    if (result.isPresent()) {
+                        return result;
+                    }
                 }
+                return Optional.empty();
             }
-            return Optional.empty();
+
+            @Override
+            public String challenge() {
+                return compositeChallenge;
+            }
         };
     }
 }

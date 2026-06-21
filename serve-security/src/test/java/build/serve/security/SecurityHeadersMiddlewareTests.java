@@ -113,8 +113,8 @@ class SecurityHeadersMiddlewareTests {
         middleware.apply(ex -> {
         }).handle(exchange);
 
-        assertThat(response.headers).containsEntry("X-Powered-By", "");
-        assertThat(response.headers).containsEntry("Server", "");
+        assertThat(response.headers).doesNotContainKey("X-Powered-By");
+        assertThat(response.headers).doesNotContainKey("Server");
     }
 
     @Test
@@ -215,6 +215,11 @@ class SecurityHeadersMiddlewareTests {
         public Response header(final String name, final String value) {
             headers.put(name, value);
             return this;
+        }
+
+        @Override
+        public void removeHeader(final String name) {
+            headers.remove(name);
         }
 
         @Override

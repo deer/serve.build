@@ -19,6 +19,7 @@
  */
 package build.serve.devtools;
 
+import build.base.logging.Logger;
 import build.serve.foundation.Handler;
 import build.serve.foundation.util.JsonStrings;
 
@@ -57,6 +58,7 @@ public final class ChromeDevToolsHandler {
 
     private static final String CONTENT_TYPE = "Content-Type";
     private static final String APPLICATION_JSON = "application/json";
+    private static final Logger LOGGER = Logger.get(ChromeDevToolsHandler.class);
 
     private ChromeDevToolsHandler() {
     }
@@ -85,6 +87,7 @@ public final class ChromeDevToolsHandler {
                                        final UUID uuid) {
         Objects.requireNonNull(root, "root");
         Objects.requireNonNull(uuid, "uuid");
+        LOGGER.warn("ChromeDevToolsHandler exposes the absolute filesystem path — do not register in production");
         final var json = buildJson(root.toAbsolutePath().normalize().toString(), uuid);
         return exchange -> exchange.response()
             .status(200)

@@ -175,13 +175,6 @@ public final class StaticFileHandler
             path = "/";
         }
 
-        // Reject path traversal attempts
-        if (containsTraversal(path)) {
-            response.status(400).send("Bad Request");
-
-            return;
-        }
-
         if (directory != null) {
             handleDirectory(exchange, path);
         } else {
@@ -276,19 +269,6 @@ public final class StaticFileHandler
 
             response.send(bytes);
         }
-    }
-
-    /**
-     * Checks whether the path contains directory traversal sequences.
-     *
-     * @param path the path to check
-     * @return {@code true} if traversal is detected
-     */
-    private static boolean containsTraversal(final String path) {
-        // Normalize and check for ".." segments
-        final var normalized = Path.of(path).normalize().toString();
-
-        return normalized.contains("..");
     }
 
     /**

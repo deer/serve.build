@@ -46,6 +46,9 @@ public final class BasicAuthStrategy implements AuthStrategy {
 
     private BasicAuthStrategy(final String realm,
                               final BiFunction<String, String, Optional<Principal>> validator) {
+        if (realm.contains("\"") || realm.contains("\r") || realm.contains("\n")) {
+            throw new IllegalArgumentException("realm must not contain quotes or CRLF");
+        }
         this.realm = realm;
         this.validator = validator;
     }
