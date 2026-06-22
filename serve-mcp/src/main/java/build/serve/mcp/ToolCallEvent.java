@@ -61,11 +61,17 @@ public record ToolCallEvent(long invocationId,
      * Lifecycle phase of a {@link ToolCallEvent}.
      */
     public enum Phase {
-        /** Published immediately before the tool handler is invoked. */
+        /**
+         * Published immediately before the tool handler is invoked.
+         */
         STARTED,
-        /** Published after the tool handler returns successfully. */
+        /**
+         * Published after the tool handler returns successfully.
+         */
         SUCCEEDED,
-        /** Published after the tool handler throws an exception. */
+        /**
+         * Published after the tool handler throws an exception.
+         */
         FAILED
     }
 

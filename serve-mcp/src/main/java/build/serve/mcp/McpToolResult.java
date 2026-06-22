@@ -86,7 +86,7 @@ public record McpToolResult(List<McpContent> content, boolean isError) {
      * Pairs with {@link #json(JsonValue)} for round-trip use.
      *
      * @return the parsed value
-     * @throws IllegalStateException    if this result contains no text content
+     * @throws IllegalStateException              if this result contains no text content
      * @throws build.base.json.JsonParseException if the text is not valid JSON
      */
     public JsonValue json() {
