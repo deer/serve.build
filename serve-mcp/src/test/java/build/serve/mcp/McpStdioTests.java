@@ -65,7 +65,7 @@ class McpStdioTests {
         server = McpServer.builder("test-server", "1.0.0")
             .tool(ToolDef.of("get_weather", "Get weather for a location")
                 .param(location)
-                .handle(args -> McpToolResult.text("Weather in " + location.extract(args) + ": sunny, 72�F")))
+                .handle(args -> McpToolResult.text("Weather in " + location.extract(args) + ": sunny, 72°F")))
             .build();
     }
 
@@ -93,7 +93,7 @@ class McpStdioTests {
         final var result = response.get("result").asObject();
         assertThat(result.get("isError").asBoolean().value()).isFalse();
         final var text = ((JsonArray) result.get("content")).values().get(0).asObject().getString("text");
-        assertThat(text).isEqualTo("Weather in Berlin: sunny, 72�F");
+        assertThat(text).isEqualTo("Weather in Berlin: sunny, 72°F");
     }
 
     @Test
