@@ -22,7 +22,7 @@ module build.serve.mcp {
     requires transitive build.serve.foundation;
     requires build.serve.sse;
     requires transitive build.base.json;
-    requires java.logging;
+    requires build.base.telemetry.foundation;
 
     exports build.serve.mcp;
 }

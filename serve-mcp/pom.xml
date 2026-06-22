@@ -21,25 +21,30 @@
             <groupId>build.base</groupId>
             <artifactId>base-flow</artifactId>
         </dependency>
+        <dependency>
+            <groupId>build.base</groupId>
+            <artifactId>base-json</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>build.base</groupId>
+            <artifactId>base-telemetry</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>build.base</groupId>
+            <artifactId>base-telemetry-foundation</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>build.serve</groupId>
             <artifactId>serve-foundation</artifactId>
         </dependency>
-
         <dependency>
             <groupId>build.serve</groupId>
             <artifactId>serve-sse</artifactId>
         </dependency>
-
         <dependency>
             <groupId>build.serve</groupId>
             <artifactId>serve-transport-json</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>build.base</groupId>
-            <artifactId>base-json</artifactId>
         </dependency>
 
         <!-- Test Dependencies -->

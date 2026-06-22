@@ -22,13 +22,24 @@ package build.serve.mcp;
 import build.base.json.Json;
 import build.base.json.JsonArray;
 import build.base.json.JsonObject;
+import build.base.telemetry.Diagnostic;
+import build.base.telemetry.Information;
+import build.base.telemetry.Telemetry;
+import build.base.telemetry.TelemetryRecorderFactory;
+import build.base.telemetry.Warning;
+import build.base.telemetry.foundation.AbstractTelemetryRecorder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -171,6 +182,95 @@ class McpStdioTests {
         }
     }
 
+    /**
+     * The default recorder writes info/diagnostic to System.out. In real stdio deployments,
+     * System.out IS the protocol channel, so any non-JSON recorder output corrupts the NDJSON stream.
+     * This test replicates that scenario by redirecting System.out before building the server,
+     * then passing that same stream to stdioLoop.
+     */
+    @Test
+    void shouldNotWriteNonJsonBytesToProtocolStream() {
+        final var realOut = System.out;
+        try {
+            final var capturedOut = new ByteArrayOutputStream();
+            final var capturedPrintStream = new java.io.PrintStream(capturedOut);
+            System.setOut(capturedPrintStream);
+
+            final var stdioServer = McpServer.builder("stdio-server", "1.0.0")
+                .tool(ToolDef.of("ping", "ping").handle(args -> McpToolResult.text("pong")))
+                .build();
+
+            stdioServer.stdioLoop(
+                toStream("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n"),
+                capturedPrintStream);
+
+            capturedPrintStream.flush();
+            final var output = capturedOut.toString(StandardCharsets.UTF_8);
+
+            output.lines()
+                .filter(l -> !l.isBlank())
+                .forEach(line -> {
+                    try {
+                        Json.parse(line);
+                    } catch (final RuntimeException e) {
+                        org.junit.jupiter.api.Assertions.fail(
+                            "Non-JSON line written to protocol stream: " + line);
+                    }
+                });
+        } finally {
+            System.setOut(realOut);
+        }
+    }
+
+    @Test
+    void shouldRecordDiagnosticsForEachDispatchedRequest() {
+        final var capturing = new CapturingTelemetryRecorder();
+        final var tracingServer = McpServer.builder("tracing-server", "1.0.0")
+            .recorder(capturing)
+            .build();
+
+        final var out = new ByteArrayOutputStream();
+        tracingServer.stdioLoop(
+            toStream("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n"),
+            out);
+
+        assertThat(capturing.diagnostics()).anyMatch(m -> m.contains("received: initialize"));
+        assertThat(capturing.diagnostics()).anyMatch(m -> m.contains("sent response to: initialize"));
+    }
+
+    @Test
+    void shouldRecordInfoOnCleanEof() {
+        final var capturing = new CapturingTelemetryRecorder();
+        final var tracingServer = McpServer.builder("tracing-server", "1.0.0")
+            .recorder(capturing)
+            .build();
+
+        tracingServer.stdioLoop(
+            toStream("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n"),
+            new ByteArrayOutputStream());
+
+        assertThat(capturing.infos()).anyMatch(m -> m.contains("clean EOF"));
+    }
+
+    @Test
+    void shouldRecordWarnOnUnexpectedIoException() {
+        final var capturing = new CapturingTelemetryRecorder();
+        final var tracingServer = McpServer.builder("tracing-server", "1.0.0")
+            .recorder(capturing)
+            .build();
+
+        final var brokenStream = new InputStream() {
+            @Override
+            public int read() throws IOException {
+                throw new IOException("connection reset by peer");
+            }
+        };
+
+        tracingServer.stdioLoop(brokenStream, new ByteArrayOutputStream());
+
+        assertThat(capturing.warns()).anyMatch(m -> m.contains("unexpectedly"));
+    }
+
     private JsonObject sendOne(final String line) {
         final var out = new ByteArrayOutputStream();
         server.stdioLoop(toStream(line + "\n"), out);
@@ -179,5 +279,37 @@ class McpStdioTests {
 
     private static ByteArrayInputStream toStream(final String s) {
         return new ByteArrayInputStream(s.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static final class CapturingTelemetryRecorder extends AbstractTelemetryRecorder {
+
+        private final List<Telemetry> captured = new CopyOnWriteArrayList<>();
+
+        CapturingTelemetryRecorder() {
+            super(URI.create("test://capture"));
+        }
+
+        @Override
+        protected <T extends Telemetry> T record(final T telemetry) {
+            captured.add(telemetry);
+            return telemetry;
+        }
+
+        @Override
+        public TelemetryRecorderFactory factory() {
+            return uri -> this;
+        }
+
+        List<String> diagnostics() {
+            return captured.stream().filter(t -> t instanceof Diagnostic).map(Object::toString).toList();
+        }
+
+        List<String> infos() {
+            return captured.stream().filter(t -> t instanceof Information).map(Object::toString).toList();
+        }
+
+        List<String> warns() {
+            return captured.stream().filter(t -> t instanceof Warning).map(Object::toString).toList();
+        }
     }
 }

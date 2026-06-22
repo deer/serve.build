@@ -28,6 +28,9 @@ import build.base.json.JsonNumber;
 import build.base.json.JsonObject;
 import build.base.json.JsonString;
 import build.base.json.JsonValue;
+import build.base.telemetry.TelemetryRecorder;
+import build.base.telemetry.foundation.PrintStreamTelemetryRecorder;
+import build.base.telemetry.foundation.SystemTelemetryRecorder;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.Handler;
 import build.serve.sse.SseEmitter;
@@ -41,6 +44,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -49,14 +53,13 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 /**
@@ -73,8 +76,6 @@ import java.util.regex.Pattern;
  */
 public final class McpServer {
 
-    private static final Logger LOGGER = Logger.getLogger(McpServer.class.getName());
-
     /**
      * ScopedValue bound to the current MCP session ID for the duration of each tool call.
      * Absent for tool calls made without a session header (e.g. local single-user use).
@@ -89,6 +90,7 @@ public final class McpServer {
     private final Set<String> allowedOrigins;
     private final int maxSessions;
     private final int maxSubscriptionsPerSession;
+    private final TelemetryRecorder recorder;
     private final SubscriberRegistry<ToolCallEvent> toolCallEvents = new SubscriberRegistry<>();
     private final ConcurrentHashMap<String, SessionState> sessions = new ConcurrentHashMap<>();
     private final AtomicLong invocationCounter = new AtomicLong();
@@ -99,6 +101,7 @@ public final class McpServer {
         this.allowedOrigins = Set.copyOf(builder.allowedOrigins);
         this.maxSessions = builder.maxSessions;
         this.maxSubscriptionsPerSession = builder.maxSubscriptionsPerSession;
+        this.recorder = builder.recorder;
 
         startSessionReaper(builder.sessionIdleTimeout);
 
@@ -259,8 +262,15 @@ public final class McpServer {
      * <p>
      * All tool calls use the session ID {@code "local"}.
      *
+     * <p><strong>Stdout pollution:</strong> {@code out} is the protocol channel — any bytes written
+     * to it outside this method (e.g. a stray {@code System.out.println} in a tool implementation
+     * or transitive library) will silently corrupt the NDJSON stream from the client's point of
+     * view. At process start, before calling this method, redirect {@code System.out} to
+     * {@code System.err} and pass the original {@code System.out} as {@code out} here so that
+     * only this method ever writes to the protocol channel.
+     *
      * @param in  the input stream (e.g. {@code System.in})
-     * @param out the output stream (e.g. {@code System.out})
+     * @param out the output stream (e.g. {@code System.out} — see stdout pollution note above)
      */
     public void stdioLoop(final InputStream in,
                           final OutputStream out) {
@@ -276,11 +286,12 @@ public final class McpServer {
                     final var request = Json.parse(line).asObject();
                     dispatch(request, "local").ifPresent(response -> writer.println(response.toJsonString()));
                 } catch (final RuntimeException e) {
-                    LOGGER.log(Level.WARNING, "Discarding malformed stdio line: {0}", e.getMessage());
+                    recorder.warn("Discarding malformed stdio line: %s", e.getMessage());
                 }
             }
+            recorder.info("stdio session ended (clean EOF)");
         } catch (final IOException e) {
-            // EOF or closed stream — exit normally
+            recorder.warn("stdio session ended unexpectedly: %s", e.getMessage());
         }
     }
 
@@ -293,6 +304,8 @@ public final class McpServer {
 
         final var rpcMethod = getString(request, "method");
         final var id = request.members().get("id");
+
+        recorder.diagnostic("received: %s", rpcMethod);
 
         if (id == null || id instanceof JsonNull) {
             return Optional.empty();
@@ -323,6 +336,7 @@ public final class McpServer {
             default -> errorEnvelope(id, -32601, "Method not found");
         };
 
+        recorder.diagnostic("sent response to: %s", rpcMethod);
         return Optional.of(response);
     }
 
@@ -487,8 +501,7 @@ public final class McpServer {
                     try {
                         emitter.send(event);
                     } catch (final IOException e) {
-                        LOGGER.log(Level.WARNING, "Failed to push resource notification for URI {0}: {1}",
-                            new Object[]{uri, e.getMessage()});
+                        recorder.warn("Failed to push resource notification for URI %s: %s", uri, e.getMessage());
                     }
                 }
             }
@@ -710,6 +723,8 @@ public final class McpServer {
         private int maxSessions = 10_000;
         private int maxSubscriptionsPerSession = 1_000;
         private Duration sessionIdleTimeout = Duration.ofHours(1);
+        private TelemetryRecorder recorder = PrintStreamTelemetryRecorder.of(URI.create("serve://mcp"), System.err, System.err);
+        private boolean logToolCalls = false;
 
         private Builder(final String name, final String version) {
             this.name = name;
@@ -808,6 +823,30 @@ public final class McpServer {
         }
 
         /**
+         * Sets the {@link TelemetryRecorder} used for server-level diagnostic output.
+         * Defaults to {@link SystemTelemetryRecorder} writing to {@code System.out}/{@code System.err}.
+         *
+         * @param recorder the recorder; must not be null
+         * @return this builder
+         */
+        public Builder recorder(final TelemetryRecorder recorder) {
+            this.recorder = Objects.requireNonNull(recorder, "recorder must not be null");
+            return this;
+        }
+
+        /**
+         * Subscribes a {@link McpToolCallLogger} using this server's recorder.
+         * STARTED events are logged at diagnostic level, SUCCEEDED at info (or warn when slow),
+         * and FAILED at warn with the thrown exception.
+         *
+         * @return this builder
+         */
+        public Builder logToolCalls() {
+            this.logToolCalls = true;
+            return this;
+        }
+
+        /**
          * Sets the maximum number of resource subscriptions per session (default 1,000).
          * Subscribe requests beyond the cap are silently ignored.
          *
@@ -828,7 +867,11 @@ public final class McpServer {
          * @return the server
          */
         public McpServer build() {
-            return new McpServer(this);
+            final var server = new McpServer(this);
+            if (logToolCalls) {
+                server.toolCallEvents().subscribe(McpToolCallLogger.of(server.recorder));
+            }
+            return server;
         }
     }
 }
