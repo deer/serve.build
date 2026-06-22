@@ -34,6 +34,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -895,6 +896,51 @@ class McpServerTests {
             final var text = content.get(0).asObject().getString("text");
             assertThat(text).doesNotContain("\r").doesNotContain("\n");
             assertThat(text).contains("error");
+        }
+    }
+
+    @Test
+    void shouldEvictIdleSessionAfterTimeout() throws InterruptedException {
+        final var mcp = McpServer.builder("s", "1")
+            .maxSessions(1)
+            .sessionIdleTimeout(Duration.ofMillis(200))
+            .build();
+        final var srv = TestServer.of(RouterBuilder.create().route("/mcp", mcp.handler()).build());
+        try (srv) {
+            srv.post("/mcp")
+                .header("Content-Type", "application/json")
+                .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
+                .send().assertStatus(200);
+
+            srv.post("/mcp")
+                .header("Content-Type", "application/json")
+                .body("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"initialize\",\"params\":{}}")
+                .send().assertStatus(503);
+
+            Thread.sleep(500); // wait for reaper (sweeps at 100ms, idle timeout 200ms)
+
+            assertThat(srv.post("/mcp")
+                .header("Content-Type", "application/json")
+                .body("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"initialize\",\"params\":{}}")
+                .send().status()).isEqualTo(200);
+        }
+    }
+
+    @Test
+    void shouldCloseOldSseEmitterOnReconnect() throws InterruptedException {
+        final var mcpServer = McpServer.builder("sse-server", "1.0.0").build();
+        try (final var sseClient = McpTestClient.start(mcpServer)) {
+            sseClient.initialize();
+
+            final var stream1 = sseClient.sseStream();
+            Thread.sleep(100); // let stream1 establish on the server
+
+            try (final var ignored = sseClient.sseStream()) {
+                // stream2 connecting causes the server to close stream1's emitter;
+                // collectAll waits for the done future, which completes when the reader exits
+                final var events = stream1.collectAll(Duration.ofSeconds(3));
+                assertThat(events).isEmpty();
+            }
         }
     }
 
