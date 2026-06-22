@@ -21,6 +21,7 @@ package build.serve.mcp;
 
 import build.base.json.Json;
 import build.base.json.JsonArray;
+import build.base.json.JsonNumber;
 import build.base.json.JsonObject;
 import build.base.telemetry.Diagnostic;
 import build.base.telemetry.Information;
@@ -31,10 +32,15 @@ import build.base.telemetry.foundation.AbstractTelemetryRecorder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
+import java.io.PrintWriter;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -59,7 +65,7 @@ class McpStdioTests {
         server = McpServer.builder("test-server", "1.0.0")
             .tool(ToolDef.of("get_weather", "Get weather for a location")
                 .param(location)
-                .handle(args -> McpToolResult.text("Weather in " + location.extract(args) + ": sunny, 72°F")))
+                .handle(args -> McpToolResult.text("Weather in " + location.extract(args) + ": sunny, 72�F")))
             .build();
     }
 
@@ -87,7 +93,7 @@ class McpStdioTests {
         final var result = response.get("result").asObject();
         assertThat(result.get("isError").asBoolean().value()).isFalse();
         final var text = ((JsonArray) result.get("content")).values().get(0).asObject().getString("text");
-        assertThat(text).isEqualTo("Weather in Berlin: sunny, 72°F");
+        assertThat(text).isEqualTo("Weather in Berlin: sunny, 72�F");
     }
 
     @Test
@@ -137,14 +143,14 @@ class McpStdioTests {
 
         final var responses = out.toString(StandardCharsets.UTF_8).lines()
             .filter(l -> !l.isBlank())
-            .map(Json::parse)
+            .map(l -> Json.parse(l).asObject())
             .toList();
 
         assertThat(responses).hasSize(2);
-        assertThat(responses.get(0).asObject().get("result").asObject()
-            .getString("protocolVersion")).isEqualTo("2025-03-26");
-        assertThat(responses.get(1).asObject().get("result").asObject()
-            .get("tools")).isInstanceOf(JsonArray.class);
+        assertThat(responses).anyMatch(r ->
+            r.get("result").asObject().getString("protocolVersion").equals("2025-03-26"));
+        assertThat(responses).anyMatch(r ->
+            r.get("result").asObject().members().get("tools") instanceof JsonArray);
     }
 
     @Test
@@ -269,6 +275,120 @@ class McpStdioTests {
         tracingServer.stdioLoop(brokenStream, new ByteArrayOutputStream());
 
         assertThat(capturing.warns()).anyMatch(m -> m.contains("unexpectedly"));
+    }
+
+    @Test
+    void shouldDispatchRequestsConcurrently() {
+        final var slowServer = McpServer.builder("slow-server", "1.0.0")
+            .tool(ToolDef.of("slow", "waits 200ms").handle(args -> {
+                try {
+                    Thread.sleep(200);
+                } catch (final InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return McpToolResult.text("slow");
+            }))
+            .tool(ToolDef.of("fast", "returns immediately").handle(args -> McpToolResult.text("fast")))
+            .build();
+
+        // Send slow (id=1) then fast (id=2) in one batch. With concurrent dispatch fast
+        // completes first, so its response should appear first in the output.
+        final var lines = String.join("\n",
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"slow\",\"arguments\":{}}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"fast\",\"arguments\":{}}}"
+        ) + "\n";
+
+        final var out = new ByteArrayOutputStream();
+        slowServer.stdioLoop(toStream(lines), out);
+
+        final var responses = out.toString(StandardCharsets.UTF_8).lines()
+            .filter(l -> !l.isBlank())
+            .map(l -> Json.parse(l).asObject())
+            .toList();
+
+        assertThat(responses).hasSize(2);
+        assertThat(((JsonNumber) responses.get(0).members().get("id")).toNumber().intValue()).isEqualTo(2);
+        assertThat(((JsonNumber) responses.get(1).members().get("id")).toNumber().intValue()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldDeliverResourceNotificationsOverStdio() throws Exception {
+        final var notifyServer = McpServer.builder("notify-server", "1.0.0")
+            .tool(ToolDef.of("ping", "ping").handle(args -> McpToolResult.text("pong")))
+            .build();
+
+        final var clientToServer = new PipedOutputStream();
+        final var serverToClient = new PipedOutputStream();
+        final var serverIn = new PipedInputStream(clientToServer);
+        final var clientIn = new PipedInputStream(serverToClient);
+
+        final var loopThread = Thread.ofVirtual().start(
+            () -> notifyServer.stdioLoop(serverIn, serverToClient));
+
+        final var writer = new PrintWriter(clientToServer, true, StandardCharsets.UTF_8);
+        final var reader = new BufferedReader(new InputStreamReader(clientIn, StandardCharsets.UTF_8));
+
+        // subscribe to a resource URI
+        writer.println("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"resources/subscribe\","
+            + "\"params\":{\"uri\":\"test://data\"}}");
+        final var subResponse = Json.parse(reader.readLine()).asObject();
+        assertThat(subResponse.members()).containsKey("result");
+
+        // trigger notification from outside
+        notifyServer.notifyResourceChanged("test://data");
+
+        // the notification should arrive on the stdio channel
+        final var notification = Json.parse(reader.readLine()).asObject();
+        assertThat(notification.getString("method")).isEqualTo("notifications/resources/updated");
+        assertThat(notification.get("params").asObject().getString("uri")).isEqualTo("test://data");
+
+        writer.close();
+        loopThread.join(5_000);
+    }
+
+    @Test
+    void shouldNotDeliverNotificationAfterUnsubscribe() throws Exception {
+        final var notifyServer = McpServer.builder("notify-server", "1.0.0")
+            .tool(ToolDef.of("ping", "ping").handle(args -> McpToolResult.text("pong")))
+            .build();
+
+        final var clientToServer = new PipedOutputStream();
+        final var serverToClient = new PipedOutputStream();
+        final var serverIn = new PipedInputStream(clientToServer);
+        final var clientIn = new PipedInputStream(serverToClient);
+
+        final var loopThread = Thread.ofVirtual().start(
+            () -> notifyServer.stdioLoop(serverIn, serverToClient));
+
+        final var writer = new PrintWriter(clientToServer, true, StandardCharsets.UTF_8);
+        final var reader = new BufferedReader(new InputStreamReader(clientIn, StandardCharsets.UTF_8));
+
+        writer.println("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"resources/subscribe\","
+            + "\"params\":{\"uri\":\"test://data\"}}");
+        assertThat(Json.parse(reader.readLine()).asObject().members()).containsKey("result");
+
+        writer.println("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"resources/unsubscribe\","
+            + "\"params\":{\"uri\":\"test://data\"}}");
+        assertThat(Json.parse(reader.readLine()).asObject().members()).containsKey("result");
+
+        notifyServer.notifyResourceChanged("test://data");
+
+        // send a ping to flush any pending output — if a spurious notification were queued
+        // it would arrive before or instead of this response
+        writer.println("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\",\"params\":{}}");
+        final var pingResponse = Json.parse(reader.readLine()).asObject();
+        assertThat(pingResponse.members().get("id")).isInstanceOf(JsonNumber.class);
+        assertThat(((JsonNumber) pingResponse.members().get("id")).toNumber().intValue()).isEqualTo(3);
+
+        writer.close();
+        loopThread.join(5_000);
+    }
+
+    @Test
+    void shouldSilentlyDropNotificationsWhenStdioLoopIsNotRunning() {
+        final var notifyServer = McpServer.builder("notify-server", "1.0.0").build();
+        // stdioLoop has never been started — notifyResourceChanged must not throw
+        notifyServer.notifyResourceChanged("test://data");
     }
 
     private JsonObject sendOne(final String line) {
