@@ -58,6 +58,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.Phaser;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
@@ -94,6 +96,8 @@ public final class McpServer {
     private final SubscriberRegistry<ToolCallEvent> toolCallEvents = new SubscriberRegistry<>();
     private final ConcurrentHashMap<String, SessionState> sessions = new ConcurrentHashMap<>();
     private final AtomicLong invocationCounter = new AtomicLong();
+    private volatile SessionState stdioSession;
+    private volatile LinkedBlockingQueue<Optional<String>> stdioOutputQueue;
 
     private McpServer(final Builder builder) {
         this.info = new McpServerInfo(builder.name, builder.version);
@@ -143,6 +147,10 @@ public final class McpServer {
         final Set<String> subscriptions = ConcurrentHashMap.newKeySet();
         final AtomicReference<SseEmitter> emitter = new AtomicReference<>();
         volatile Instant lastAccessed = Instant.now();
+    }
+
+    private SessionState stateFor(final String sessionId) {
+        return "local".equals(sessionId) ? stdioSession : sessions.get(sessionId);
     }
 
     private record TemplateEntry(McpResourceTemplate template, Pattern pattern) {
@@ -274,30 +282,63 @@ public final class McpServer {
      */
     public void stdioLoop(final InputStream in,
                           final OutputStream out) {
+        stdioSession = new SessionState();
+        final var queue = new LinkedBlockingQueue<Optional<String>>();
+        stdioOutputQueue = queue;
+        // Single writer thread owns all writes to `out`; dispatch threads enqueue responses.
+        // This keeps PipedInputStream's writer-thread tracking pointed at one live thread.
+        final var writerThread = Thread.ofVirtual().name("mcp-stdio-writer").start(() -> {
+            final var pw = new PrintWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8), true);
+            try {
+                Optional<String> item;
+                while ((item = queue.take()).isPresent()) {
+                    pw.println(item.get());
+                }
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
         final var reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
-        final var writer = new PrintWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8), true);
+        final var phaser = new Phaser(1);
         try {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (line.isBlank()) {
                     continue;
                 }
-                try {
-                    final var request = Json.parse(line).asObject();
-                    dispatch(request, "local").ifPresent(response -> writer.println(response.toJsonString()));
-                } catch (final RuntimeException e) {
-                    recorder.warn("Discarding malformed stdio line: %s", e.getMessage());
-                }
+                final var captured = line;
+                phaser.register();
+                Thread.ofVirtual().start(() -> {
+                    try {
+                        final var request = Json.parse(captured).asObject();
+                        dispatch(request, "local").ifPresent(r -> queue.offer(Optional.of(r.toJsonString())));
+                    } catch (final RuntimeException e) {
+                        recorder.warn("Discarding malformed stdio line: %s", e.getMessage());
+                    } finally {
+                        phaser.arriveAndDeregister();
+                    }
+                });
             }
+            phaser.arriveAndAwaitAdvance();
             recorder.info("stdio session ended (clean EOF)");
         } catch (final IOException e) {
+            phaser.arriveAndAwaitAdvance();
             recorder.warn("stdio session ended unexpectedly: %s", e.getMessage());
+        } finally {
+            stdioOutputQueue = null;
+            stdioSession = null;
+            queue.offer(Optional.empty()); // poison pill — stops the writer thread
+            try {
+                writerThread.join(5_000);
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
     private Optional<JsonObject> dispatch(final JsonObject request,
                                           final String sessionId) {
-        final var state = sessions.get(sessionId);
+        final var state = stateFor(sessionId);
         if (state != null) {
             state.lastAccessed = Instant.now();
         }
@@ -506,6 +547,12 @@ public final class McpServer {
                 }
             }
         }
+
+        final var q = stdioOutputQueue;
+        final var ss = stdioSession;
+        if (q != null && ss != null && ss.subscriptions.contains(uri)) {
+            q.offer(Optional.of(notification));
+        }
     }
 
     private JsonObject handleResourcesList() {
@@ -589,7 +636,7 @@ public final class McpServer {
     private JsonObject handleResourcesSubscribe(final JsonValue params, final String sessionId, final JsonValue id) {
         final var paramsObj = params instanceof JsonObject p ? p : JsonObject.builder().build();
         final var uri = getString(paramsObj, "uri");
-        final var state = sessions.get(sessionId);
+        final var state = stateFor(sessionId);
         if (state != null) {
             synchronized (state.subscriptions) {
                 if (state.subscriptions.size() < maxSubscriptionsPerSession) {
@@ -603,7 +650,7 @@ public final class McpServer {
     private JsonObject handleResourcesUnsubscribe(final JsonValue params, final String sessionId, final JsonValue id) {
         final var paramsObj = params instanceof JsonObject p ? p : JsonObject.builder().build();
         final var uri = getString(paramsObj, "uri");
-        final var state = sessions.get(sessionId);
+        final var state = stateFor(sessionId);
         if (state != null) {
             state.subscriptions.remove(uri);
         }
