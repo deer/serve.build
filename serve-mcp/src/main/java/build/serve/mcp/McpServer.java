@@ -54,12 +54,19 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 /**
  * An MCP (Model Context Protocol) server that exposes tools via JSON-RPC 2.0 over HTTP.
+ *
+ * <p><strong>Authentication:</strong> {@code McpServer} has no built-in authentication.
+ * Any deployment reachable by untrusted clients must be wrapped with an authentication
+ * layer — for example {@code serve-auth}'s {@code AuthMiddleware} — before the handler
+ * returned by {@link #handler()} is registered. Standalone use without such a wrapper
+ * is an open server.
  *
  * @author reed.vonredwitz
  * @since Mar-2026
@@ -93,6 +100,8 @@ public final class McpServer {
         this.maxSessions = builder.maxSessions;
         this.maxSubscriptionsPerSession = builder.maxSubscriptionsPerSession;
 
+        startSessionReaper(builder.sessionIdleTimeout);
+
         final var toolMap = new LinkedHashMap<String, McpTool>();
         for (final var tool : builder.tools) {
             toolMap.put(tool.name(), tool);
@@ -112,9 +121,25 @@ public final class McpServer {
         this.templates = List.copyOf(templateList);
     }
 
+    private void startSessionReaper(final Duration idleTimeout) {
+        final long intervalMs = Math.min(idleTimeout.toMillis() / 2, Duration.ofMinutes(5).toMillis());
+        Thread.ofVirtual().name("mcp-session-reaper").start(() -> {
+            while (!Thread.currentThread().isInterrupted()) {
+                try {
+                    Thread.sleep(intervalMs);
+                } catch (final InterruptedException e) {
+                    break;
+                }
+                final var cutoff = Instant.now().minus(idleTimeout);
+                sessions.entrySet().removeIf(entry -> entry.getValue().lastAccessed.isBefore(cutoff));
+            }
+        });
+    }
+
     private static final class SessionState {
-        final java.util.Set<String> subscriptions = ConcurrentHashMap.newKeySet();
-        volatile SseEmitter emitter;
+        final Set<String> subscriptions = ConcurrentHashMap.newKeySet();
+        final AtomicReference<SseEmitter> emitter = new AtomicReference<>();
+        volatile Instant lastAccessed = Instant.now();
     }
 
     private record TemplateEntry(McpResourceTemplate template, Pattern pattern) {
@@ -261,6 +286,11 @@ public final class McpServer {
 
     private Optional<JsonObject> dispatch(final JsonObject request,
                                           final String sessionId) {
+        final var state = sessions.get(sessionId);
+        if (state != null) {
+            state.lastAccessed = Instant.now();
+        }
+
         final var rpcMethod = getString(request, "method");
         final var id = request.members().get("id");
 
@@ -390,7 +420,7 @@ public final class McpServer {
 
         final var tool = tools.get(toolName);
         if (tool == null) {
-            return errorEnvelope(id, -32602, "Unknown tool: " + toolName);
+            return errorEnvelope(id, -32602, "Unknown tool: " + sanitizeMessage(toolName));
         }
 
         final var invocationId = invocationCounter.incrementAndGet();
@@ -420,13 +450,17 @@ public final class McpServer {
             return;
         }
         SseUpgrade.sse(emitter -> {
-            state.emitter = emitter;
+            state.lastAccessed = Instant.now();
+            final var prev = state.emitter.getAndSet(emitter);
+            if (prev != null) {
+                prev.close();
+            }
             try {
                 emitter.awaitClose();
             } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
             } finally {
-                state.emitter = null;
+                state.emitter.compareAndSet(emitter, null);
             }
         }).handle(exchange);
     }
@@ -448,7 +482,7 @@ public final class McpServer {
 
         for (final var state : sessions.values()) {
             if (state.subscriptions.contains(uri)) {
-                final var emitter = state.emitter;
+                final var emitter = state.emitter.get();
                 if (emitter != null && emitter.isOpen()) {
                     try {
                         emitter.send(event);
@@ -543,8 +577,12 @@ public final class McpServer {
         final var paramsObj = params instanceof JsonObject p ? p : JsonObject.builder().build();
         final var uri = getString(paramsObj, "uri");
         final var state = sessions.get(sessionId);
-        if (state != null && state.subscriptions.size() < maxSubscriptionsPerSession) {
-            state.subscriptions.add(uri);
+        if (state != null) {
+            synchronized (state.subscriptions) {
+                if (state.subscriptions.size() < maxSubscriptionsPerSession) {
+                    state.subscriptions.add(uri);
+                }
+            }
         }
         return envelope(id, JsonObject.builder().build());
     }
@@ -671,6 +709,7 @@ public final class McpServer {
         private final HashSet<String> allowedOrigins = new HashSet<>();
         private int maxSessions = 10_000;
         private int maxSubscriptionsPerSession = 1_000;
+        private Duration sessionIdleTimeout = Duration.ofHours(1);
 
         private Builder(final String name, final String version) {
             this.name = name;
@@ -748,6 +787,23 @@ public final class McpServer {
                 throw new IllegalArgumentException("maxSessions must be positive");
             }
             this.maxSessions = maxSessions;
+            return this;
+        }
+
+        /**
+         * Sets the idle timeout after which inactive sessions are reaped (default 1 hour).
+         * A background daemon thread sweeps expired sessions at half the idle timeout interval,
+         * capped at 5 minutes. Activity on a session (any JSON-RPC request or SSE connection)
+         * resets the idle clock.
+         *
+         * @param idleTimeout the idle duration; must be at least 1 minute
+         * @return this builder
+         */
+        public Builder sessionIdleTimeout(final Duration idleTimeout) {
+            if (idleTimeout == null || idleTimeout.isNegative() || idleTimeout.isZero()) {
+                throw new IllegalArgumentException("sessionIdleTimeout must be positive");
+            }
+            this.sessionIdleTimeout = idleTimeout;
             return this;
         }
 
