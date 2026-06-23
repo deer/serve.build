@@ -46,6 +46,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -389,6 +390,37 @@ class McpStdioTests {
         final var notifyServer = McpServer.builder("notify-server", "1.0.0").build();
         // stdioLoop has never been started — notifyResourceChanged must not throw
         notifyServer.notifyResourceChanged("test://data");
+    }
+
+    @Test
+    void shouldSkipNotificationsWhenCorrelatingResponses() throws Exception {
+        final var latch = new CountDownLatch(1);
+        final var notifyServer = McpServer.builder("notify-server", "1.0.0")
+            .tool(ToolDef.of("slow_ping", "ping after notification").handle(args -> {
+                // wait until the notification has been pushed before returning
+                try {
+                    latch.await();
+                } catch (final InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return McpToolResult.text("pong");
+            }))
+            .build();
+
+        try (var client = McpStdioClient.of(notifyServer)) {
+            client.send("resources/subscribe", Map.of("uri", "test://x"));
+
+            // push notification first, then unblock the tool
+            Thread.ofVirtual().start(() -> {
+                notifyServer.notifyResourceChanged("test://x");
+                latch.countDown();
+            });
+
+            // client.send must skip the notification and return the real response
+            final var response = client.send("tools/call",
+                Map.of("name", "slow_ping", "arguments", Map.of()));
+            assertThat(response.get("result").asObject().get("content")).isInstanceOf(JsonArray.class);
+        }
     }
 
     private JsonObject sendOne(final String line) {
