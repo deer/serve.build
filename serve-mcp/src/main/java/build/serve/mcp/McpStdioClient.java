@@ -38,8 +38,11 @@ import java.io.PipedOutputStream;
 import java.io.PrintWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * A client that drives an {@link McpServer} over its stdio transport.
@@ -60,17 +63,25 @@ import java.util.Map;
  */
 public final class McpStdioClient implements AutoCloseable {
 
+    private static final Duration DEFAULT_SEND_TIMEOUT = Duration.ofSeconds(30);
+
     private final PrintWriter writer;
     private final BufferedReader reader;
+    private final PipedInputStream clientIn;
     private final Thread serverThread;
+    private final Duration sendTimeout;
     private int nextId = 1;
 
     private McpStdioClient(final PrintWriter writer,
                            final BufferedReader reader,
-                           final Thread serverThread) {
+                           final PipedInputStream clientIn,
+                           final Thread serverThread,
+                           final Duration sendTimeout) {
         this.writer = writer;
         this.reader = reader;
+        this.clientIn = clientIn;
         this.serverThread = serverThread;
+        this.sendTimeout = sendTimeout;
     }
 
     /**
@@ -81,6 +92,17 @@ public final class McpStdioClient implements AutoCloseable {
      * @return the connected client
      */
     public static McpStdioClient of(final McpServer server) {
+        return of(server, DEFAULT_SEND_TIMEOUT);
+    }
+
+    /**
+     * Creates a client with a custom send timeout.
+     *
+     * @param server      the server to connect to
+     * @param sendTimeout how long to wait for each response before throwing
+     * @return the connected client
+     */
+    public static McpStdioClient of(final McpServer server, final Duration sendTimeout) {
         try {
             final var clientToServer = new PipedOutputStream();
             final var serverToClient = new PipedOutputStream();
@@ -93,7 +115,9 @@ public final class McpStdioClient implements AutoCloseable {
             return new McpStdioClient(
                 new PrintWriter(new OutputStreamWriter(clientToServer, StandardCharsets.UTF_8), true),
                 new BufferedReader(new InputStreamReader(clientIn, StandardCharsets.UTF_8)),
-                thread
+                clientIn,
+                thread,
+                sendTimeout
             );
         } catch (final IOException e) {
             throw new UncheckedIOException(e);
@@ -115,19 +139,31 @@ public final class McpStdioClient implements AutoCloseable {
 
     /**
      * Sends a raw JSON-RPC request and returns the full response object.
+     * Skips any server-pushed notifications (no {@code id} field) that arrive before
+     * the matching response. Throws if no response arrives within the send timeout.
      *
      * @param method the JSON-RPC method name
      * @param params the parameters
      * @return the full response envelope
      */
     public JsonObject send(final String method, final Map<String, Object> params) {
-        writer.println(rpc(method, nextId++, params));
+        final int sentId = nextId++;
+        writer.println(rpc(method, sentId, params));
         try {
-            final var line = reader.readLine();
-            if (line == null) {
-                throw new IllegalStateException("Server closed stdout before responding");
+            while (true) {
+                final var line = readLineWithTimeout();
+                if (line == null) {
+                    throw new IllegalStateException("Server closed stdout before responding to id " + sentId);
+                }
+                final var msg = Json.parse(line).asObject();
+                final var responseId = msg.members().get("id");
+                if (responseId == null || responseId instanceof JsonNull) {
+                    continue; // notification — no id
+                }
+                if (idMatches(responseId, sentId)) {
+                    return msg;
+                }
             }
-            return Json.parse(line).asObject();
         } catch (final IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -140,10 +176,53 @@ public final class McpStdioClient implements AutoCloseable {
     public void close() {
         writer.close();
         try {
+            clientIn.close();
+        } catch (final IOException ignored) {
+        }
+        try {
             serverThread.join(5_000);
         } catch (final InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    private String readLineWithTimeout() throws IOException {
+        final String[] lineRef = new String[1];
+        final IOException[] errorRef = new IOException[1];
+        final var latch = new CountDownLatch(1);
+        Thread.ofVirtual().start(() -> {
+            try {
+                lineRef[0] = reader.readLine();
+            } catch (final IOException e) {
+                errorRef[0] = e;
+            } finally {
+                latch.countDown();
+            }
+        });
+        try {
+            if (!latch.await(sendTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
+                clientIn.close(); // unblock the stuck readLine() virtual thread
+                throw new IOException("Server did not respond within " + sendTimeout);
+            }
+        } catch (final InterruptedException e) {
+            Thread.currentThread().interrupt();
+            clientIn.close(); // unblock the stuck readLine() virtual thread
+            throw new IOException("Interrupted waiting for server response", e);
+        }
+        if (errorRef[0] != null) {
+            throw errorRef[0];
+        }
+        return lineRef[0];
+    }
+
+    private static boolean idMatches(final JsonValue responseId, final int sentId) {
+        if (responseId instanceof JsonNumber n) {
+            return n.toNumber().intValue() == sentId;
+        }
+        if (responseId instanceof JsonString s) {
+            return s.value().equals(String.valueOf(sentId));
+        }
+        return false;
     }
 
     private static String rpc(final String method, final int id, final Map<String, Object> params) {
