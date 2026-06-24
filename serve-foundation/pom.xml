@@ -19,11 +19,6 @@
     <dependencies>
         <dependency>
             <groupId>build.base</groupId>
-            <artifactId>base-foundation</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>build.base</groupId>
             <artifactId>base-json</artifactId>
         </dependency>
 
@@ -34,22 +29,7 @@
 
         <dependency>
             <groupId>build.base</groupId>
-            <artifactId>base-option</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>build.base</groupId>
             <artifactId>base-network</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>build.base</groupId>
-            <artifactId>base-flow</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>build.base</groupId>
-            <artifactId>base-logging</artifactId>
         </dependency>
 
         <dependency>
@@ -83,13 +63,6 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
                 <configuration>
-                    <!-- Dependencies required by module-info.java but not detected via bytecode analysis -->
-                    <usedDependencies>
-                        <usedDependency>build.base:base-foundation</usedDependency>
-                        <usedDependency>build.base:base-option</usedDependency>
-                        <usedDependency>build.base:base-flow</usedDependency>
-                        <usedDependency>build.base:base-logging</usedDependency>
-                    </usedDependencies>
                     <!-- JPMS requires compile scope for test-only module requires; maven-dependency-plugin can't model this -->
                     <ignoredNonTestScopedDependencies>
                         <ignoredNonTestScopedDependency>build.base:base-network</ignoredNonTestScopedDependency>
