@@ -23,11 +23,6 @@
         </dependency>
 
         <dependency>
-            <groupId>build.serve</groupId>
-            <artifactId>serve-transport-json</artifactId>
-        </dependency>
-
-        <dependency>
             <groupId>com.graphql-java</groupId>
             <artifactId>graphql-java</artifactId>
         </dependency>
@@ -56,20 +51,5 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-dependency-plugin</artifactId>
-                <configuration>
-                    <!-- Dependencies required by module-info.java but not detected via bytecode analysis -->
-                    <usedDependencies>
-                        <usedDependency>build.serve:serve-transport-json</usedDependency>
-                    </usedDependencies>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
 
 </project>
