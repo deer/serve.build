@@ -770,12 +770,13 @@ public final class McpServer {
         private int maxSessions = 10_000;
         private int maxSubscriptionsPerSession = 1_000;
         private Duration sessionIdleTimeout = Duration.ofHours(1);
-        private TelemetryRecorder recorder = PrintStreamTelemetryRecorder.of(URI.create("serve://mcp"), System.err, System.err);
+        private TelemetryRecorder recorder;
         private boolean logToolCalls = false;
 
         private Builder(final String name, final String version) {
             this.name = name;
             this.version = version;
+            this.recorder = PrintStreamTelemetryRecorder.of(URI.create("serve://mcp/" + name), System.err, System.err);
         }
 
         /**
