@@ -378,7 +378,7 @@ public final class McpServer {
         }
 
         final var response = switch (rpcMethod) {
-            case "initialize" -> envelope(id, handleInitialize());
+            case "initialize" -> envelope(id, handleInitialize(request.members().getOrDefault("params", JsonNull.INSTANCE)));
             case "ping" -> envelope(id, JsonObject.builder().build());
             case "tools/list" -> envelope(id, handleToolsList());
             case "tools/call" -> {
@@ -468,7 +468,17 @@ public final class McpServer {
         return toolCallEvents;
     }
 
-    private JsonObject handleInitialize() {
+    private static final String SUPPORTED_PROTOCOL_VERSION = "2025-03-26";
+
+    private JsonObject handleInitialize(final JsonValue params) {
+        final var paramsObj = params instanceof JsonObject p ? p : JsonObject.builder().build();
+        final var requestedVersion = getString(paramsObj, "protocolVersion");
+        // Respond with the requested version if we support it; otherwise our highest supported
+        // version. The client decides whether to proceed or disconnect on mismatch.
+        final var responseVersion = SUPPORTED_PROTOCOL_VERSION.equals(requestedVersion)
+            ? requestedVersion
+            : SUPPORTED_PROTOCOL_VERSION;
+
         final var capabilities = JsonObject.builder()
             .put("tools", JsonObject.builder().put("listChanged", false).build())
             .put("resources", JsonObject.builder()
@@ -483,7 +493,7 @@ public final class McpServer {
             .build();
 
         final var result = JsonObject.builder()
-            .put("protocolVersion", "2025-03-26")
+            .put("protocolVersion", responseVersion)
             .put("capabilities", capabilities)
             .put("serverInfo", serverInfo);
         if (instructions != null) {
