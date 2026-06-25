@@ -149,10 +149,10 @@ class McpStdioTests {
         assertThat(responses).hasSize(2);
         assertThat(responses).anyMatch(r ->
             r.has("result") && r.get("result").asObject().has("protocolVersion")
-            && r.get("result").asObject().getString("protocolVersion").equals("2025-03-26"));
+                && r.get("result").asObject().getString("protocolVersion").equals("2025-03-26"));
         assertThat(responses).anyMatch(r ->
             r.has("result") && r.get("result").asObject().has("tools")
-            && r.get("result").asObject().members().get("tools") instanceof JsonArray);
+                && r.get("result").asObject().members().get("tools") instanceof JsonArray);
     }
 
     @Test
