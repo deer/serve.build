@@ -71,11 +71,19 @@ class McpStdioTests {
 
     @Test
     void shouldHandleInitialize() {
-        final var response = sendOne("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+        final var response = sendOne("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\","
+            + "\"params\":{\"protocolVersion\":\"2025-03-26\"}}");
         assertThat(response.getString("jsonrpc")).isEqualTo("2.0");
         assertThat(response.get("result").asObject().getString("protocolVersion")).isEqualTo("2025-03-26");
         assertThat(response.get("result").asObject().get("serverInfo").asObject().getString("name"))
             .isEqualTo("test-server");
+    }
+
+    @Test
+    void shouldRespondWithSupportedVersionWhenClientRequestsUnknownVersion() {
+        final var response = sendOne("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\","
+            + "\"params\":{\"protocolVersion\":\"2099-01-01\"}}");
+        assertThat(response.get("result").asObject().getString("protocolVersion")).isEqualTo("2025-03-26");
     }
 
     @Test
