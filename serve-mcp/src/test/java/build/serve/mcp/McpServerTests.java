@@ -944,6 +944,47 @@ class McpServerTests {
         }
     }
 
+    @Test
+    void shouldHandleHttpBatchRequest() {
+        final var mcpServer = McpServer.builder("batch-server", "1.0.0").build();
+        try (final var testClient = McpTestClient.start(mcpServer)) {
+            testClient.initialize();
+
+            final var batch = "[{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"tools/list\",\"params\":{}},"
+                + "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"ping\",\"params\":{}}]";
+            final var response = testClient.post("/mcp")
+                .header("Content-Type", "application/json")
+                .header("Mcp-Session-Id", testClient.sessionId)
+                .body(batch)
+                .send();
+
+            assertThat(response.status()).isEqualTo(200);
+            final var arr = Json.parse(response.body()).asArray();
+            assertThat(arr.values()).hasSize(2);
+            final var ids = arr.values().stream()
+                .map(v -> ((build.base.json.JsonNumber) v.asObject().members().get("id")).toNumber().intValue())
+                .toList();
+            assertThat(ids).containsExactlyInAnyOrder(10, 11);
+        }
+    }
+
+    @Test
+    void shouldReturn202ForHttpBatchOfNotificationsOnly() {
+        final var mcpServer = McpServer.builder("batch-server", "1.0.0").build();
+        try (final var testClient = McpTestClient.start(mcpServer)) {
+            testClient.initialize();
+
+            final var batch = "[{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}]";
+            final var response = testClient.post("/mcp")
+                .header("Content-Type", "application/json")
+                .header("Mcp-Session-Id", testClient.sessionId)
+                .body(batch)
+                .send();
+
+            assertThat(response.status()).isEqualTo(202);
+        }
+    }
+
     /**
      * Sends a raw HTTP POST to /mcp using a plain socket, bypassing Java's restricted-header
      * filtering so that headers like Origin can be set freely.

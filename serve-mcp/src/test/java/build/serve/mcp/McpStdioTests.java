@@ -411,6 +411,46 @@ class McpStdioTests {
         }
     }
 
+    @Test
+    void shouldHandleBatchRequest() {
+        final var lines = "[{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{}},"
+            + "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\",\"params\":{}}]\n";
+
+        final var out = new ByteArrayOutputStream();
+        server.stdioLoop(toStream(lines), out);
+
+        final var arr = Json.parse(out.toString(StandardCharsets.UTF_8).strip()).asArray();
+        assertThat(arr.values()).hasSize(2);
+        final var ids = arr.values().stream()
+            .map(v -> ((JsonNumber) v.asObject().members().get("id")).toNumber().intValue())
+            .toList();
+        assertThat(ids).containsExactlyInAnyOrder(1, 2);
+    }
+
+    @Test
+    void shouldHandleBatchWithNotificationsOnly() {
+        final var lines = "[{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}]\n";
+
+        final var out = new ByteArrayOutputStream();
+        server.stdioLoop(toStream(lines), out);
+
+        assertThat(out.toString(StandardCharsets.UTF_8).strip()).isEmpty();
+    }
+
+    @Test
+    void shouldHandleBatchWithMixedRequestsAndNotifications() {
+        final var lines = "[{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"params\":{}},"
+            + "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}]\n";
+
+        final var out = new ByteArrayOutputStream();
+        server.stdioLoop(toStream(lines), out);
+
+        final var arr = Json.parse(out.toString(StandardCharsets.UTF_8).strip()).asArray();
+        assertThat(arr.values()).hasSize(1);
+        assertThat(((JsonNumber) arr.values().get(0).asObject().members().get("id")).toNumber().intValue())
+            .isEqualTo(1);
+    }
+
     private JsonObject sendOne(final String line) {
         final var out = new ByteArrayOutputStream();
         server.stdioLoop(toStream(line + "\n"), out);
