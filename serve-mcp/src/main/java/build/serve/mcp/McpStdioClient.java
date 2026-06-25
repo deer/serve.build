@@ -29,9 +29,8 @@ import build.base.json.JsonObject;
 import build.base.json.JsonString;
 import build.base.json.JsonValue;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
@@ -41,7 +40,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -66,20 +65,17 @@ public final class McpStdioClient implements AutoCloseable {
     private static final Duration DEFAULT_SEND_TIMEOUT = Duration.ofSeconds(30);
 
     private final PrintWriter writer;
-    private final BufferedReader reader;
-    private final PipedInputStream clientIn;
+    private final LineQueue lineQueue;
     private final Thread serverThread;
     private final Duration sendTimeout;
     private int nextId = 1;
 
     private McpStdioClient(final PrintWriter writer,
-                           final BufferedReader reader,
-                           final PipedInputStream clientIn,
+                           final LineQueue lineQueue,
                            final Thread serverThread,
                            final Duration sendTimeout) {
         this.writer = writer;
-        this.reader = reader;
-        this.clientIn = clientIn;
+        this.lineQueue = lineQueue;
         this.serverThread = serverThread;
         this.sendTimeout = sendTimeout;
     }
@@ -105,17 +101,15 @@ public final class McpStdioClient implements AutoCloseable {
     public static McpStdioClient of(final McpServer server, final Duration sendTimeout) {
         try {
             final var clientToServer = new PipedOutputStream();
-            final var serverToClient = new PipedOutputStream();
             final var serverIn = new PipedInputStream(clientToServer);
-            final var clientIn = new PipedInputStream(serverToClient);
+            final var lineQueue = new LineQueue();
 
             final var thread = Thread.ofVirtual().start(
-                () -> server.stdioLoop(serverIn, serverToClient));
+                () -> server.stdioLoop(serverIn, lineQueue));
 
             return new McpStdioClient(
                 new PrintWriter(new OutputStreamWriter(clientToServer, StandardCharsets.UTF_8), true),
-                new BufferedReader(new InputStreamReader(clientIn, StandardCharsets.UTF_8)),
-                clientIn,
+                lineQueue,
                 thread,
                 sendTimeout
             );
@@ -151,9 +145,9 @@ public final class McpStdioClient implements AutoCloseable {
         writer.println(rpc(method, sentId, params));
         try {
             while (true) {
-                final var line = readLineWithTimeout();
+                final var line = lineQueue.poll(sendTimeout);
                 if (line == null) {
-                    throw new IllegalStateException("Server closed stdout before responding to id " + sentId);
+                    throw new UncheckedIOException(new IOException("Server did not respond within " + sendTimeout));
                 }
                 final var msg = Json.parse(line).asObject();
                 final var responseId = msg.members().get("id");
@@ -164,8 +158,9 @@ public final class McpStdioClient implements AutoCloseable {
                     return msg;
                 }
             }
-        } catch (final IOException e) {
-            throw new UncheckedIOException(e);
+        } catch (final InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new UncheckedIOException(new IOException("Interrupted waiting for server response", e));
         }
     }
 
@@ -176,43 +171,10 @@ public final class McpStdioClient implements AutoCloseable {
     public void close() {
         writer.close();
         try {
-            clientIn.close();
-        } catch (final IOException ignored) {
-        }
-        try {
             serverThread.join(5_000);
         } catch (final InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-    }
-
-    private String readLineWithTimeout() throws IOException {
-        final String[] lineRef = new String[1];
-        final IOException[] errorRef = new IOException[1];
-        final var latch = new CountDownLatch(1);
-        Thread.ofVirtual().start(() -> {
-            try {
-                lineRef[0] = reader.readLine();
-            } catch (final IOException e) {
-                errorRef[0] = e;
-            } finally {
-                latch.countDown();
-            }
-        });
-        try {
-            if (!latch.await(sendTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
-                clientIn.close(); // unblock the stuck readLine() virtual thread
-                throw new IOException("Server did not respond within " + sendTimeout);
-            }
-        } catch (final InterruptedException e) {
-            Thread.currentThread().interrupt();
-            clientIn.close(); // unblock the stuck readLine() virtual thread
-            throw new IOException("Interrupted waiting for server response", e);
-        }
-        if (errorRef[0] != null) {
-            throw errorRef[0];
-        }
-        return lineRef[0];
     }
 
     private static boolean idMatches(final JsonValue responseId, final int sentId) {
@@ -264,5 +226,41 @@ public final class McpStdioClient implements AutoCloseable {
             return builder.build();
         }
         throw new IllegalArgumentException("Unsupported type: " + value.getClass());
+    }
+
+    /**
+     * An {@link OutputStream} that accumulates bytes and enqueues complete lines
+     * (delimited by {@code \n}) into a {@link LinkedBlockingQueue}.
+     *
+     * <p>The server's {@code mcp-stdio-writer} virtual thread writes to this directly,
+     * bypassing {@link java.io.PipedInputStream} and its {@code synchronized} monitor.
+     * Callers read via {@link #poll}, which uses {@link java.util.concurrent.locks.LockSupport#park}
+     * and is safe to call from virtual threads without pinning a carrier.
+     */
+    private static final class LineQueue extends OutputStream {
+
+        private final LinkedBlockingQueue<String> lines = new LinkedBlockingQueue<>();
+        private final StringBuilder current = new StringBuilder();
+
+        @Override
+        public void write(final int b) {
+            if (b == '\n') {
+                lines.offer(current.toString());
+                current.setLength(0);
+            } else if (b != '\r') {
+                current.append((char) b);
+            }
+        }
+
+        @Override
+        public void write(final byte[] b, final int off, final int len) {
+            for (int i = off; i < off + len; i++) {
+                write(b[i] & 0xFF);
+            }
+        }
+
+        String poll(final Duration timeout) throws InterruptedException {
+            return lines.poll(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        }
     }
 }

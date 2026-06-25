@@ -46,7 +46,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -149,9 +148,11 @@ class McpStdioTests {
 
         assertThat(responses).hasSize(2);
         assertThat(responses).anyMatch(r ->
-            r.get("result").asObject().getString("protocolVersion").equals("2025-03-26"));
+            r.has("result") && r.get("result").asObject().has("protocolVersion")
+                && r.get("result").asObject().getString("protocolVersion").equals("2025-03-26"));
         assertThat(responses).anyMatch(r ->
-            r.get("result").asObject().members().get("tools") instanceof JsonArray);
+            r.has("result") && r.get("result").asObject().has("tools")
+                && r.get("result").asObject().members().get("tools") instanceof JsonArray);
     }
 
     @Test
@@ -393,32 +394,19 @@ class McpStdioTests {
     }
 
     @Test
-    void shouldSkipNotificationsWhenCorrelatingResponses() throws Exception {
-        final var latch = new CountDownLatch(1);
-        final var notifyServer = McpServer.builder("notify-server", "1.0.0")
-            .tool(ToolDef.of("slow_ping", "ping after notification").handle(args -> {
-                // wait until the notification has been pushed before returning
-                try {
-                    latch.await();
-                } catch (final InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-                return McpToolResult.text("pong");
-            }))
+    void shouldSkipNotificationsWhenCorrelatingResponses() {
+        final var notifyServer = McpServer.builder("skip-notify-server", "1.0.0")
+            .tool(ToolDef.of("ping", "simple ping").handle(args -> McpToolResult.text("pong")))
             .build();
 
         try (var client = McpStdioClient.of(notifyServer)) {
             client.send("resources/subscribe", Map.of("uri", "test://x"));
-
-            // push notification first, then unblock the tool
-            Thread.ofVirtual().start(() -> {
-                notifyServer.notifyResourceChanged("test://x");
-                latch.countDown();
-            });
-
-            // client.send must skip the notification and return the real response
+            // Enqueue the notification synchronously from the test thread before sending the
+            // next request. The FIFO writer queue guarantees the notification reaches the pipe
+            // before the tools/call response, so client.send must skip it.
+            notifyServer.notifyResourceChanged("test://x");
             final var response = client.send("tools/call",
-                Map.of("name", "slow_ping", "arguments", Map.of()));
+                Map.of("name", "ping", "arguments", Map.of()));
             assertThat(response.get("result").asObject().get("content")).isInstanceOf(JsonArray.class);
         }
     }
