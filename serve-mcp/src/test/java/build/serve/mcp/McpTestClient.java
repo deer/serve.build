@@ -53,7 +53,7 @@ final class McpTestClient implements AutoCloseable {
     private static final String MCP_PATH = "/mcp";
 
     private final TestServer server;
-    private String sessionId;
+    String sessionId;
     private int nextId = 1;
 
     private McpTestClient(final TestServer server) {

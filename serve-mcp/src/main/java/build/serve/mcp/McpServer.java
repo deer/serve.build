@@ -58,6 +58,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Phaser;
 import java.util.concurrent.atomic.AtomicLong;
@@ -215,7 +216,25 @@ public final class McpServer {
             final var sessionId = exchange.request().header("Mcp-Session-Id");
 
             final var body = exchange.request().bodyAsString();
-            final var request = Json.parse(body).asObject();
+            final var parsed = Json.parse(body);
+
+            if (parsed instanceof JsonArray batch) {
+                if (sessionId.isPresent() && !sessions.containsKey(sessionId.get())) {
+                    exchange.response().status(404).send("Session not found");
+                    return;
+                }
+                final var maybeResponse = dispatchBatch(batch, sessionId.orElse("local"));
+                if (maybeResponse.isEmpty()) {
+                    exchange.response().status(202).send("");
+                    return;
+                }
+                exchange.response()
+                    .header("Content-Type", "application/json")
+                    .send(maybeResponse.get().toJsonString().getBytes(StandardCharsets.UTF_8));
+                return;
+            }
+
+            final var request = parsed.asObject();
             final var isInitialize = "initialize".equals(getString(request, "method"));
 
             if (isInitialize && sessionId.isPresent()) {
@@ -310,8 +329,14 @@ public final class McpServer {
                 phaser.register();
                 Thread.ofVirtual().start(() -> {
                     try {
-                        final var request = Json.parse(captured).asObject();
-                        dispatch(request, "local").ifPresent(r -> queue.offer(Optional.of(r.toJsonString())));
+                        final var parsed = Json.parse(captured);
+                        if (parsed instanceof JsonArray batch) {
+                            dispatchBatch(batch, "local")
+                                .ifPresent(r -> queue.offer(Optional.of(r.toJsonString())));
+                        } else {
+                            dispatch(parsed.asObject(), "local")
+                                .ifPresent(r -> queue.offer(Optional.of(r.toJsonString())));
+                        }
                     } catch (final RuntimeException e) {
                         recorder.warn("Discarding malformed stdio line: %s", e.getMessage());
                     } finally {
@@ -379,6 +404,35 @@ public final class McpServer {
 
         recorder.diagnostic("sent response to: %s", rpcMethod);
         return Optional.of(response);
+    }
+
+    private Optional<JsonValue> dispatchBatch(final JsonArray batch, final String sessionId) {
+        if (batch.values().isEmpty()) {
+            return Optional.of(errorEnvelope(JsonNull.INSTANCE, -32600, "Invalid Request: empty batch"));
+        }
+        final var responses = new ConcurrentLinkedQueue<JsonObject>();
+        final var batchPhaser = new Phaser(1);
+        for (final var item : batch.values()) {
+            if (!(item instanceof JsonObject req)) {
+                responses.add(errorEnvelope(JsonNull.INSTANCE, -32600, "Invalid Request"));
+                continue;
+            }
+            batchPhaser.register();
+            Thread.ofVirtual().start(() -> {
+                try {
+                    dispatch(req, sessionId).ifPresent(responses::add);
+                } finally {
+                    batchPhaser.arriveAndDeregister();
+                }
+            });
+        }
+        batchPhaser.arriveAndAwaitAdvance();
+        if (responses.isEmpty()) {
+            return Optional.empty();
+        }
+        final var arr = JsonArray.builder();
+        responses.forEach(arr::add);
+        return Optional.of(arr.build());
     }
 
     private boolean isOriginAllowed(final Exchange exchange) {
