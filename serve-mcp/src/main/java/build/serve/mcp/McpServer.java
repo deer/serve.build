@@ -148,6 +148,7 @@ public final class McpServer {
         final Set<String> subscriptions = ConcurrentHashMap.newKeySet();
         final AtomicReference<SseEmitter> emitter = new AtomicReference<>();
         volatile Instant lastAccessed = Instant.now();
+        volatile McpLogLevel logLevel;
     }
 
     private SessionState stateFor(final String sessionId) {
@@ -378,7 +379,8 @@ public final class McpServer {
         }
 
         final var response = switch (rpcMethod) {
-            case "initialize" -> envelope(id, handleInitialize(request.members().getOrDefault("params", JsonNull.INSTANCE)));
+            case "initialize" ->
+                envelope(id, handleInitialize(request.members().getOrDefault("params", JsonNull.INSTANCE)));
             case "ping" -> envelope(id, JsonObject.builder().build());
             case "tools/list" -> envelope(id, handleToolsList());
             case "tools/call" -> {
@@ -398,6 +400,10 @@ public final class McpServer {
             case "resources/unsubscribe" -> {
                 final var params = request.members().getOrDefault("params", JsonNull.INSTANCE);
                 yield handleResourcesUnsubscribe(params, sessionId, id);
+            }
+            case "logging/setLevel" -> {
+                final var params = request.members().getOrDefault("params", JsonNull.INSTANCE);
+                yield handleLoggingSetLevel(params, sessionId, id);
             }
             default -> errorEnvelope(id, -32601, "Method not found");
         };
@@ -485,6 +491,7 @@ public final class McpServer {
                 .put("subscribe", true)
                 .put("listChanged", false)
                 .build())
+            .put("logging", JsonObject.builder().build())
             .build();
 
         final var serverInfo = JsonObject.builder()
@@ -719,6 +726,70 @@ public final class McpServer {
             state.subscriptions.remove(uri);
         }
         return envelope(id, JsonObject.builder().build());
+    }
+
+    private JsonObject handleLoggingSetLevel(final JsonValue params, final String sessionId, final JsonValue id) {
+        final var paramsObj = params instanceof JsonObject p ? p : JsonObject.builder().build();
+        final var levelStr = getString(paramsObj, "level");
+        final var level = McpLogLevel.fromString(levelStr);
+        if (level.isEmpty()) {
+            return errorEnvelope(id, -32602, "Invalid log level: " + sanitizeMessage(levelStr));
+        }
+        final var state = stateFor(sessionId);
+        if (state != null) {
+            state.logLevel = level.get();
+        }
+        return envelope(id, JsonObject.builder().build());
+    }
+
+    /**
+     * Pushes a {@code notifications/message} log event to each connected client whose
+     * configured log level threshold is met. Has no effect on clients that have not called
+     * {@code logging/setLevel}, or where {@code level} does not meet their threshold.
+     *
+     * @param level  the severity level
+     * @param logger an optional logger name (may be null or empty)
+     * @param data   the log data payload (may be null)
+     */
+    public void log(final McpLogLevel level, final String logger, final JsonValue data) {
+        final var paramsBuilder = JsonObject.builder().put("level", level.name());
+        if (logger != null && !logger.isEmpty()) {
+            paramsBuilder.put("logger", logger);
+        }
+        if (data != null && !(data instanceof JsonNull)) {
+            paramsBuilder.put("data", data);
+        }
+        final var notification = JsonObject.builder()
+            .put("jsonrpc", "2.0")
+            .put("method", "notifications/message")
+            .put("params", paramsBuilder.build())
+            .build()
+            .toJsonString();
+        final var event = SseEvent.of("message", notification);
+
+        for (final var state : sessions.values()) {
+            final var threshold = state.logLevel;
+            if (threshold == null || !level.meets(threshold)) {
+                continue;
+            }
+            final var emitter = state.emitter.get();
+            if (emitter != null && emitter.isOpen()) {
+                try {
+                    emitter.send(event);
+                } catch (final IOException e) {
+                    recorder.warn("Failed to push log notification: %s", e.getMessage());
+                }
+            }
+        }
+
+        final var q = stdioOutputQueue;
+        final var ss = stdioSession;
+        if (q != null && ss != null) {
+            final var threshold = ss.logLevel;
+            if (threshold != null && level.meets(threshold)) {
+                q.offer(Optional.of(notification));
+            }
+        }
     }
 
     private static JsonObject buildToolResultJson(final McpToolResult toolResult) {
