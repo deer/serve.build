@@ -98,6 +98,20 @@ final class McpTestClient implements AutoCloseable {
     }
 
     /**
+     * Returns the {@code prompts} array from a {@code prompts/list} call.
+     */
+    JsonValue listPrompts() {
+        return postJson(rpc("prompts/list", nextId++, Map.of())).asObject().get("result").asObject().get("prompts");
+    }
+
+    /**
+     * Sends a {@code prompts/get} request and returns the full JSON-RPC response.
+     */
+    JsonValue getPrompt(final String name, final Map<String, Object> arguments) {
+        return postJson(rpc("prompts/get", nextId++, Map.of("name", name, "arguments", arguments)));
+    }
+
+    /**
      * Calls the named tool and returns the {@code result} object.
      */
     JsonValue call(final String toolName, final Map<String, Object> arguments) {

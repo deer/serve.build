@@ -37,6 +37,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -249,13 +250,13 @@ class McpServerTests {
                 }
 
                 @Override
-                public java.util.Optional<String> description() {
-                    return java.util.Optional.of("App config");
+                public Optional<String> description() {
+                    return Optional.of("App config");
                 }
 
                 @Override
-                public java.util.Optional<String> mimeType() {
-                    return java.util.Optional.of("application/json");
+                public Optional<String> mimeType() {
+                    return Optional.of("application/json");
                 }
 
                 @Override
@@ -291,13 +292,13 @@ class McpServerTests {
                 }
 
                 @Override
-                public java.util.Optional<String> description() {
-                    return java.util.Optional.empty();
+                public Optional<String> description() {
+                    return Optional.empty();
                 }
 
                 @Override
-                public java.util.Optional<String> mimeType() {
-                    return java.util.Optional.of("text/plain");
+                public Optional<String> mimeType() {
+                    return Optional.of("text/plain");
                 }
 
                 @Override
@@ -334,13 +335,13 @@ class McpServerTests {
                 }
 
                 @Override
-                public java.util.Optional<String> description() {
-                    return java.util.Optional.empty();
+                public Optional<String> description() {
+                    return Optional.empty();
                 }
 
                 @Override
-                public java.util.Optional<String> mimeType() {
-                    return java.util.Optional.of("image/png");
+                public Optional<String> mimeType() {
+                    return Optional.of("image/png");
                 }
 
                 @Override
@@ -391,13 +392,13 @@ class McpServerTests {
                 }
 
                 @Override
-                public java.util.Optional<String> description() {
-                    return java.util.Optional.of("Any file");
+                public Optional<String> description() {
+                    return Optional.of("Any file");
                 }
 
                 @Override
-                public java.util.Optional<String> mimeType() {
-                    return java.util.Optional.of("text/plain");
+                public Optional<String> mimeType() {
+                    return Optional.of("text/plain");
                 }
 
                 @Override
@@ -408,7 +409,7 @@ class McpServerTests {
             .build())) {
 
             templateClient.initialize();
-            final var result = templateClient.send("resources/templates/list", java.util.Map.of()).asObject()
+            final var result = templateClient.send("resources/templates/list", Map.of()).asObject()
                 .get("result").asObject();
             final var templates = (JsonArray) result.get("resourceTemplates");
             assertThat(templates.values()).hasSize(1);
@@ -435,13 +436,13 @@ class McpServerTests {
                 }
 
                 @Override
-                public java.util.Optional<String> description() {
-                    return java.util.Optional.empty();
+                public Optional<String> description() {
+                    return Optional.empty();
                 }
 
                 @Override
-                public java.util.Optional<String> mimeType() {
-                    return java.util.Optional.of("application/json");
+                public Optional<String> mimeType() {
+                    return Optional.of("application/json");
                 }
 
                 @Override
@@ -475,13 +476,13 @@ class McpServerTests {
                 }
 
                 @Override
-                public java.util.Optional<String> description() {
-                    return java.util.Optional.empty();
+                public Optional<String> description() {
+                    return Optional.empty();
                 }
 
                 @Override
-                public java.util.Optional<String> mimeType() {
-                    return java.util.Optional.empty();
+                public Optional<String> mimeType() {
+                    return Optional.empty();
                 }
 
                 @Override
@@ -501,13 +502,13 @@ class McpServerTests {
                 }
 
                 @Override
-                public java.util.Optional<String> description() {
-                    return java.util.Optional.empty();
+                public Optional<String> description() {
+                    return Optional.empty();
                 }
 
                 @Override
-                public java.util.Optional<String> mimeType() {
-                    return java.util.Optional.empty();
+                public Optional<String> mimeType() {
+                    return Optional.empty();
                 }
 
                 @Override
@@ -542,7 +543,7 @@ class McpServerTests {
                 Thread.sleep(100); // let SSE connection establish
 
                 final var subResponse = subClient.send("resources/subscribe",
-                    java.util.Map.of("uri", "file:///data.txt")).asObject();
+                    Map.of("uri", "file:///data.txt")).asObject();
                 assertThat(subResponse.members()).containsKey("result");
 
                 mcpServer.notifyResourceChanged("file:///data.txt");
@@ -565,8 +566,8 @@ class McpServerTests {
             try (final var stream = subClient.sseStream()) {
                 Thread.sleep(100);
 
-                subClient.send("resources/subscribe", java.util.Map.of("uri", "file:///data.txt"));
-                subClient.send("resources/unsubscribe", java.util.Map.of("uri", "file:///data.txt"));
+                subClient.send("resources/subscribe", Map.of("uri", "file:///data.txt"));
+                subClient.send("resources/unsubscribe", Map.of("uri", "file:///data.txt"));
 
                 mcpServer.notifyResourceChanged("file:///data.txt");
 
@@ -584,7 +585,7 @@ class McpServerTests {
             try (final var stream = subClient.sseStream()) {
                 Thread.sleep(100);
 
-                subClient.send("resources/subscribe", java.util.Map.of("uri", "file:///a.txt"));
+                subClient.send("resources/subscribe", Map.of("uri", "file:///a.txt"));
 
                 mcpServer.notifyResourceChanged("file:///b.txt");
 
@@ -723,18 +724,18 @@ class McpServerTests {
                 }
 
                 @Override
-                public java.util.Optional<String> description() {
-                    return java.util.Optional.empty();
+                public Optional<String> description() {
+                    return Optional.empty();
                 }
 
                 @Override
-                public java.util.Optional<String> mimeType() {
-                    return java.util.Optional.of("application/octet-stream");
+                public Optional<String> mimeType() {
+                    return Optional.of("application/octet-stream");
                 }
 
                 @Override
-                public java.util.Optional<Long> size() {
-                    return java.util.Optional.of(1024L);
+                public Optional<Long> size() {
+                    return Optional.of(1024L);
                 }
 
                 @Override
@@ -765,13 +766,13 @@ class McpServerTests {
                 }
 
                 @Override
-                public java.util.Optional<String> description() {
-                    return java.util.Optional.empty();
+                public Optional<String> description() {
+                    return Optional.empty();
                 }
 
                 @Override
-                public java.util.Optional<String> mimeType() {
-                    return java.util.Optional.empty();
+                public Optional<String> mimeType() {
+                    return Optional.empty();
                 }
 
                 @Override
@@ -982,6 +983,248 @@ class McpServerTests {
                 .send();
 
             assertThat(response.status()).isEqualTo(202);
+        }
+    }
+
+    @Test
+    void shouldAdvertisePromptsCapabilityOnInitialize() {
+        final var result = client.initialize().asObject().get("result").asObject();
+        final var prompts = result.get("capabilities").asObject().get("prompts").asObject();
+        assertThat(prompts.get("listChanged").asBoolean().value()).isTrue();
+    }
+
+    @Test
+    void shouldListEmptyPromptsWhenNoneRegistered() {
+        client.initialize();
+        final var prompts = (JsonArray) client.listPrompts();
+        assertThat(prompts.values()).isEmpty();
+    }
+
+    @Test
+    void shouldListRegisteredPrompt() {
+        try (final var promptClient = McpTestClient.start(McpServer.builder("p-server", "1.0.0")
+            .prompt(new McpPrompt() {
+                @Override
+                public String name() {
+                    return "greet";
+                }
+
+                @Override
+                public Optional<String> description() {
+                    return Optional.of("Greets someone");
+                }
+
+                @Override
+                public List<McpPromptArgument> arguments() {
+                    return List.of(McpPromptArgument.required("name", "Person to greet"));
+                }
+
+                @Override
+                public McpPromptResult get(final Map<String, String> arguments) {
+                    return McpPromptResult.of(McpPromptMessage.userText("Hello, " + arguments.get("name") + "!"));
+                }
+            })
+            .build())) {
+
+            promptClient.initialize();
+            final var prompts = (JsonArray) promptClient.listPrompts();
+            assertThat(prompts.values()).hasSize(1);
+            final var p = prompts.values().get(0).asObject();
+            assertThat(p.getString("name")).isEqualTo("greet");
+            assertThat(p.getString("description")).isEqualTo("Greets someone");
+            final var args = (JsonArray) p.get("arguments");
+            assertThat(args.values()).hasSize(1);
+            final var arg = args.values().get(0).asObject();
+            assertThat(arg.getString("name")).isEqualTo("name");
+            assertThat(arg.getString("description")).isEqualTo("Person to greet");
+            assertThat(arg.get("required").asBoolean().value()).isTrue();
+        }
+    }
+
+    @Test
+    void shouldOmitArgumentsWhenPromptHasNone() {
+        try (final var promptClient = McpTestClient.start(McpServer.builder("p-server", "1.0.0")
+            .prompt(new McpPrompt() {
+                @Override
+                public String name() {
+                    return "static_prompt";
+                }
+
+                @Override
+                public Optional<String> description() {
+                    return Optional.empty();
+                }
+
+                @Override
+                public McpPromptResult get(final Map<String, String> arguments) {
+                    return McpPromptResult.of(McpPromptMessage.userText("Fixed content"));
+                }
+            })
+            .build())) {
+
+            promptClient.initialize();
+            final var p = ((JsonArray) promptClient.listPrompts()).values().get(0).asObject();
+            assertThat(p.members()).doesNotContainKey("arguments");
+            assertThat(p.members()).doesNotContainKey("description");
+        }
+    }
+
+    @Test
+    void shouldGetPromptWithTextMessage() {
+        try (final var promptClient = McpTestClient.start(McpServer.builder("p-server", "1.0.0")
+            .prompt(new McpPrompt() {
+                @Override
+                public String name() {
+                    return "greet";
+                }
+
+                @Override
+                public Optional<String> description() {
+                    return Optional.empty();
+                }
+
+                @Override
+                public McpPromptResult get(final Map<String, String> arguments) {
+                    return McpPromptResult.of(
+                        "Greeting prompt",
+                        McpPromptMessage.userText("Hello, " + arguments.getOrDefault("name", "world") + "!")
+                    );
+                }
+            })
+            .build())) {
+
+            promptClient.initialize();
+            final var response = promptClient.getPrompt("greet", Map.of("name", "Alice")).asObject();
+            assertThat(response.members()).containsKey("result");
+            final var result = response.get("result").asObject();
+            assertThat(result.getString("description")).isEqualTo("Greeting prompt");
+            final var messages = (JsonArray) result.get("messages");
+            assertThat(messages.values()).hasSize(1);
+            final var msg = messages.values().get(0).asObject();
+            assertThat(msg.getString("role")).isEqualTo("user");
+            final var content = msg.get("content").asObject();
+            assertThat(content.getString("type")).isEqualTo("text");
+            assertThat(content.getString("text")).isEqualTo("Hello, Alice!");
+        }
+    }
+
+    @Test
+    void shouldGetPromptWithImageMessage() {
+        try (final var promptClient = McpTestClient.start(McpServer.builder("p-server", "1.0.0")
+            .prompt(new McpPrompt() {
+                @Override
+                public String name() {
+                    return "show_image";
+                }
+
+                @Override
+                public Optional<String> description() {
+                    return Optional.empty();
+                }
+
+                @Override
+                public McpPromptResult get(final Map<String, String> arguments) {
+                    return McpPromptResult.of(McpPromptMessage.userImage("iVBORw0KGgo=", "image/png"));
+                }
+            })
+            .build())) {
+
+            promptClient.initialize();
+            final var result = promptClient.getPrompt("show_image", Map.of()).asObject().get("result").asObject();
+            final var msg = ((JsonArray) result.get("messages")).values().get(0).asObject();
+            assertThat(msg.getString("role")).isEqualTo("user");
+            final var content = msg.get("content").asObject();
+            assertThat(content.getString("type")).isEqualTo("image");
+            assertThat(content.getString("data")).isEqualTo("iVBORw0KGgo=");
+            assertThat(content.getString("mimeType")).isEqualTo("image/png");
+        }
+    }
+
+    @Test
+    void shouldGetPromptWithAssistantRole() {
+        try (final var promptClient = McpTestClient.start(McpServer.builder("p-server", "1.0.0")
+            .prompt(new McpPrompt() {
+                @Override
+                public String name() {
+                    return "convo";
+                }
+
+                @Override
+                public Optional<String> description() {
+                    return Optional.empty();
+                }
+
+                @Override
+                public McpPromptResult get(final Map<String, String> arguments) {
+                    return McpPromptResult.of(
+                        McpPromptMessage.userText("What is Java?"),
+                        McpPromptMessage.assistantText("Java is a programming language.")
+                    );
+                }
+            })
+            .build())) {
+
+            promptClient.initialize();
+            final var messages = (JsonArray) promptClient.getPrompt("convo", Map.of())
+                .asObject().get("result").asObject().get("messages");
+            assertThat(messages.values()).hasSize(2);
+            assertThat(messages.values().get(0).asObject().getString("role")).isEqualTo("user");
+            assertThat(messages.values().get(1).asObject().getString("role")).isEqualTo("assistant");
+        }
+    }
+
+    @Test
+    void shouldOmitDescriptionFromGetPromptResultWhenAbsent() {
+        try (final var promptClient = McpTestClient.start(McpServer.builder("p-server", "1.0.0")
+            .prompt(new McpPrompt() {
+                @Override
+                public String name() {
+                    return "nodesc";
+                }
+
+                @Override
+                public Optional<String> description() {
+                    return Optional.empty();
+                }
+
+                @Override
+                public McpPromptResult get(final Map<String, String> arguments) {
+                    return McpPromptResult.of(McpPromptMessage.userText("content"));
+                }
+            })
+            .build())) {
+
+            promptClient.initialize();
+            final var result = promptClient.getPrompt("nodesc", Map.of()).asObject().get("result").asObject();
+            assertThat(result.members()).doesNotContainKey("description");
+        }
+    }
+
+    @Test
+    void shouldReturnErrorForUnknownPrompt() {
+        client.initialize();
+        final var response = client.getPrompt("nonexistent", Map.of()).asObject();
+        assertThat(response.members()).containsKey("error");
+        assertThat(response.get("error").asObject().get("code").asNumber().toNumber().intValue()).isEqualTo(-32602);
+        assertThat(response.get("error").asObject().getString("message")).contains("Unknown prompt");
+    }
+
+    @Test
+    void shouldPushPromptsListChangedNotificationOverSse() throws InterruptedException {
+        final var mcpServer = McpServer.builder("p-server", "1.0.0").build();
+        try (final var promptClient = McpTestClient.start(mcpServer)) {
+            promptClient.initialize();
+
+            try (final var stream = promptClient.sseStream()) {
+                Thread.sleep(100);
+
+                mcpServer.notifyPromptsChanged();
+
+                final var events = stream.collect(1, java.time.Duration.ofSeconds(5));
+                assertThat(events).hasSize(1);
+                final var notification = Json.parse(events.get(0).data()).asObject();
+                assertThat(notification.getString("method")).isEqualTo("notifications/prompts/list_changed");
+            }
         }
     }
 
