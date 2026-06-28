@@ -49,6 +49,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -90,6 +91,7 @@ public final class McpServer {
     private final Map<String, McpTool> tools;
     private final Map<String, McpResource> resources;
     private final List<TemplateEntry> templates;
+    private final Map<String, McpPrompt> prompts;
     private final Set<String> allowedOrigins;
     private final int maxSessions;
     private final int maxSubscriptionsPerSession;
@@ -127,6 +129,12 @@ public final class McpServer {
             templateList.add(new TemplateEntry(template, uriTemplateToPattern(template.uriTemplate())));
         }
         this.templates = List.copyOf(templateList);
+
+        final var promptMap = new LinkedHashMap<String, McpPrompt>();
+        for (final var prompt : builder.prompts) {
+            promptMap.put(prompt.name(), prompt);
+        }
+        this.prompts = Map.copyOf(promptMap);
     }
 
     private void startSessionReaper(final Duration idleTimeout) {
@@ -405,6 +413,11 @@ public final class McpServer {
                 final var params = request.members().getOrDefault("params", JsonNull.INSTANCE);
                 yield handleLoggingSetLevel(params, sessionId, id);
             }
+            case "prompts/list" -> envelope(id, handlePromptsList());
+            case "prompts/get" -> {
+                final var params = request.members().getOrDefault("params", JsonNull.INSTANCE);
+                yield handlePromptsGet(params, id);
+            }
             default -> errorEnvelope(id, -32601, "Method not found");
         };
 
@@ -492,6 +505,7 @@ public final class McpServer {
                 .put("listChanged", false)
                 .build())
             .put("logging", JsonObject.builder().build())
+            .put("prompts", JsonObject.builder().put("listChanged", true).build())
             .build();
 
         final var serverInfo = JsonObject.builder()
@@ -742,6 +756,107 @@ public final class McpServer {
         return envelope(id, JsonObject.builder().build());
     }
 
+    private JsonObject handlePromptsList() {
+        final var promptsArray = JsonArray.builder();
+        for (final var prompt : prompts.values()) {
+            final var builder = JsonObject.builder().put("name", prompt.name());
+            prompt.description().ifPresent(d -> builder.put("description", d));
+            final var args = prompt.arguments();
+            if (!args.isEmpty()) {
+                final var argsArray = JsonArray.builder();
+                for (final var arg : args) {
+                    final var argBuilder = JsonObject.builder()
+                        .put("name", arg.name())
+                        .put("required", arg.required());
+                    arg.description().ifPresent(d -> argBuilder.put("description", d));
+                    argsArray.add(argBuilder.build());
+                }
+                builder.put("arguments", argsArray.build());
+            }
+            promptsArray.add(builder.build());
+        }
+        return JsonObject.builder().put("prompts", promptsArray.build()).build();
+    }
+
+    private JsonObject handlePromptsGet(final JsonValue params, final JsonValue id) {
+        final var paramsObj = params instanceof JsonObject p ? p : JsonObject.builder().build();
+        final var name = getString(paramsObj, "name");
+        final var prompt = prompts.get(name);
+        if (prompt == null) {
+            return errorEnvelope(id, -32602, "Unknown prompt: " + sanitizeMessage(name));
+        }
+
+        final var rawArgs = paramsObj.members().get("arguments");
+        final var argMap = new HashMap<String, String>();
+        if (rawArgs instanceof JsonObject argsObj) {
+            for (final var entry : argsObj.members().entrySet()) {
+                if (entry.getValue() instanceof JsonString s) {
+                    argMap.put(entry.getKey(), s.value());
+                }
+            }
+        }
+
+        final McpPromptResult result;
+        try {
+            result = prompt.get(Map.copyOf(argMap));
+        } catch (final Exception e) {
+            return errorEnvelope(id, -32603, "Prompt rendering failed: " + sanitizeMessage(e.getMessage()));
+        }
+
+        final var messagesArray = JsonArray.builder();
+        for (final var msg : result.messages()) {
+            final var contentNode = switch (msg) {
+                case McpPromptMessage.Text t -> JsonObject.builder()
+                    .put("type", "text")
+                    .put("text", t.text())
+                    .build();
+                case McpPromptMessage.Image img -> JsonObject.builder()
+                    .put("type", "image")
+                    .put("data", img.data())
+                    .put("mimeType", img.mimeType())
+                    .build();
+            };
+            messagesArray.add(JsonObject.builder()
+                .put("role", msg.role())
+                .put("content", contentNode)
+                .build());
+        }
+
+        final var resultBuilder = JsonObject.builder();
+        result.description().ifPresent(d -> resultBuilder.put("description", d));
+        resultBuilder.put("messages", messagesArray.build());
+        return envelope(id, resultBuilder.build());
+    }
+
+    /**
+     * Pushes a {@code notifications/prompts/list_changed} event to all connected clients.
+     * Call this whenever the set of available prompts changes at runtime.
+     */
+    public void notifyPromptsChanged() {
+        final var notification = JsonObject.builder()
+            .put("jsonrpc", "2.0")
+            .put("method", "notifications/prompts/list_changed")
+            .build()
+            .toJsonString();
+        final var event = SseEvent.of("message", notification);
+
+        for (final var state : sessions.values()) {
+            final var emitter = state.emitter.get();
+            if (emitter != null && emitter.isOpen()) {
+                try {
+                    emitter.send(event);
+                } catch (final IOException e) {
+                    recorder.warn("Failed to push prompts/list_changed notification: %s", e.getMessage());
+                }
+            }
+        }
+
+        final var q = stdioOutputQueue;
+        if (q != null) {
+            q.offer(Optional.of(notification));
+        }
+    }
+
     /**
      * Pushes a {@code notifications/message} log event to each connected client whose
      * configured log level threshold is met. Has no effect on clients that have not called
@@ -901,6 +1016,7 @@ public final class McpServer {
         private final List<McpTool> tools = new ArrayList<>();
         private final List<McpResource> resources = new ArrayList<>();
         private final List<McpResourceTemplate> templates = new ArrayList<>();
+        private final List<McpPrompt> prompts = new ArrayList<>();
         private final HashSet<String> allowedOrigins = new HashSet<>();
         private int maxSessions = 10_000;
         private int maxSubscriptionsPerSession = 1_000;
@@ -955,6 +1071,17 @@ public final class McpServer {
          */
         public Builder template(final McpResourceTemplate template) {
             templates.add(template);
+            return this;
+        }
+
+        /**
+         * Adds a prompt template to this server.
+         *
+         * @param prompt the prompt
+         * @return this builder
+         */
+        public Builder prompt(final McpPrompt prompt) {
+            prompts.add(prompt);
             return this;
         }
 
