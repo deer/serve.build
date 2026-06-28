@@ -420,6 +420,110 @@ class McpStdioTests {
     }
 
     @Test
+    void shouldAdvertiseLoggingCapability() {
+        final var response = sendOne("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\","
+            + "\"params\":{\"protocolVersion\":\"2025-03-26\"}}");
+        final var capabilities = response.get("result").asObject().get("capabilities").asObject();
+        assertThat(capabilities.members()).containsKey("logging");
+    }
+
+    @Test
+    void shouldHandleLoggingSetLevel() {
+        final var response = sendOne("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"logging/setLevel\","
+            + "\"params\":{\"level\":\"info\"}}");
+        assertThat(response.members()).containsKey("result");
+    }
+
+    @Test
+    void shouldReturnErrorForInvalidLogLevel() {
+        final var response = sendOne("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"logging/setLevel\","
+            + "\"params\":{\"level\":\"bogus\"}}");
+        assertThat(response.members()).containsKey("error");
+        assertThat(response.get("error").asObject().getString("message")).contains("Invalid log level");
+    }
+
+    @Test
+    void shouldDeliverLogNotificationsOverStdio() throws Exception {
+        final var logServer = McpServer.builder("log-server", "1.0.0").build();
+
+        final var clientToServer = new PipedOutputStream();
+        final var serverToClient = new PipedOutputStream();
+        final var serverIn = new PipedInputStream(clientToServer);
+        final var clientIn = new PipedInputStream(serverToClient);
+
+        final var loopThread = Thread.ofVirtual().start(
+            () -> logServer.stdioLoop(serverIn, serverToClient));
+
+        final var writer = new PrintWriter(clientToServer, true, StandardCharsets.UTF_8);
+        final var reader = new BufferedReader(new InputStreamReader(clientIn, StandardCharsets.UTF_8));
+
+        writer.println("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"logging/setLevel\","
+            + "\"params\":{\"level\":\"info\"}}");
+        assertThat(Json.parse(reader.readLine()).asObject().members()).containsKey("result");
+
+        logServer.log(McpLogLevel.info, "test", JsonObject.builder().put("msg", "hello").build());
+
+        final var notification = Json.parse(reader.readLine()).asObject();
+        assertThat(notification.getString("method")).isEqualTo("notifications/message");
+        final var params = notification.get("params").asObject();
+        assertThat(params.getString("level")).isEqualTo("info");
+        assertThat(params.getString("logger")).isEqualTo("test");
+
+        writer.close();
+        loopThread.join(5_000);
+    }
+
+    @Test
+    void shouldRespectLogLevelThreshold() throws Exception {
+        final var logServer = McpServer.builder("log-server", "1.0.0")
+            .tool(ToolDef.of("ping", "ping").handle(args -> McpToolResult.text("pong")))
+            .build();
+
+        final var clientToServer = new PipedOutputStream();
+        final var serverToClient = new PipedOutputStream();
+        final var serverIn = new PipedInputStream(clientToServer);
+        final var clientIn = new PipedInputStream(serverToClient);
+
+        final var loopThread = Thread.ofVirtual().start(
+            () -> logServer.stdioLoop(serverIn, serverToClient));
+
+        final var writer = new PrintWriter(clientToServer, true, StandardCharsets.UTF_8);
+        final var reader = new BufferedReader(new InputStreamReader(clientIn, StandardCharsets.UTF_8));
+
+        writer.println("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"logging/setLevel\","
+            + "\"params\":{\"level\":\"warning\"}}");
+        assertThat(Json.parse(reader.readLine()).asObject().members()).containsKey("result");
+
+        // debug is below the warning threshold — should be silently dropped
+        logServer.log(McpLogLevel.debug, "test", null);
+
+        // a ping should arrive with no preceding notification
+        writer.println("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\",\"params\":{}}");
+        final var pingResponse = Json.parse(reader.readLine()).asObject();
+        assertThat(pingResponse.members()).containsKey("result");
+        assertThat(pingResponse.members()).doesNotContainKey("method");
+
+        writer.close();
+        loopThread.join(5_000);
+    }
+
+    @Test
+    void shouldNotDeliverLogNotificationsWhenLevelNotSet() {
+        final var logServer = McpServer.builder("log-server", "1.0.0").build();
+        // no logging/setLevel called — log() must be a no-op
+        final var out = new ByteArrayOutputStream();
+        logServer.stdioLoop(
+            toStream("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"params\":{}}\n"),
+            out);
+        // push after loop ends to verify no queue interaction
+        logServer.log(McpLogLevel.debug, "test", null);
+        final var lines = out.toString(StandardCharsets.UTF_8).lines()
+            .filter(l -> !l.isBlank()).toList();
+        assertThat(lines).hasSize(1);
+        assertThat(Json.parse(lines.get(0)).asObject().members()).containsKey("result");
+    }
+
+    @Test
     void shouldHandleBatchRequest() {
         final var lines = "[{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{}},"
             + "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\",\"params\":{}}]\n";
