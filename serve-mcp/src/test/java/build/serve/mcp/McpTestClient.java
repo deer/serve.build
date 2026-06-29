@@ -112,6 +112,26 @@ final class McpTestClient implements AutoCloseable {
     }
 
     /**
+     * Sends a {@code completion/complete} for a prompt argument and returns the full JSON-RPC response.
+     */
+    JsonValue completePromptArg(final String promptName, final String argName, final String value) {
+        final var params = Map.<String, Object>of(
+            "ref", Map.of("type", "ref/prompt", "name", promptName),
+            "argument", Map.of("name", argName, "value", value));
+        return postJson(rpc("completion/complete", nextId++, params));
+    }
+
+    /**
+     * Sends a {@code completion/complete} for a resource template argument and returns the full JSON-RPC response.
+     */
+    JsonValue completeResourceArg(final String uriTemplate, final String argName, final String value) {
+        final var params = Map.<String, Object>of(
+            "ref", Map.of("type", "ref/resource", "uri", uriTemplate),
+            "argument", Map.of("name", argName, "value", value));
+        return postJson(rpc("completion/complete", nextId++, params));
+    }
+
+    /**
      * Calls the named tool and returns the {@code result} object.
      */
     JsonValue call(final String toolName, final Map<String, Object> arguments) {

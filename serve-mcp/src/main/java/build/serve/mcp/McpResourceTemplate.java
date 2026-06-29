@@ -19,6 +19,7 @@
  */
 package build.serve.mcp;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -70,4 +71,16 @@ public interface McpResourceTemplate {
      * @throws Exception if reading fails
      */
     McpResourceContent read(String uri) throws Exception;
+
+    /**
+     * Returns completion suggestions for the named URI template variable given a partial value.
+     * Defaults to an empty list; override to provide autocomplete for specific variables.
+     *
+     * @param argumentName the URI template variable name (e.g. {@code "table"} in {@code db://{table}/{id}})
+     * @param value        the partial value typed so far
+     * @return matching suggestions (may be empty)
+     */
+    default List<String> complete(final String argumentName, final String value) {
+        return List.of();
+    }
 }

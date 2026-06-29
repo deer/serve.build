@@ -418,6 +418,10 @@ public final class McpServer {
                 final var params = request.members().getOrDefault("params", JsonNull.INSTANCE);
                 yield handlePromptsGet(params, id);
             }
+            case "completion/complete" -> {
+                final var params = request.members().getOrDefault("params", JsonNull.INSTANCE);
+                yield handleCompletionComplete(params, id);
+            }
             default -> errorEnvelope(id, -32601, "Method not found");
         };
 
@@ -506,6 +510,7 @@ public final class McpServer {
                 .build())
             .put("logging", JsonObject.builder().build())
             .put("prompts", JsonObject.builder().put("listChanged", true).build())
+            .put("completions", JsonObject.builder().build())
             .build();
 
         final var serverInfo = JsonObject.builder()
@@ -826,6 +831,58 @@ public final class McpServer {
         result.description().ifPresent(d -> resultBuilder.put("description", d));
         resultBuilder.put("messages", messagesArray.build());
         return envelope(id, resultBuilder.build());
+    }
+
+    private JsonObject handleCompletionComplete(final JsonValue params, final JsonValue id) {
+        final var paramsObj = params instanceof JsonObject p ? p : JsonObject.builder().build();
+        final var ref = paramsObj.members().get("ref");
+        final var argument = paramsObj.members().get("argument");
+
+        if (!(ref instanceof JsonObject refObj) || !(argument instanceof JsonObject argObj)) {
+            return errorEnvelope(id, -32602, "Invalid params: ref and argument are required");
+        }
+
+        final var refType = getString(refObj, "type");
+        final var argName = getString(argObj, "name");
+        final var argValue = getString(argObj, "value");
+
+        final List<String> values = switch (refType) {
+            case "ref/prompt" -> {
+                final var prompt = prompts.get(getString(refObj, "name"));
+                if (prompt == null) {
+                    yield List.of();
+                }
+                yield prompt.arguments().stream()
+                    .filter(a -> a.name().equals(argName))
+                    .findFirst()
+                    .flatMap(McpPromptArgument::completer)
+                    .map(fn -> fn.apply(argValue))
+                    .orElse(List.of());
+            }
+            case "ref/resource" -> {
+                final var template = findTemplateByUri(getString(refObj, "uri"));
+                yield template == null ? List.of() : template.complete(argName, argValue);
+            }
+            default -> List.of();
+        };
+
+        final var capped = values.size() > 100 ? values.subList(0, 100) : values;
+        final var arr = JsonArray.builder();
+        capped.forEach(v -> arr.add(JsonString.of(v)));
+        return envelope(id, JsonObject.builder()
+            .put("completion", JsonObject.builder()
+                .put("values", arr.build())
+                .build())
+            .build());
+    }
+
+    private McpResourceTemplate findTemplateByUri(final String uriTemplate) {
+        for (final var entry : templates) {
+            if (entry.template().uriTemplate().equals(uriTemplate)) {
+                return entry.template();
+            }
+        }
+        return null;
     }
 
     /**

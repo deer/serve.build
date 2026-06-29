@@ -38,6 +38,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -1226,6 +1227,184 @@ class McpServerTests {
                 assertThat(notification.getString("method")).isEqualTo("notifications/prompts/list_changed");
             }
         }
+    }
+
+    @Test
+    void shouldAdvertiseCompletionsCapabilityOnInitialize() {
+        final var result = client.initialize().asObject().get("result").asObject();
+        assertThat(result.get("capabilities").asObject().members()).containsKey("completions");
+    }
+
+    @Test
+    void shouldCompletePromptArgument() {
+        try (final var completionClient = McpTestClient.start(McpServer.builder("c-server", "1.0.0")
+            .prompt(new McpPrompt() {
+                @Override
+                public String name() {
+                    return "greet";
+                }
+
+                @Override
+                public Optional<String> description() {
+                    return Optional.empty();
+                }
+
+                @Override
+                public List<McpPromptArgument> arguments() {
+                    return List.of(McpPromptArgument.required("city", "City name")
+                        .withCompleter(v -> List.of("Berlin", "Boston", "Barcelona")
+                            .stream().filter(c -> c.toLowerCase().startsWith(v.toLowerCase())).toList()));
+                }
+
+                @Override
+                public McpPromptResult get(final Map<String, String> arguments) {
+                    return McpPromptResult.of(McpPromptMessage.userText("Hello from " + arguments.get("city")));
+                }
+            })
+            .build())) {
+
+            completionClient.initialize();
+            final var response = completionClient.completePromptArg("greet", "city", "B").asObject();
+            assertThat(response.members()).containsKey("result");
+            final var values = (JsonArray) response.get("result").asObject().get("completion").asObject().get("values");
+            assertThat(values.values()).hasSize(3);
+            assertThat(values.values().stream().map(v -> v.asString().value()).toList())
+                .containsExactlyInAnyOrder("Berlin", "Boston", "Barcelona");
+        }
+    }
+
+    @Test
+    void shouldReturnEmptyCompletionForUnknownPrompt() {
+        client.initialize();
+        final var response = client.completePromptArg("nonexistent", "arg", "v").asObject();
+        assertThat(response.members()).containsKey("result");
+        final var values = (JsonArray) response.get("result").asObject().get("completion").asObject().get("values");
+        assertThat(values.values()).isEmpty();
+    }
+
+    @Test
+    void shouldReturnEmptyCompletionForArgumentWithNoCompleter() {
+        try (final var noCompleterClient = McpTestClient.start(McpServer.builder("c-server", "1.0.0")
+            .prompt(new McpPrompt() {
+                @Override
+                public String name() {
+                    return "greet";
+                }
+
+                @Override
+                public Optional<String> description() {
+                    return Optional.empty();
+                }
+
+                @Override
+                public List<McpPromptArgument> arguments() {
+                    return List.of(McpPromptArgument.required("name", "Name"));
+                }
+
+                @Override
+                public McpPromptResult get(final Map<String, String> arguments) {
+                    return McpPromptResult.of(McpPromptMessage.userText("Hi"));
+                }
+            })
+            .build())) {
+
+            noCompleterClient.initialize();
+            final var response = noCompleterClient.completePromptArg("greet", "name", "A").asObject();
+            final var values = (JsonArray) response.get("result").asObject().get("completion").asObject().get("values");
+            assertThat(values.values()).isEmpty();
+        }
+    }
+
+    @Test
+    void shouldCompleteResourceTemplateArgument() {
+        try (final var templateClient = McpTestClient.start(McpServer.builder("c-server", "1.0.0")
+            .template(new McpResourceTemplate() {
+                @Override
+                public String uriTemplate() {
+                    return "db://{table}/{id}";
+                }
+
+                @Override
+                public String name() {
+                    return "DB Row";
+                }
+
+                @Override
+                public Optional<String> description() {
+                    return Optional.empty();
+                }
+
+                @Override
+                public Optional<String> mimeType() {
+                    return Optional.empty();
+                }
+
+                @Override
+                public McpResourceContent read(final String uri) {
+                    return new McpResourceContent.Text(uri, "application/json", "{}");
+                }
+
+                @Override
+                public List<String> complete(final String argumentName, final String value) {
+                    if ("table".equals(argumentName)) {
+                        return List.of("users", "orders").stream()
+                            .filter(t -> t.startsWith(value)).toList();
+                    }
+                    return List.of();
+                }
+            })
+            .build())) {
+
+            templateClient.initialize();
+            final var response = templateClient.completeResourceArg("db://{table}/{id}", "table", "u").asObject();
+            assertThat(response.members()).containsKey("result");
+            final var values = (JsonArray) response.get("result").asObject().get("completion").asObject().get("values");
+            assertThat(values.values()).hasSize(1);
+            assertThat(values.values().get(0).asString().value()).isEqualTo("users");
+        }
+    }
+
+    @Test
+    void shouldCapCompletionsAtOneHundred() {
+        try (final var capClient = McpTestClient.start(McpServer.builder("c-server", "1.0.0")
+            .prompt(new McpPrompt() {
+                @Override
+                public String name() {
+                    return "big";
+                }
+
+                @Override
+                public Optional<String> description() {
+                    return Optional.empty();
+                }
+
+                @Override
+                public List<McpPromptArgument> arguments() {
+                    return List.of(McpPromptArgument.required("x")
+                        .withCompleter(v -> IntStream.range(0, 200)
+                            .mapToObj(Integer::toString).toList()));
+                }
+
+                @Override
+                public McpPromptResult get(final Map<String, String> arguments) {
+                    return McpPromptResult.of(McpPromptMessage.userText(""));
+                }
+            })
+            .build())) {
+
+            capClient.initialize();
+            final var response = capClient.completePromptArg("big", "x", "").asObject();
+            final var values = (JsonArray) response.get("result").asObject().get("completion").asObject().get("values");
+            assertThat(values.values()).hasSize(100);
+        }
+    }
+
+    @Test
+    void shouldReturnErrorForMissingRefOrArgument() {
+        client.initialize();
+        final var response = client.send("completion/complete", Map.of()).asObject();
+        assertThat(response.members()).containsKey("error");
+        assertThat(response.get("error").asObject().get("code").asNumber().toNumber().intValue()).isEqualTo(-32602);
     }
 
     /**
