@@ -19,7 +19,9 @@
  */
 package build.serve.mcp;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * Describes a named argument accepted by an {@link McpPrompt}.
@@ -27,10 +29,12 @@ import java.util.Optional;
  * @param name        the argument name
  * @param description an optional human-readable description
  * @param required    whether the argument must be supplied by the caller
+ * @param completer   an optional function that returns completion suggestions given a partial value
  * @author reed.vonredwitz
  * @since Jun-2026
  */
-public record McpPromptArgument(String name, Optional<String> description, boolean required) {
+public record McpPromptArgument(String name, Optional<String> description, boolean required,
+                                Optional<Function<String, List<String>>> completer) {
 
     /**
      * Creates a required argument with a description.
@@ -40,7 +44,7 @@ public record McpPromptArgument(String name, Optional<String> description, boole
      * @return the argument
      */
     public static McpPromptArgument required(final String name, final String description) {
-        return new McpPromptArgument(name, Optional.of(description), true);
+        return new McpPromptArgument(name, Optional.of(description), true, Optional.empty());
     }
 
     /**
@@ -50,7 +54,7 @@ public record McpPromptArgument(String name, Optional<String> description, boole
      * @return the argument
      */
     public static McpPromptArgument required(final String name) {
-        return new McpPromptArgument(name, Optional.empty(), true);
+        return new McpPromptArgument(name, Optional.empty(), true, Optional.empty());
     }
 
     /**
@@ -61,7 +65,7 @@ public record McpPromptArgument(String name, Optional<String> description, boole
      * @return the argument
      */
     public static McpPromptArgument optional(final String name, final String description) {
-        return new McpPromptArgument(name, Optional.of(description), false);
+        return new McpPromptArgument(name, Optional.of(description), false, Optional.empty());
     }
 
     /**
@@ -71,6 +75,17 @@ public record McpPromptArgument(String name, Optional<String> description, boole
      * @return the argument
      */
     public static McpPromptArgument optional(final String name) {
-        return new McpPromptArgument(name, Optional.empty(), false);
+        return new McpPromptArgument(name, Optional.empty(), false, Optional.empty());
+    }
+
+    /**
+     * Returns a copy of this argument with the given completion function attached.
+     * The function receives the partial value typed so far and returns matching suggestions.
+     *
+     * @param completionFn the completion function
+     * @return a new argument with the completer set
+     */
+    public McpPromptArgument withCompleter(final Function<String, List<String>> completionFn) {
+        return new McpPromptArgument(name, description, required, Optional.of(completionFn));
     }
 }
