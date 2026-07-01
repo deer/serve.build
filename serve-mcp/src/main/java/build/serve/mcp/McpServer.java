@@ -56,6 +56,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -85,6 +86,13 @@ public final class McpServer {
      * Absent for tool calls made without a session header (e.g. local single-user use).
      */
     public static final ScopedValue<String> SESSION_ID = ScopedValue.newInstance();
+
+    /**
+     * ScopedValue bound to a {@link ProgressReporter} when the client's {@code tools/call}
+     * request included a {@code _meta.progressToken}. Tools should check
+     * {@link ScopedValue#isBound()} before calling the reporter.
+     */
+    public static final ScopedValue<ProgressReporter> PROGRESS_REPORTER = ScopedValue.newInstance();
 
     private final McpServerInfo info;
     private final String instructions;
@@ -568,11 +576,25 @@ public final class McpServer {
             return errorEnvelope(id, -32602, "Unknown tool: " + sanitizeMessage(toolName));
         }
 
+        final var meta = paramsObj.members().get("_meta");
+        final var progressToken = (meta instanceof JsonObject m) ? m.members().get("progressToken") : null;
+        final var hasProgressToken = progressToken != null && !(progressToken instanceof JsonNull);
+
         final var invocationId = invocationCounter.incrementAndGet();
         toolCallEvents.publish(ToolCallEvent.started(invocationId, sessionId, toolName, arguments));
         final var start = Instant.now();
         try {
-            final var toolResult = ScopedValue.where(SESSION_ID, sessionId).call(() -> tool.call(arguments));
+            final McpToolResult toolResult;
+            if (hasProgressToken) {
+                final var token = progressToken;
+                final ProgressReporter reporter = (progress, total, message) ->
+                    pushProgressNotification(sessionId, token, progress, total, message);
+                toolResult = ScopedValue.where(SESSION_ID, sessionId)
+                    .where(PROGRESS_REPORTER, reporter)
+                    .call(() -> tool.call(arguments));
+            } else {
+                toolResult = ScopedValue.where(SESSION_ID, sessionId).call(() -> tool.call(arguments));
+            }
             final var duration = Duration.between(start, Instant.now());
             toolCallEvents.publish(ToolCallEvent.succeeded(invocationId, sessionId, toolName, arguments, toolResult, duration));
             return envelope(id, buildToolResultJson(toolResult));
@@ -580,6 +602,46 @@ public final class McpServer {
             final var duration = Duration.between(start, Instant.now());
             toolCallEvents.publish(ToolCallEvent.failed(invocationId, sessionId, toolName, arguments, e, duration));
             return envelope(id, buildToolResultJson(McpToolResult.error(sanitizeMessage(e.getMessage()))));
+        }
+    }
+
+    private void pushProgressNotification(final String sessionId,
+                                          final JsonValue progressToken,
+                                          final double progress,
+                                          final OptionalDouble total,
+                                          final Optional<String> message) {
+        final var paramsBuilder = JsonObject.builder()
+            .put("progressToken", progressToken)
+            .put("progress", progress);
+        total.ifPresent(t -> paramsBuilder.put("total", t));
+        message.ifPresent(m -> paramsBuilder.put("message", m));
+        final var notification = JsonObject.builder()
+            .put("jsonrpc", "2.0")
+            .put("method", "notifications/progress")
+            .put("params", paramsBuilder.build())
+            .build()
+            .toJsonString();
+        pushNotification(sessionId, notification);
+    }
+
+    private void pushNotification(final String sessionId, final String json) {
+        if ("local".equals(sessionId)) {
+            final var q = stdioOutputQueue;
+            if (q != null) {
+                q.offer(Optional.of(json));
+            }
+        } else {
+            final var state = sessions.get(sessionId);
+            if (state != null) {
+                final var emitter = state.emitter.get();
+                if (emitter != null && emitter.isOpen()) {
+                    try {
+                        emitter.send(SseEvent.of("message", json));
+                    } catch (final IOException e) {
+                        recorder.warn("Failed to push notification for session %s: %s", sessionId, e.getMessage());
+                    }
+                }
+            }
         }
     }
 

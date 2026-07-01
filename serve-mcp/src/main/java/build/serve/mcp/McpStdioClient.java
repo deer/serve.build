@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 /**
  * A client that drives an {@link McpServer} over its stdio transport.
@@ -63,21 +64,26 @@ import java.util.concurrent.TimeUnit;
 public final class McpStdioClient implements AutoCloseable {
 
     private static final Duration DEFAULT_SEND_TIMEOUT = Duration.ofSeconds(30);
+    private static final Consumer<JsonObject> NO_OP_NOTIFICATION_HANDLER = n -> {
+    };
 
     private final PrintWriter writer;
     private final LineQueue lineQueue;
     private final Thread serverThread;
     private final Duration sendTimeout;
+    private final Consumer<JsonObject> notificationHandler;
     private int nextId = 1;
 
     private McpStdioClient(final PrintWriter writer,
                            final LineQueue lineQueue,
                            final Thread serverThread,
-                           final Duration sendTimeout) {
+                           final Duration sendTimeout,
+                           final Consumer<JsonObject> notificationHandler) {
         this.writer = writer;
         this.lineQueue = lineQueue;
         this.serverThread = serverThread;
         this.sendTimeout = sendTimeout;
+        this.notificationHandler = notificationHandler;
     }
 
     /**
@@ -88,7 +94,7 @@ public final class McpStdioClient implements AutoCloseable {
      * @return the connected client
      */
     public static McpStdioClient of(final McpServer server) {
-        return of(server, DEFAULT_SEND_TIMEOUT);
+        return of(server, DEFAULT_SEND_TIMEOUT, NO_OP_NOTIFICATION_HANDLER);
     }
 
     /**
@@ -99,6 +105,24 @@ public final class McpStdioClient implements AutoCloseable {
      * @return the connected client
      */
     public static McpStdioClient of(final McpServer server, final Duration sendTimeout) {
+        return of(server, sendTimeout, NO_OP_NOTIFICATION_HANDLER);
+    }
+
+    /**
+     * Creates a client with a custom send timeout and a handler for server-pushed notifications.
+     *
+     * <p>The handler is called (on the calling thread, inside {@link #send}) for each
+     * server-pushed notification received before the matching response — for example,
+     * {@code notifications/progress} messages from a long-running tool call.
+     *
+     * @param server              the server to connect to
+     * @param sendTimeout         how long to wait for each response before throwing
+     * @param notificationHandler called for each server-pushed notification (no {@code id} field)
+     * @return the connected client
+     */
+    public static McpStdioClient of(final McpServer server,
+                                    final Duration sendTimeout,
+                                    final Consumer<JsonObject> notificationHandler) {
         try {
             final var clientToServer = new PipedOutputStream();
             final var serverIn = new PipedInputStream(clientToServer);
@@ -111,7 +135,8 @@ public final class McpStdioClient implements AutoCloseable {
                 new PrintWriter(new OutputStreamWriter(clientToServer, StandardCharsets.UTF_8), true),
                 lineQueue,
                 thread,
-                sendTimeout
+                sendTimeout,
+                notificationHandler
             );
         } catch (final IOException e) {
             throw new UncheckedIOException(e);
@@ -152,7 +177,8 @@ public final class McpStdioClient implements AutoCloseable {
                 final var msg = Json.parse(line).asObject();
                 final var responseId = msg.members().get("id");
                 if (responseId == null || responseId instanceof JsonNull) {
-                    continue; // notification — no id
+                    notificationHandler.accept(msg);
+                    continue;
                 }
                 if (idMatches(responseId, sentId)) {
                     return msg;
