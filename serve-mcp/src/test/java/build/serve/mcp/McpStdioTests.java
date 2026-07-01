@@ -563,6 +563,74 @@ class McpStdioTests {
             .isEqualTo(1);
     }
 
+    @Test
+    void shouldDeliverProgressNotificationsOverStdio() {
+        final var progressServer = McpServer.builder("progress-server", "1.0.0")
+            .tool(ToolDef.of("multi_step", "runs three steps").handle(args -> {
+                final var reporter = McpServer.PROGRESS_REPORTER.get();
+                reporter.report(1, 3, "step one");
+                reporter.report(2, 3, "step two");
+                reporter.report(3, 3, "done");
+                return McpToolResult.text("finished");
+            }))
+            .build();
+
+        final var captured = new CopyOnWriteArrayList<JsonObject>();
+        try (var client = McpStdioClient.of(progressServer, java.time.Duration.ofSeconds(5),
+            notification -> {
+                if ("notifications/progress".equals(notification.getString("method"))) {
+                    captured.add(notification);
+                }
+            })) {
+            final var result = client.send("tools/call",
+                Map.of("name", "multi_step", "arguments", Map.of(),
+                    "_meta", Map.of("progressToken", "tok-1")));
+            assertThat(result.get("result").asObject().get("isError").asBoolean().value()).isFalse();
+        }
+
+        assertThat(captured).hasSize(3);
+        assertThat(captured.get(0).get("params").asObject().getString("message")).isEqualTo("step one");
+        assertThat(captured.get(1).get("params").asObject().getString("message")).isEqualTo("step two");
+        assertThat(captured.get(2).get("params").asObject().getString("message")).isEqualTo("done");
+        assertThat(captured.get(0).get("params").asObject().getString("progressToken")).isEqualTo("tok-1");
+    }
+
+    @Test
+    void shouldNotBindProgressReporterWhenTokenAbsent() {
+        final var bound = new java.util.concurrent.atomic.AtomicBoolean(false);
+        final var probeServer = McpServer.builder("probe-server", "1.0.0")
+            .tool(ToolDef.of("probe", "checks binding").handle(args -> {
+                bound.set(McpServer.PROGRESS_REPORTER.isBound());
+                return McpToolResult.text("ok");
+            }))
+            .build();
+
+        try (var client = McpStdioClient.of(probeServer)) {
+            client.send("tools/call", Map.of("name", "probe", "arguments", Map.of()));
+        }
+
+        assertThat(bound.get()).isFalse();
+    }
+
+    @Test
+    void shouldBindProgressReporterWhenTokenPresent() {
+        final var bound = new java.util.concurrent.atomic.AtomicBoolean(false);
+        final var probeServer = McpServer.builder("probe-server", "1.0.0")
+            .tool(ToolDef.of("probe", "checks binding").handle(args -> {
+                bound.set(McpServer.PROGRESS_REPORTER.isBound());
+                return McpToolResult.text("ok");
+            }))
+            .build();
+
+        try (var client = McpStdioClient.of(probeServer)) {
+            client.send("tools/call",
+                Map.of("name", "probe", "arguments", Map.of(),
+                    "_meta", Map.of("progressToken", "t")));
+        }
+
+        assertThat(bound.get()).isTrue();
+    }
+
     private JsonObject sendOne(final String line) {
         final var out = new ByteArrayOutputStream();
         server.stdioLoop(toStream(line + "\n"), out);
