@@ -54,6 +54,19 @@ public interface McpTool {
     JsonObject inputSchema();
 
     /**
+     * Returns the JSON Schema describing the {@code structuredContent} this tool's result may carry.
+     *
+     * <p>Empty by default — most tools return unstructured content only. Present it as an object schema
+     * (per the MCP spec's {@code outputSchema} field) when the tool's result includes
+     * {@link McpToolResult#structuredContent()}, so clients can validate it.
+     *
+     * @return the output schema, or empty if this tool has no structured output
+     */
+    default Optional<JsonObject> outputSchema() {
+        return Optional.empty();
+    }
+
+    /**
      * Returns optional behavioral hints for this tool.
      *
      * <p>These hints are informational only — clients may use them for UI decisions

@@ -25,16 +25,23 @@ import build.base.json.JsonValue;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The result of an MCP tool invocation.
  *
- * @param content the content items
- * @param isError whether the result represents an error
+ * @param content           the content items
+ * @param isError           whether the result represents an error
+ * @param structuredContent optional structured JSON result, validated by callers against the tool's
+ *                          {@code outputSchema} (see {@link McpTool#outputSchema()})
  * @author reed.vonredwitz
  * @since Mar-2026
  */
-public record McpToolResult(List<McpContent> content, boolean isError) {
+public record McpToolResult(List<McpContent> content, boolean isError, Optional<JsonValue> structuredContent) {
+
+    public McpToolResult(final List<McpContent> content, final boolean isError) {
+        this(content, isError, Optional.empty());
+    }
 
     /**
      * Creates a successful text result.
@@ -55,6 +62,19 @@ public record McpToolResult(List<McpContent> content, boolean isError) {
      */
     public static McpToolResult json(final JsonValue value) {
         return text(value.toJsonString());
+    }
+
+    /**
+     * Creates a successful result carrying structured JSON output, per the MCP {@code outputSchema}
+     * mechanism. A text content item holding the compact JSON serialization is included alongside it
+     * for clients that don't yet understand {@code structuredContent}.
+     *
+     * @param structuredContent the structured JSON result
+     * @return the result
+     */
+    public static McpToolResult structured(final JsonValue structuredContent) {
+        return new McpToolResult(List.of(new McpContent.Text(structuredContent.toJsonString())), false,
+            Optional.of(structuredContent));
     }
 
     /**
@@ -130,6 +150,7 @@ public record McpToolResult(List<McpContent> content, boolean isError) {
             };
             items.add(content);
         }
-        return new McpToolResult(List.copyOf(items), isError);
+        final var structuredContent = Optional.ofNullable(result.members().get("structuredContent"));
+        return new McpToolResult(List.copyOf(items), isError, structuredContent);
     }
 }

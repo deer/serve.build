@@ -68,14 +68,33 @@ public interface ToolDef extends McpTool {
 
     List<ToolParam<?>> params();
 
+    /**
+     * Params describing the shape of {@link McpToolResult#structuredContent()}. Empty by default —
+     * override to derive {@link #outputSchema()} the same way {@link #inputSchema()} is derived from
+     * {@link #params()}.
+     */
+    default List<ToolParam<?>> outputParams() {
+        return List.of();
+    }
+
     McpToolResult handle(JsonValue args) throws Exception;
 
     @Override
     default JsonObject inputSchema() {
+        return schemaOf(params());
+    }
+
+    @Override
+    default Optional<JsonObject> outputSchema() {
+        final var outputParams = outputParams();
+        return outputParams.isEmpty() ? Optional.empty() : Optional.of(schemaOf(outputParams));
+    }
+
+    private static JsonObject schemaOf(final List<ToolParam<?>> params) {
         final var props = JsonObject.builder();
         final var required = JsonArray.builder();
         final var allDefs = new LinkedHashMap<String, JsonObject>();
-        for (final ToolParam<?> param : params()) {
+        for (final ToolParam<?> param : params) {
             props.put(param.name(), param.propertySchema());
             if (param.isRequired()) {
                 required.add(param.name());
@@ -122,6 +141,7 @@ public interface ToolDef extends McpTool {
         private final String name;
         private final String description;
         private final List<ToolParam<?>> params = new ArrayList<>();
+        private final List<ToolParam<?>> outputParams = new ArrayList<>();
         private McpToolAnnotations annotations = null;
 
         private Builder(final String name, final String description) {
@@ -134,13 +154,19 @@ public interface ToolDef extends McpTool {
             return this;
         }
 
+        public Builder outputParam(final ToolParam<?> param) {
+            outputParams.add(param);
+            return this;
+        }
+
         public Builder annotations(final McpToolAnnotations annotations) {
             this.annotations = annotations;
             return this;
         }
 
         public ToolDef handle(final Handler handler) {
-            return new BuiltTool(name, description, List.copyOf(params), handler, Optional.ofNullable(annotations));
+            return new BuiltTool(name, description, List.copyOf(params), List.copyOf(outputParams), handler,
+                Optional.ofNullable(annotations));
         }
     }
 

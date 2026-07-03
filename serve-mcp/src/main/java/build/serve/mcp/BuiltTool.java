@@ -27,6 +27,7 @@ import java.util.Optional;
 record BuiltTool(String name,
                  String description,
                  List<ToolParam<?>> params,
+                 List<ToolParam<?>> outputParams,
                  ToolDef.Handler handler,
                  Optional<McpToolAnnotations> annotations)
     implements ToolDef {
