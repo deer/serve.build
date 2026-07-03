@@ -543,6 +543,7 @@ public final class McpServer {
                 .put("name", tool.name())
                 .put("description", tool.description())
                 .put("inputSchema", tool.inputSchema());
+            tool.outputSchema().ifPresent(schema -> toolBuilder.put("outputSchema", schema));
             tool.annotations().ifPresent(ann -> toolBuilder.put("annotations", buildAnnotationsJson(ann)));
             toolsArray.add(toolBuilder.build());
         }
@@ -1063,10 +1064,11 @@ public final class McpServer {
             contentArray.add(contentNode);
         }
 
-        return JsonObject.builder()
+        final var resultBuilder = JsonObject.builder()
             .put("content", contentArray.build())
-            .put("isError", toolResult.isError())
-            .build();
+            .put("isError", toolResult.isError());
+        toolResult.structuredContent().ifPresent(sc -> resultBuilder.put("structuredContent", sc));
+        return resultBuilder.build();
     }
 
     private static JsonObject envelope(final JsonValue id, final JsonValue result) {

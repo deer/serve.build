@@ -66,6 +66,29 @@ class ToolDefTest {
         assertThat(tool.inputSchema().get("required").asArray().values()).isEmpty();
     }
 
+    // --- Output schema generation ---
+
+    @Test
+    void shouldHaveNoOutputSchemaByDefault() {
+        final var tool = ToolDef.of("noop", "No output params").handle(args -> McpToolResult.text("ok"));
+        assertThat(tool.outputSchema()).isEmpty();
+    }
+
+    @Test
+    void shouldDeriveOutputSchemaFromOutputParams() {
+        final var summary = ToolParam.string("summary", "Result summary");
+        final var count = ToolParam.integer("count", "Item count");
+        final var tool = ToolDef.of("search", "Search something")
+            .outputParam(summary).outputParam(count)
+            .handle(args -> McpToolResult.text("ok"));
+
+        final var schema = tool.outputSchema().orElseThrow();
+        assertThat(schema.getString("type")).isEqualTo("object");
+        assertThat(schema.get("properties").asObject().has("summary")).isTrue();
+        assertThat(schema.get("properties").asObject().has("count")).isTrue();
+        assertThat(schema.get("required").asArray().values()).hasSize(2);
+    }
+
     // --- call() ---
 
     @Test

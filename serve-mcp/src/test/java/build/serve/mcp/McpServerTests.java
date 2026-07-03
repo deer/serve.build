@@ -127,6 +127,42 @@ class McpServerTests {
     }
 
     @Test
+    void shouldIncludeOutputSchemaInToolsList() {
+        final var summary = ToolParam.string("summary", "Result summary");
+        try (final var structuredClient = McpTestClient.start(McpServer.builder("structured-server", "1.0.0")
+            .tool(ToolDef.of("summarize", "Summarizes something")
+                .outputParam(summary)
+                .handle(args -> McpToolResult.structured(JsonObject.builder().put("summary", "ok").build())))
+            .build())) {
+
+            structuredClient.initialize();
+            final var tools = ((JsonArray) structuredClient.listTools()).values();
+            final var tool = tools.get(0).asObject();
+            final var outputSchema = tool.get("outputSchema").asObject();
+            assertThat(outputSchema.getString("type")).isEqualTo("object");
+            assertThat(outputSchema.get("properties").asObject().has("summary")).isTrue();
+        }
+    }
+
+    @Test
+    void shouldIncludeStructuredContentInToolsCallResult() {
+        try (final var structuredClient = McpTestClient.start(McpServer.builder("structured-server", "1.0.0")
+            .tool(ToolDef.of("summarize", "Summarizes something")
+                .handle(args -> McpToolResult.structured(JsonObject.builder().put("summary", "ok").build())))
+            .build())) {
+
+            structuredClient.initialize();
+            final var result = structuredClient.call("summarize", Map.of()).asObject();
+            assertThat(result.get("isError").asBoolean().value()).isFalse();
+            assertThat(result.get("structuredContent").asObject().getString("summary")).isEqualTo("ok");
+
+            final var content = ((JsonArray) result.get("content")).values().get(0).asObject();
+            assertThat(content.getString("type")).isEqualTo("text");
+            assertThat(content.getString("text")).isEqualTo("{\"summary\":\"ok\"}");
+        }
+    }
+
+    @Test
     void toolsCallUnknownTest() {
         final var json = client.send("tools/call",
             Map.of("name", "nonexistent", "arguments", Map.of())).asObject();
