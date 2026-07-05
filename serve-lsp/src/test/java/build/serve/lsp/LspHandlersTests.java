@@ -20,13 +20,18 @@
 package build.serve.lsp;
 
 import build.base.json.JsonNull;
+import build.serve.lsp.types.CallHierarchyIncomingCall;
+import build.serve.lsp.types.CallHierarchyItem;
+import build.serve.lsp.types.CallHierarchyOutgoingCall;
 import build.serve.lsp.types.CodeAction;
 import build.serve.lsp.types.Diagnostic;
 import build.serve.lsp.types.DiagnosticSeverity;
 import build.serve.lsp.types.Location;
 import build.serve.lsp.types.Range;
 import build.serve.lsp.types.ShowMessageParams;
+import build.serve.lsp.types.SymbolKind;
 import build.serve.lsp.types.TextEdit;
+import build.serve.lsp.types.TypeHierarchyItem;
 import build.serve.lsp.types.WorkspaceEdit;
 import org.junit.jupiter.api.Test;
 
@@ -317,6 +322,136 @@ class LspHandlersTests {
 
             assertThat(refs.get("id").asNumber().toNumber().intValue()).isEqualTo(2);
             assertThat(refs.get("result").asArray().values().get(0).asObject().get("uri").asString().value()).isEqualTo("file:///ref.java");
+        }
+    }
+
+    @Test
+    void shouldReturnPrepareCallHierarchyItems() throws Exception {
+        final var server = LspServer.builder()
+            .onPrepareCallHierarchy((params, ctx) -> List.of(
+                new CallHierarchyItem("doWork", SymbolKind.METHOD, "void doWork()", "file:///a.java",
+                    Range.of(4, 0, 4, 20), Range.of(4, 9, 4, 15), null)))
+            .build();
+
+        try (final var client = new LspTransportTests.LspTestClient(server)) {
+            final var response = client.sendRequest(1, "textDocument/prepareCallHierarchy", POSITION_PARAMS);
+
+            final var result = response.get("result").asArray();
+            assertThat(result.values()).hasSize(1);
+            final var item = result.values().get(0).asObject();
+            assertThat(item.get("name").asString().value()).isEqualTo("doWork");
+            assertThat(item.get("kind").asNumber().toNumber().intValue()).isEqualTo(SymbolKind.METHOD.value());
+            assertThat(item.get("detail").asString().value()).isEqualTo("void doWork()");
+            assertThat(item.get("uri").asString().value()).isEqualTo("file:///a.java");
+            assertThat(item.has("data")).isFalse();
+        }
+    }
+
+    @Test
+    void shouldRoundTripCallHierarchyItemDataThroughIncomingCalls() throws Exception {
+        final var server = LspServer.builder()
+            .onCallHierarchyIncomingCalls((params, ctx) -> {
+                assertThat(params.item().name()).isEqualTo("doWork");
+                assertThat(params.item().data().asString().value()).isEqualTo("opaque-id");
+                return List.of(new CallHierarchyIncomingCall(
+                    new CallHierarchyItem("caller", SymbolKind.METHOD, null, "file:///b.java",
+                        Range.of(0, 0, 0, 10), Range.of(0, 0, 0, 6), null),
+                    List.of(Range.of(1, 4, 1, 10))));
+            })
+            .build();
+
+        try (final var client = new LspTransportTests.LspTestClient(server)) {
+            final var response = client.sendRequest(1, "callHierarchy/incomingCalls",
+                "{\"item\":{\"name\":\"doWork\",\"kind\":6,\"uri\":\"file:///a.java\","
+                    + "\"range\":{\"start\":{\"line\":4,\"character\":0},\"end\":{\"line\":4,\"character\":20}},"
+                    + "\"selectionRange\":{\"start\":{\"line\":4,\"character\":9},\"end\":{\"line\":4,\"character\":15}},"
+                    + "\"data\":\"opaque-id\"}}");
+
+            final var result = response.get("result").asArray();
+            assertThat(result.values()).hasSize(1);
+            final var call = result.values().get(0).asObject();
+            assertThat(call.get("from").asObject().get("name").asString().value()).isEqualTo("caller");
+            assertThat(call.get("fromRanges").asArray().values()).hasSize(1);
+        }
+    }
+
+    @Test
+    void shouldReturnCallHierarchyOutgoingCalls() throws Exception {
+        final var server = LspServer.builder()
+            .onCallHierarchyOutgoingCalls((params, ctx) -> List.of(new CallHierarchyOutgoingCall(
+                new CallHierarchyItem("callee", SymbolKind.METHOD, null, "file:///c.java",
+                    Range.of(2, 0, 2, 10), Range.of(2, 0, 2, 6), null),
+                List.of(Range.of(5, 4, 5, 10)))))
+            .build();
+
+        try (final var client = new LspTransportTests.LspTestClient(server)) {
+            final var response = client.sendRequest(1, "callHierarchy/outgoingCalls",
+                "{\"item\":{\"name\":\"doWork\",\"kind\":6,\"uri\":\"file:///a.java\","
+                    + "\"range\":{\"start\":{\"line\":4,\"character\":0},\"end\":{\"line\":4,\"character\":20}},"
+                    + "\"selectionRange\":{\"start\":{\"line\":4,\"character\":9},\"end\":{\"line\":4,\"character\":15}}}}");
+
+            final var result = response.get("result").asArray();
+            assertThat(result.values()).hasSize(1);
+            assertThat(result.values().get(0).asObject().get("to").asObject().get("name").asString().value()).isEqualTo("callee");
+        }
+    }
+
+    @Test
+    void shouldReturnPrepareTypeHierarchyItems() throws Exception {
+        final var server = LspServer.builder()
+            .onPrepareTypeHierarchy((params, ctx) -> List.of(
+                new TypeHierarchyItem("Widget", SymbolKind.CLASS, null, "file:///widget.java",
+                    Range.of(0, 0, 10, 1), Range.of(0, 6, 0, 12), null)))
+            .build();
+
+        try (final var client = new LspTransportTests.LspTestClient(server)) {
+            final var response = client.sendRequest(1, "textDocument/prepareTypeHierarchy", POSITION_PARAMS);
+
+            final var result = response.get("result").asArray();
+            assertThat(result.values()).hasSize(1);
+            assertThat(result.values().get(0).asObject().get("name").asString().value()).isEqualTo("Widget");
+        }
+    }
+
+    @Test
+    void shouldReturnTypeHierarchySupertypes() throws Exception {
+        final var server = LspServer.builder()
+            .onTypeHierarchySupertypes((params, ctx) -> {
+                assertThat(params.item().name()).isEqualTo("Widget");
+                return List.of(new TypeHierarchyItem("Component", SymbolKind.INTERFACE, null, "file:///component.java",
+                    Range.of(0, 0, 5, 1), Range.of(0, 6, 0, 15), null));
+            })
+            .build();
+
+        try (final var client = new LspTransportTests.LspTestClient(server)) {
+            final var response = client.sendRequest(1, "typeHierarchy/supertypes",
+                "{\"item\":{\"name\":\"Widget\",\"kind\":5,\"uri\":\"file:///widget.java\","
+                    + "\"range\":{\"start\":{\"line\":0,\"character\":0},\"end\":{\"line\":10,\"character\":1}},"
+                    + "\"selectionRange\":{\"start\":{\"line\":0,\"character\":6},\"end\":{\"line\":0,\"character\":12}}}}");
+
+            final var result = response.get("result").asArray();
+            assertThat(result.values()).hasSize(1);
+            assertThat(result.values().get(0).asObject().get("name").asString().value()).isEqualTo("Component");
+        }
+    }
+
+    @Test
+    void shouldReturnTypeHierarchySubtypes() throws Exception {
+        final var server = LspServer.builder()
+            .onTypeHierarchySubtypes((params, ctx) -> List.of(
+                new TypeHierarchyItem("Button", SymbolKind.CLASS, null, "file:///button.java",
+                    Range.of(0, 0, 5, 1), Range.of(0, 6, 0, 12), null)))
+            .build();
+
+        try (final var client = new LspTransportTests.LspTestClient(server)) {
+            final var response = client.sendRequest(1, "typeHierarchy/subtypes",
+                "{\"item\":{\"name\":\"Widget\",\"kind\":5,\"uri\":\"file:///widget.java\","
+                    + "\"range\":{\"start\":{\"line\":0,\"character\":0},\"end\":{\"line\":10,\"character\":1}},"
+                    + "\"selectionRange\":{\"start\":{\"line\":0,\"character\":6},\"end\":{\"line\":0,\"character\":12}}}}");
+
+            final var result = response.get("result").asArray();
+            assertThat(result.values()).hasSize(1);
+            assertThat(result.values().get(0).asObject().get("name").asString().value()).isEqualTo("Button");
         }
     }
 }

@@ -27,6 +27,8 @@ import build.base.json.JsonNumber;
 import build.base.json.JsonObject;
 import build.base.json.JsonString;
 import build.base.json.JsonValue;
+import build.serve.lsp.params.CallHierarchyIncomingCallsParams;
+import build.serve.lsp.params.CallHierarchyOutgoingCallsParams;
 import build.serve.lsp.params.CodeActionParams;
 import build.serve.lsp.params.DidChangeParams;
 import build.serve.lsp.params.DidCloseParams;
@@ -43,7 +45,12 @@ import build.serve.lsp.params.ReferenceParams;
 import build.serve.lsp.params.RenameParams;
 import build.serve.lsp.params.SelectionRangeParams;
 import build.serve.lsp.params.TextDocumentPositionParams;
+import build.serve.lsp.params.TypeHierarchySubtypesParams;
+import build.serve.lsp.params.TypeHierarchySupertypesParams;
 import build.serve.lsp.params.WorkspaceSymbolParams;
+import build.serve.lsp.types.CallHierarchyIncomingCall;
+import build.serve.lsp.types.CallHierarchyItem;
+import build.serve.lsp.types.CallHierarchyOutgoingCall;
 import build.serve.lsp.types.ClientCapabilities;
 import build.serve.lsp.types.CodeAction;
 import build.serve.lsp.types.Command;
@@ -67,10 +74,12 @@ import build.serve.lsp.types.ShowMessageParams;
 import build.serve.lsp.types.SignatureHelp;
 import build.serve.lsp.types.SignatureInformation;
 import build.serve.lsp.types.SymbolInformation;
+import build.serve.lsp.types.SymbolKind;
 import build.serve.lsp.types.TextDocumentContentChangeEvent;
 import build.serve.lsp.types.TextDocumentIdentifier;
 import build.serve.lsp.types.TextDocumentItem;
 import build.serve.lsp.types.TextEdit;
+import build.serve.lsp.types.TypeHierarchyItem;
 import build.serve.lsp.types.VersionedTextDocumentIdentifier;
 import build.serve.lsp.types.WorkspaceEdit;
 
@@ -93,6 +102,7 @@ final class LspJson {
             case null -> JsonNull.INSTANCE;
             case LspType t -> typeToJson(t);
             case List<?> l -> listToJson(l);
+            case JsonValue v -> v;
             default -> Json.of(value);
         };
     }
@@ -291,6 +301,44 @@ final class LspJson {
                 }
                 yield b.build();
             }
+            case CallHierarchyItem chi -> {
+                final var b = JsonObject.builder()
+                    .put("name", chi.name())
+                    .put("kind", chi.kind().value())
+                    .put("uri", chi.uri())
+                    .put("range", toJson(chi.range()))
+                    .put("selectionRange", toJson(chi.selectionRange()));
+                if (chi.detail() != null) {
+                    b.put("detail", chi.detail());
+                }
+                if (chi.data() != null) {
+                    b.put("data", chi.data());
+                }
+                yield b.build();
+            }
+            case CallHierarchyIncomingCall c -> JsonObject.builder()
+                .put("from", toJson(c.from()))
+                .put("fromRanges", listToJson(c.fromRanges()))
+                .build();
+            case CallHierarchyOutgoingCall c -> JsonObject.builder()
+                .put("to", toJson(c.to()))
+                .put("fromRanges", listToJson(c.fromRanges()))
+                .build();
+            case TypeHierarchyItem thi -> {
+                final var b = JsonObject.builder()
+                    .put("name", thi.name())
+                    .put("kind", thi.kind().value())
+                    .put("uri", thi.uri())
+                    .put("range", toJson(thi.range()))
+                    .put("selectionRange", toJson(thi.selectionRange()));
+                if (thi.detail() != null) {
+                    b.put("detail", thi.detail());
+                }
+                if (thi.data() != null) {
+                    b.put("data", thi.data());
+                }
+                yield b.build();
+            }
             case ShowMessageParams smp -> JsonObject.builder()
                 .put("type", smp.type())
                 .put("message", smp.message())
@@ -353,6 +401,30 @@ final class LspJson {
         );
     }
 
+    private static CallHierarchyItem parseCallHierarchyItem(final JsonObject o) {
+        return new CallHierarchyItem(
+            o.get("name").asString().value(),
+            SymbolKind.fromValue(o.get("kind").asNumber().toNumber().intValue()),
+            o.has("detail") ? o.get("detail").asString().value() : null,
+            o.get("uri").asString().value(),
+            parseRange(o.get("range").asObject()),
+            parseRange(o.get("selectionRange").asObject()),
+            o.has("data") ? o.get("data") : null
+        );
+    }
+
+    private static TypeHierarchyItem parseTypeHierarchyItem(final JsonObject o) {
+        return new TypeHierarchyItem(
+            o.get("name").asString().value(),
+            SymbolKind.fromValue(o.get("kind").asNumber().toNumber().intValue()),
+            o.has("detail") ? o.get("detail").asString().value() : null,
+            o.get("uri").asString().value(),
+            parseRange(o.get("range").asObject()),
+            parseRange(o.get("selectionRange").asObject()),
+            o.has("data") ? o.get("data") : null
+        );
+    }
+
     // ── Params parsers ────────────────────────────────────────────────────────
 
     static InitializeParams parseInitialize(final JsonObject o) {
@@ -367,6 +439,22 @@ final class LspJson {
             parseTDI(o.get("textDocument").asObject()),
             parsePosition(o.get("position").asObject())
         );
+    }
+
+    static CallHierarchyIncomingCallsParams parseCallHierarchyIncomingCalls(final JsonObject o) {
+        return new CallHierarchyIncomingCallsParams(parseCallHierarchyItem(o.get("item").asObject()));
+    }
+
+    static CallHierarchyOutgoingCallsParams parseCallHierarchyOutgoingCalls(final JsonObject o) {
+        return new CallHierarchyOutgoingCallsParams(parseCallHierarchyItem(o.get("item").asObject()));
+    }
+
+    static TypeHierarchySupertypesParams parseTypeHierarchySupertypes(final JsonObject o) {
+        return new TypeHierarchySupertypesParams(parseTypeHierarchyItem(o.get("item").asObject()));
+    }
+
+    static TypeHierarchySubtypesParams parseTypeHierarchySubtypes(final JsonObject o) {
+        return new TypeHierarchySubtypesParams(parseTypeHierarchyItem(o.get("item").asObject()));
     }
 
     static CodeActionParams parseCodeAction(final JsonObject o) {

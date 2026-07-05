@@ -20,6 +20,8 @@
 package build.serve.lsp;
 
 import build.base.json.JsonObject;
+import build.serve.lsp.params.CallHierarchyIncomingCallsParams;
+import build.serve.lsp.params.CallHierarchyOutgoingCallsParams;
 import build.serve.lsp.params.CodeActionParams;
 import build.serve.lsp.params.DocumentSymbolParams;
 import build.serve.lsp.params.ExecuteCommandParams;
@@ -32,6 +34,8 @@ import build.serve.lsp.params.ReferenceParams;
 import build.serve.lsp.params.RenameParams;
 import build.serve.lsp.params.SelectionRangeParams;
 import build.serve.lsp.params.TextDocumentPositionParams;
+import build.serve.lsp.params.TypeHierarchySubtypesParams;
+import build.serve.lsp.params.TypeHierarchySupertypesParams;
 import build.serve.lsp.params.WorkspaceSymbolParams;
 
 /**
@@ -43,6 +47,20 @@ import build.serve.lsp.params.WorkspaceSymbolParams;
 public sealed interface LspRequest {
 
     LspRequestMethod method();
+
+    record CallHierarchyIncomingCalls(CallHierarchyIncomingCallsParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.CALL_HIERARCHY_INCOMING_CALLS;
+        }
+    }
+
+    record CallHierarchyOutgoingCalls(CallHierarchyOutgoingCallsParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.CALL_HIERARCHY_OUTGOING_CALLS;
+        }
+    }
 
     record CodeAction(CodeActionParams params) implements LspRequest {
         @Override
@@ -135,6 +153,20 @@ public sealed interface LspRequest {
         }
     }
 
+    record PrepareCallHierarchy(TextDocumentPositionParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.PREPARE_CALL_HIERARCHY;
+        }
+    }
+
+    record PrepareTypeHierarchy(TextDocumentPositionParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.PREPARE_TYPE_HIERARCHY;
+        }
+    }
+
     record RangeFormatting(RangeFormattingParams params) implements LspRequest {
         @Override
         public LspRequestMethod method() {
@@ -177,6 +209,20 @@ public sealed interface LspRequest {
         }
     }
 
+    record TypeHierarchySubtypes(TypeHierarchySubtypesParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.TYPE_HIERARCHY_SUBTYPES;
+        }
+    }
+
+    record TypeHierarchySupertypes(TypeHierarchySupertypesParams params) implements LspRequest {
+        @Override
+        public LspRequestMethod method() {
+            return LspRequestMethod.TYPE_HIERARCHY_SUPERTYPES;
+        }
+    }
+
     record WorkspaceSymbol(WorkspaceSymbolParams params) implements LspRequest {
         @Override
         public LspRequestMethod method() {
@@ -186,6 +232,10 @@ public sealed interface LspRequest {
 
     static LspRequest parse(final LspRequestMethod method, final JsonObject params) {
         return switch (method) {
+            case CALL_HIERARCHY_INCOMING_CALLS ->
+                new CallHierarchyIncomingCalls(LspJson.parseCallHierarchyIncomingCalls(params));
+            case CALL_HIERARCHY_OUTGOING_CALLS ->
+                new CallHierarchyOutgoingCalls(LspJson.parseCallHierarchyOutgoingCalls(params));
             case CODE_ACTION -> new CodeAction(LspJson.parseCodeAction(params));
             case COMPLETION -> new Completion(LspJson.parseTDPosition(params));
             case DECLARATION -> new Declaration(LspJson.parseTDPosition(params));
@@ -199,12 +249,16 @@ public sealed interface LspRequest {
             case IMPLEMENTATION -> new Implementation(LspJson.parseTDPosition(params));
             case INITIALIZE -> new Initialize(LspJson.parseInitialize(params));
             case INLAY_HINT -> new InlayHint(LspJson.parseInlayHint(params));
+            case PREPARE_CALL_HIERARCHY -> new PrepareCallHierarchy(LspJson.parseTDPosition(params));
+            case PREPARE_TYPE_HIERARCHY -> new PrepareTypeHierarchy(LspJson.parseTDPosition(params));
             case RANGE_FORMATTING -> new RangeFormatting(LspJson.parseRangeFormatting(params));
             case REFERENCES -> new References(LspJson.parseReferences(params));
             case RENAME -> new Rename(LspJson.parseRename(params));
             case SELECTION_RANGE -> new SelectionRange(LspJson.parseSelectionRange(params));
             case SIGNATURE_HELP -> new SignatureHelp(LspJson.parseTDPosition(params));
             case TYPE_DEFINITION -> new TypeDefinition(LspJson.parseTDPosition(params));
+            case TYPE_HIERARCHY_SUBTYPES -> new TypeHierarchySubtypes(LspJson.parseTypeHierarchySubtypes(params));
+            case TYPE_HIERARCHY_SUPERTYPES -> new TypeHierarchySupertypes(LspJson.parseTypeHierarchySupertypes(params));
             case WORKSPACE_SYMBOL -> new WorkspaceSymbol(LspJson.parseWorkspaceSymbol(params));
         };
     }

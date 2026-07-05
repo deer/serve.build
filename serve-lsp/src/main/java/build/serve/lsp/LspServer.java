@@ -19,6 +19,8 @@
  */
 package build.serve.lsp;
 
+import build.serve.lsp.params.CallHierarchyIncomingCallsParams;
+import build.serve.lsp.params.CallHierarchyOutgoingCallsParams;
 import build.serve.lsp.params.CodeActionParams;
 import build.serve.lsp.params.DidChangeParams;
 import build.serve.lsp.params.DidCloseParams;
@@ -35,7 +37,12 @@ import build.serve.lsp.params.ReferenceParams;
 import build.serve.lsp.params.RenameParams;
 import build.serve.lsp.params.SelectionRangeParams;
 import build.serve.lsp.params.TextDocumentPositionParams;
+import build.serve.lsp.params.TypeHierarchySubtypesParams;
+import build.serve.lsp.params.TypeHierarchySupertypesParams;
 import build.serve.lsp.params.WorkspaceSymbolParams;
+import build.serve.lsp.types.CallHierarchyIncomingCall;
+import build.serve.lsp.types.CallHierarchyItem;
+import build.serve.lsp.types.CallHierarchyOutgoingCall;
 import build.serve.lsp.types.CodeAction;
 import build.serve.lsp.types.CompletionItem;
 import build.serve.lsp.types.DocumentHighlight;
@@ -49,6 +56,7 @@ import build.serve.lsp.types.ServerCapabilities;
 import build.serve.lsp.types.SignatureHelp;
 import build.serve.lsp.types.SymbolInformation;
 import build.serve.lsp.types.TextEdit;
+import build.serve.lsp.types.TypeHierarchyItem;
 import build.serve.lsp.types.WorkspaceEdit;
 
 import java.util.EnumMap;
@@ -152,6 +160,42 @@ public interface LspServer {
         public Builder onImplementation(final BiFunction<TextDocumentPositionParams, LspContext, List<Location>> h) {
             requestHandlers.put(LspRequestMethod.IMPLEMENTATION,
                 (r, ctx) -> h.apply(((LspRequest.Implementation) r).params(), ctx));
+            return this;
+        }
+
+        public Builder onPrepareCallHierarchy(final BiFunction<TextDocumentPositionParams, LspContext, List<CallHierarchyItem>> h) {
+            requestHandlers.put(LspRequestMethod.PREPARE_CALL_HIERARCHY,
+                (r, ctx) -> h.apply(((LspRequest.PrepareCallHierarchy) r).params(), ctx));
+            return this;
+        }
+
+        public Builder onCallHierarchyIncomingCalls(final BiFunction<CallHierarchyIncomingCallsParams, LspContext, List<CallHierarchyIncomingCall>> h) {
+            requestHandlers.put(LspRequestMethod.CALL_HIERARCHY_INCOMING_CALLS,
+                (r, ctx) -> h.apply(((LspRequest.CallHierarchyIncomingCalls) r).params(), ctx));
+            return this;
+        }
+
+        public Builder onCallHierarchyOutgoingCalls(final BiFunction<CallHierarchyOutgoingCallsParams, LspContext, List<CallHierarchyOutgoingCall>> h) {
+            requestHandlers.put(LspRequestMethod.CALL_HIERARCHY_OUTGOING_CALLS,
+                (r, ctx) -> h.apply(((LspRequest.CallHierarchyOutgoingCalls) r).params(), ctx));
+            return this;
+        }
+
+        public Builder onPrepareTypeHierarchy(final BiFunction<TextDocumentPositionParams, LspContext, List<TypeHierarchyItem>> h) {
+            requestHandlers.put(LspRequestMethod.PREPARE_TYPE_HIERARCHY,
+                (r, ctx) -> h.apply(((LspRequest.PrepareTypeHierarchy) r).params(), ctx));
+            return this;
+        }
+
+        public Builder onTypeHierarchySupertypes(final BiFunction<TypeHierarchySupertypesParams, LspContext, List<TypeHierarchyItem>> h) {
+            requestHandlers.put(LspRequestMethod.TYPE_HIERARCHY_SUPERTYPES,
+                (r, ctx) -> h.apply(((LspRequest.TypeHierarchySupertypes) r).params(), ctx));
+            return this;
+        }
+
+        public Builder onTypeHierarchySubtypes(final BiFunction<TypeHierarchySubtypesParams, LspContext, List<TypeHierarchyItem>> h) {
+            requestHandlers.put(LspRequestMethod.TYPE_HIERARCHY_SUBTYPES,
+                (r, ctx) -> h.apply(((LspRequest.TypeHierarchySubtypes) r).params(), ctx));
             return this;
         }
 
