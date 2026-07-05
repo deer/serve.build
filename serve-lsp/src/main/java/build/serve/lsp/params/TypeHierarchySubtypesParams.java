@@ -19,19 +19,13 @@
  */
 package build.serve.lsp.params;
 
+import build.serve.lsp.types.TypeHierarchyItem;
+
 /**
- * Sealed marker interface for all LSP request and notification parameter types.
+ * Parameters for the typeHierarchy/subtypes request.
  *
  * @author reed.vonredwitz
- * @since Apr-2026
+ * @since Jul-2026
  */
-public sealed interface LspParams
-    permits CallHierarchyIncomingCallsParams, CallHierarchyOutgoingCallsParams,
-    CodeActionParams, DidChangeParams, DidCloseParams, DidOpenParams,
-    DidSaveParams, DocumentSymbolParams, ExecuteCommandParams,
-    FoldingRangeParams, FormattingParams, InitializeParams,
-    InlayHintParams, RangeFormattingParams, ReferenceParams,
-    RenameParams, SelectionRangeParams, TextDocumentPositionParams,
-    TypeHierarchySubtypesParams, TypeHierarchySupertypesParams,
-    WorkspaceSymbolParams {
+public record TypeHierarchySubtypesParams(TypeHierarchyItem item) implements LspParams {
 }

@@ -27,6 +27,7 @@ package build.serve.lsp.types;
  */
 public enum ServerCapability {
 
+    CALL_HIERARCHY("callHierarchyProvider"),
     CODE_ACTION("codeActionProvider"),
     CODE_LENS("codeLensProvider"),
     COMPLETION("completionProvider"),
@@ -45,6 +46,7 @@ public enum ServerCapability {
     SELECTION_RANGE("selectionRangeProvider"),
     SIGNATURE_HELP("signatureHelpProvider"),
     TYPE_DEFINITION("typeDefinitionProvider"),
+    TYPE_HIERARCHY("typeHierarchyProvider"),
     WORKSPACE_SYMBOL("workspaceSymbolProvider");
 
     public final String fieldName;

@@ -17,21 +17,18 @@
  * limitations under the License.
  * #L%
  */
-package build.serve.lsp.params;
+package build.serve.lsp.types;
+
+import java.util.List;
 
 /**
- * Sealed marker interface for all LSP request and notification parameter types.
+ * One caller of a {@code callHierarchy/incomingCalls} item.
  *
+ * @param from       the item that makes the call
+ * @param fromRanges the ranges at which the calls appear inside {@code from}
  * @author reed.vonredwitz
- * @since Apr-2026
+ * @since Jul-2026
  */
-public sealed interface LspParams
-    permits CallHierarchyIncomingCallsParams, CallHierarchyOutgoingCallsParams,
-    CodeActionParams, DidChangeParams, DidCloseParams, DidOpenParams,
-    DidSaveParams, DocumentSymbolParams, ExecuteCommandParams,
-    FoldingRangeParams, FormattingParams, InitializeParams,
-    InlayHintParams, RangeFormattingParams, ReferenceParams,
-    RenameParams, SelectionRangeParams, TextDocumentPositionParams,
-    TypeHierarchySubtypesParams, TypeHierarchySupertypesParams,
-    WorkspaceSymbolParams {
+public record CallHierarchyIncomingCall(CallHierarchyItem from,
+                                        List<Range> fromRanges) implements LspType {
 }

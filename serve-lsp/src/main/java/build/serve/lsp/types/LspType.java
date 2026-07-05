@@ -26,10 +26,11 @@ package build.serve.lsp.types;
  * @since Apr-2026
  */
 public sealed interface LspType
-    permits ClientCapabilities, CodeAction, Command, CompletionItem, Diagnostic, DocumentHighlight,
+    permits CallHierarchyIncomingCall, CallHierarchyItem, CallHierarchyOutgoingCall,
+    ClientCapabilities, CodeAction, Command, CompletionItem, Diagnostic, DocumentHighlight,
     DocumentSymbol, FoldingRange, Hover, InlayHint, Location,
     MarkupContent, ParameterInformation, Position, Range, SelectionRange,
     ServerCapabilities, ShowMessageParams, SignatureHelp, SignatureInformation,
     SymbolInformation, TextDocumentContentChangeEvent, TextDocumentIdentifier,
-    TextDocumentItem, TextEdit, VersionedTextDocumentIdentifier, WorkspaceEdit {
+    TextDocumentItem, TextEdit, TypeHierarchyItem, VersionedTextDocumentIdentifier, WorkspaceEdit {
 }

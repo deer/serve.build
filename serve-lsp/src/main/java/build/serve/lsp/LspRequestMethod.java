@@ -32,6 +32,8 @@ import java.util.stream.Stream;
  */
 public enum LspRequestMethod {
 
+    CALL_HIERARCHY_INCOMING_CALLS("callHierarchy/incomingCalls"),
+    CALL_HIERARCHY_OUTGOING_CALLS("callHierarchy/outgoingCalls"),
     CODE_ACTION("textDocument/codeAction"),
     COMPLETION("textDocument/completion"),
     DECLARATION("textDocument/declaration"),
@@ -45,12 +47,16 @@ public enum LspRequestMethod {
     IMPLEMENTATION("textDocument/implementation"),
     INITIALIZE("initialize"),
     INLAY_HINT("textDocument/inlayHint"),
+    PREPARE_CALL_HIERARCHY("textDocument/prepareCallHierarchy"),
+    PREPARE_TYPE_HIERARCHY("textDocument/prepareTypeHierarchy"),
     RANGE_FORMATTING("textDocument/rangeFormatting"),
     REFERENCES("textDocument/references"),
     RENAME("textDocument/rename"),
     SELECTION_RANGE("textDocument/selectionRange"),
     SIGNATURE_HELP("textDocument/signatureHelp"),
     TYPE_DEFINITION("textDocument/typeDefinition"),
+    TYPE_HIERARCHY_SUBTYPES("typeHierarchy/subtypes"),
+    TYPE_HIERARCHY_SUPERTYPES("typeHierarchy/supertypes"),
     WORKSPACE_SYMBOL("workspace/symbol");
 
     public final String methodName;
