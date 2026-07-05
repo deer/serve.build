@@ -131,25 +131,25 @@ public interface LspServer {
             return this;
         }
 
-        public Builder onDefinition(final BiFunction<TextDocumentPositionParams, LspContext, Location> h) {
+        public Builder onDefinition(final BiFunction<TextDocumentPositionParams, LspContext, List<Location>> h) {
             requestHandlers.put(LspRequestMethod.DEFINITION,
                 (r, ctx) -> h.apply(((LspRequest.Definition) r).params(), ctx));
             return this;
         }
 
-        public Builder onDeclaration(final BiFunction<TextDocumentPositionParams, LspContext, Location> h) {
+        public Builder onDeclaration(final BiFunction<TextDocumentPositionParams, LspContext, List<Location>> h) {
             requestHandlers.put(LspRequestMethod.DECLARATION,
                 (r, ctx) -> h.apply(((LspRequest.Declaration) r).params(), ctx));
             return this;
         }
 
-        public Builder onTypeDefinition(final BiFunction<TextDocumentPositionParams, LspContext, Location> h) {
+        public Builder onTypeDefinition(final BiFunction<TextDocumentPositionParams, LspContext, List<Location>> h) {
             requestHandlers.put(LspRequestMethod.TYPE_DEFINITION,
                 (r, ctx) -> h.apply(((LspRequest.TypeDefinition) r).params(), ctx));
             return this;
         }
 
-        public Builder onImplementation(final BiFunction<TextDocumentPositionParams, LspContext, Location> h) {
+        public Builder onImplementation(final BiFunction<TextDocumentPositionParams, LspContext, List<Location>> h) {
             requestHandlers.put(LspRequestMethod.IMPLEMENTATION,
                 (r, ctx) -> h.apply(((LspRequest.Implementation) r).params(), ctx));
             return this;

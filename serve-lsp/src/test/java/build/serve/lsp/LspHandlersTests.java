@@ -49,19 +49,91 @@ class LspHandlersTests {
     @Test
     void shouldReturnDefinitionLocation() throws Exception {
         final var server = LspServer.builder()
-            .onDefinition((params, ctx) -> new Location(
+            .onDefinition((params, ctx) -> List.of(new Location(
                 "file:///other.java",
-                Range.of(10, 0, 10, 15)))
+                Range.of(10, 0, 10, 15))))
             .build();
 
         try (final var client = new LspTransportTests.LspTestClient(server)) {
             final var response = client.sendRequest(1, "textDocument/definition", POSITION_PARAMS);
 
-            final var result = response.get("result").asObject();
+            final var result = response.get("result").asArray().values().get(0).asObject();
             assertThat(result.get("uri").asString().value()).isEqualTo("file:///other.java");
             assertThat(result.get("range").asObject().get("start").asObject().get("line").asNumber().toNumber().intValue()).isEqualTo(10);
             assertThat(result.get("range").asObject().get("start").asObject().get("character").asNumber().toNumber().intValue()).isEqualTo(0);
             assertThat(result.get("range").asObject().get("end").asObject().get("character").asNumber().toNumber().intValue()).isEqualTo(15);
+        }
+    }
+
+    @Test
+    void shouldReturnMultipleDefinitionLocations() throws Exception {
+        final var server = LspServer.builder()
+            .onDefinition((params, ctx) -> List.of(
+                new Location("file:///header.java", Range.of(1, 0, 1, 5)),
+                new Location("file:///impl.java", Range.of(9, 4, 9, 9))))
+            .build();
+
+        try (final var client = new LspTransportTests.LspTestClient(server)) {
+            final var response = client.sendRequest(1, "textDocument/definition", POSITION_PARAMS);
+
+            final var result = response.get("result").asArray();
+            assertThat(result.values()).hasSize(2);
+            assertThat(result.values().get(0).asObject().get("uri").asString().value()).isEqualTo("file:///header.java");
+            assertThat(result.values().get(1).asObject().get("uri").asString().value()).isEqualTo("file:///impl.java");
+        }
+    }
+
+    @Test
+    void shouldReturnMultipleDeclarationLocations() throws Exception {
+        final var server = LspServer.builder()
+            .onDeclaration((params, ctx) -> List.of(
+                new Location("file:///a.java", Range.of(1, 0, 1, 5)),
+                new Location("file:///b.java", Range.of(2, 0, 2, 5))))
+            .build();
+
+        try (final var client = new LspTransportTests.LspTestClient(server)) {
+            final var response = client.sendRequest(1, "textDocument/declaration", POSITION_PARAMS);
+
+            final var result = response.get("result").asArray();
+            assertThat(result.values()).hasSize(2);
+            assertThat(result.values().get(0).asObject().get("uri").asString().value()).isEqualTo("file:///a.java");
+            assertThat(result.values().get(1).asObject().get("uri").asString().value()).isEqualTo("file:///b.java");
+        }
+    }
+
+    @Test
+    void shouldReturnMultipleTypeDefinitionLocations() throws Exception {
+        final var server = LspServer.builder()
+            .onTypeDefinition((params, ctx) -> List.of(
+                new Location("file:///a.java", Range.of(1, 0, 1, 5)),
+                new Location("file:///b.java", Range.of(2, 0, 2, 5))))
+            .build();
+
+        try (final var client = new LspTransportTests.LspTestClient(server)) {
+            final var response = client.sendRequest(1, "textDocument/typeDefinition", POSITION_PARAMS);
+
+            final var result = response.get("result").asArray();
+            assertThat(result.values()).hasSize(2);
+            assertThat(result.values().get(0).asObject().get("uri").asString().value()).isEqualTo("file:///a.java");
+            assertThat(result.values().get(1).asObject().get("uri").asString().value()).isEqualTo("file:///b.java");
+        }
+    }
+
+    @Test
+    void shouldReturnMultipleImplementationLocations() throws Exception {
+        final var server = LspServer.builder()
+            .onImplementation((params, ctx) -> List.of(
+                new Location("file:///a.java", Range.of(1, 0, 1, 5)),
+                new Location("file:///b.java", Range.of(2, 0, 2, 5))))
+            .build();
+
+        try (final var client = new LspTransportTests.LspTestClient(server)) {
+            final var response = client.sendRequest(1, "textDocument/implementation", POSITION_PARAMS);
+
+            final var result = response.get("result").asArray();
+            assertThat(result.values()).hasSize(2);
+            assertThat(result.values().get(0).asObject().get("uri").asString().value()).isEqualTo("file:///a.java");
+            assertThat(result.values().get(1).asObject().get("uri").asString().value()).isEqualTo("file:///b.java");
         }
     }
 
@@ -228,7 +300,7 @@ class LspHandlersTests {
     @Test
     void shouldHandleMultipleRequestsInSequence() throws Exception {
         final var server = LspServer.builder()
-            .onDefinition((params, ctx) -> new Location("file:///def.java", Range.of(0, 0, 0, 5)))
+            .onDefinition((params, ctx) -> List.of(new Location("file:///def.java", Range.of(0, 0, 0, 5))))
             .onReferences((params, ctx) -> List.of(
                 new Location("file:///ref.java", Range.of(1, 0, 1, 5))))
             .build();
@@ -241,7 +313,7 @@ class LspHandlersTests {
                     + "\"includeDeclaration\":false}");
 
             assertThat(def.get("id").asNumber().toNumber().intValue()).isEqualTo(1);
-            assertThat(def.get("result").asObject().get("uri").asString().value()).isEqualTo("file:///def.java");
+            assertThat(def.get("result").asArray().values().get(0).asObject().get("uri").asString().value()).isEqualTo("file:///def.java");
 
             assertThat(refs.get("id").asNumber().toNumber().intValue()).isEqualTo(2);
             assertThat(refs.get("result").asArray().values().get(0).asObject().get("uri").asString().value()).isEqualTo("file:///ref.java");
