@@ -2,6 +2,7 @@ package build.serve.lsp;
 
 import build.base.json.Json;
 import build.base.json.JsonObject;
+import build.base.json.JsonValue;
 import build.serve.lsp.types.CompletionItem;
 import build.serve.lsp.types.CompletionItemKind;
 import build.serve.lsp.types.Hover;
@@ -21,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -116,6 +118,66 @@ class LspTransportTests {
             assertThat(notification.get("method").asString().value()).isEqualTo("textDocument/publishDiagnostics");
             assertThat(notification.get("params").asObject().get("uri").asString().value()).isEqualTo("file:///test.java");
             assertThat(notification.get("params").asObject().get("diagnostics").asArray().values()).hasSize(1);
+        }
+    }
+
+    @Test
+    void shouldCorrelateOutboundRequestWithClientResult() throws Exception {
+        final var resultRef = new AtomicReference<JsonValue>();
+        final var server = LspServer.builder()
+            .onDidOpen((params, ctx) ->
+                ctx.sendRequest("workspace/applyEdit", JsonObject.builder().put("label", "test").build())
+                    .thenAccept(resultRef::set))
+            .build();
+
+        try (final var client = new LspTestClient(server)) {
+            client.sendNotification("textDocument/didOpen",
+                """
+                    {"textDocument":{"uri":"file:///test.java","languageId":"java","version":1,"text":"hello"}}
+                    """);
+
+            final var outboundRequest = client.readMessage();
+            assertThat(outboundRequest.get("method").asString().value()).isEqualTo("workspace/applyEdit");
+            final var outboundId = outboundRequest.get("id").asNumber().toNumber().intValue();
+
+            client.writeMessage(
+                "{\"jsonrpc\":\"2.0\",\"id\":" + outboundId + ",\"result\":{\"applied\":true}}");
+
+            // round-trip a follow-up request to guarantee the server has processed the response above,
+            // since the server thread reads messages from the same stream in order
+            client.sendRequest(99, "shutdown", null);
+            assertThat(resultRef.get().asObject().get("applied").asBoolean().value()).isTrue();
+        }
+    }
+
+    @Test
+    void shouldFailFutureWhenClientRespondsToOutboundRequestWithError() throws Exception {
+        final var errorRef = new AtomicReference<Throwable>();
+        final var server = LspServer.builder()
+            .onDidOpen((params, ctx) ->
+                ctx.sendRequest("workspace/applyEdit", JsonObject.builder().build())
+                    .whenComplete((result, error) -> errorRef.set(error)))
+            .build();
+
+        try (final var client = new LspTestClient(server)) {
+            client.sendNotification("textDocument/didOpen",
+                """
+                    {"textDocument":{"uri":"file:///test.java","languageId":"java","version":1,"text":"hello"}}
+                    """);
+
+            final var outboundRequest = client.readMessage();
+            final var outboundId = outboundRequest.get("id").asNumber().toNumber().intValue();
+
+            client.writeMessage(
+                "{\"jsonrpc\":\"2.0\",\"id\":" + outboundId + ",\"error\":{\"code\":-32000,\"message\":\"declined\"}}");
+
+            // round-trip a follow-up request to guarantee the server has processed the response above,
+            // since the server thread reads messages from the same stream in order
+            client.sendRequest(99, "shutdown", null);
+            assertThat(errorRef.get()).isInstanceOf(LspClientErrorException.class);
+            final var error = (LspClientErrorException) errorRef.get();
+            assertThat(error.code()).isEqualTo(-32000);
+            assertThat(error.getMessage()).isEqualTo("declined");
         }
     }
 
