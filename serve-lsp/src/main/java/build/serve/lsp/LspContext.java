@@ -19,10 +19,13 @@
  */
 package build.serve.lsp;
 
+import build.base.json.JsonObject;
+import build.base.json.JsonValue;
 import build.serve.lsp.types.Diagnostic;
 import build.serve.lsp.types.ShowMessageParams;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Context passed to every LSP handler for server-initiated messages.
@@ -55,9 +58,23 @@ public interface LspContext {
     void logMessage(ShowMessageParams params);
 
     /**
-     * Shows a message request to the client.
+     * Shows a message request to the client and returns a future completing with the client's
+     * response once it arrives.
      *
      * @param params the message parameters
+     * @return a future completing with the client's response, or completing exceptionally with
+     *         {@link LspClientErrorException} if the client responds with a JSON-RPC error
      */
-    void showMessageRequest(ShowMessageParams params);
+    CompletableFuture<JsonValue> showMessageRequest(ShowMessageParams params);
+
+    /**
+     * Sends a server-initiated JSON-RPC request to the client and returns a future completing
+     * with the client's result once its response arrives.
+     *
+     * @param method the JSON-RPC method name
+     * @param params the request parameters
+     * @return a future completing with the client's result value, or completing exceptionally
+     *         with {@link LspClientErrorException} if the client responds with a JSON-RPC error
+     */
+    CompletableFuture<JsonValue> sendRequest(String method, JsonObject params);
 }

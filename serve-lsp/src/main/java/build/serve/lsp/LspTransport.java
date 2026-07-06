@@ -35,6 +35,9 @@ import java.io.OutputStream;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -103,6 +106,7 @@ public final class LspTransport {
         final var shutdownRequested = new AtomicBoolean(false);
         final var outboundId = new AtomicInteger(0);
         final var lock = new Object();
+        final Map<Integer, CompletableFuture<JsonValue>> pendingRequests = new ConcurrentHashMap<>();
 
         final LspContext ctx = new LspContext() {
             @Override
@@ -125,9 +129,17 @@ public final class LspTransport {
             }
 
             @Override
-            public void showMessageRequest(final ShowMessageParams params) {
-                sendOutboundRequest(out, lock, outboundId.incrementAndGet(),
-                    "window/showMessageRequest", showMessageNode(params));
+            public CompletableFuture<JsonValue> showMessageRequest(final ShowMessageParams params) {
+                return sendRequest("window/showMessageRequest", showMessageNode(params));
+            }
+
+            @Override
+            public CompletableFuture<JsonValue> sendRequest(final String method, final JsonObject params) {
+                final var id = outboundId.incrementAndGet();
+                final var future = new CompletableFuture<JsonValue>();
+                pendingRequests.put(id, future);
+                sendOutboundRequest(out, lock, id, method, params);
+                return future;
             }
 
             private JsonObject showMessageNode(final ShowMessageParams params) {
@@ -138,10 +150,20 @@ public final class LspTransport {
             }
         };
 
+        try {
+            runLoop(server, in, out, ctx, shutdownRequested, lock, pendingRequests);
+        } finally {
+            failPendingRequests(pendingRequests);
+        }
+    }
+
+    private static void runLoop(final LspServer server, final InputStream in, final OutputStream out,
+                                final LspContext ctx, final AtomicBoolean shutdownRequested, final Object lock,
+                                final Map<Integer, CompletableFuture<JsonValue>> pendingRequests) throws IOException {
         while (true) {
             final var contentLength = readContentLength(in);
             if (contentLength < 0) {
-                break;
+                return;
             }
 
             final var body = in.readNBytes(contentLength);
@@ -172,7 +194,8 @@ public final class LspTransport {
 
             if (id != null && !(id instanceof JsonNull)) {
                 if (methodStr.isEmpty()) {
-                    // Client response to a server-initiated request — ignore
+                    // Client response to a server-initiated request — complete the matching future
+                    completeOutboundResponse(pendingRequests, message, id);
                     continue;
                 }
                 final var methodOpt = LspRequestMethod.from(methodStr);
@@ -201,6 +224,49 @@ public final class LspTransport {
                 }
             }
         }
+    }
+
+    private static void failPendingRequests(final Map<Integer, CompletableFuture<JsonValue>> pendingRequests) {
+        if (pendingRequests.isEmpty()) {
+            return;
+        }
+        final var closed = new IOException("LSP transport closed before a response was received");
+        pendingRequests.values().forEach(future -> future.completeExceptionally(closed));
+        pendingRequests.clear();
+    }
+
+    private static void completeOutboundResponse(final Map<Integer, CompletableFuture<JsonValue>> pendingRequests,
+                                                 final JsonObject message, final JsonValue id) {
+        final var key = outboundIdKey(id);
+        if (key == null) {
+            return;
+        }
+        final var future = pendingRequests.remove(key);
+        if (future == null) {
+            return;
+        }
+        if (message.has("error")) {
+            final var error = message.get("error").asObject();
+            final var code = error.has("code") ? error.get("code").asNumber().toNumber().intValue() : 0;
+            final var errorMessage = error.has("message") ? error.get("message").asString().value() : "";
+            future.completeExceptionally(new LspClientErrorException(code, errorMessage));
+        } else {
+            future.complete(message.has("result") ? message.get("result") : JsonNull.INSTANCE);
+        }
+    }
+
+    private static Integer outboundIdKey(final JsonValue id) {
+        if (id instanceof JsonNumber n) {
+            return n.toNumber().intValue();
+        }
+        if (id instanceof JsonString s) {
+            try {
+                return Integer.parseInt(s.value());
+            } catch (final NumberFormatException e) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private static int readContentLength(final InputStream in) throws IOException {
