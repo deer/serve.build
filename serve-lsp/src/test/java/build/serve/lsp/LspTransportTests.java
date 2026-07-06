@@ -7,6 +7,7 @@ import build.serve.lsp.types.CompletionItemKind;
 import build.serve.lsp.types.Hover;
 import build.serve.lsp.types.ServerCapabilities;
 import build.serve.lsp.types.ServerCapability;
+import build.serve.lsp.types.ShowMessageParams;
 import org.junit.jupiter.api.Test;
 
 import java.io.BufferedReader;
@@ -19,6 +20,7 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -119,6 +121,62 @@ class LspTransportTests {
 
     @Test
     void shutdownExitTest() throws Exception {
+        final var server = LspServer.builder().build();
+
+        try (final var client = new LspTestClient(server)) {
+            final var response = client.sendRequest(1, "shutdown", null);
+            assertThat(response.has("result")).isTrue();
+        }
+    }
+
+    @Test
+    void shouldInvokeShutdownHookBeforeRespondingToShutdown() throws Exception {
+        final var hookRan = new AtomicBoolean(false);
+        final var server = LspServer.builder()
+            .onShutdown(ctx -> hookRan.set(true))
+            .build();
+
+        try (final var client = new LspTestClient(server)) {
+            final var response = client.sendRequest(1, "shutdown", null);
+            assertThat(hookRan.get()).isTrue();
+            assertThat(response.has("result")).isTrue();
+        }
+    }
+
+    @Test
+    void shouldPassUsableContextToShutdownHook() throws Exception {
+        final var server = LspServer.builder()
+            .onShutdown(ctx -> ctx.logMessage(new ShowMessageParams(1, "shutting down")))
+            .build();
+
+        try (final var client = new LspTestClient(server)) {
+            client.writeMessage("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"shutdown\"}");
+
+            final var notification = client.readMessage();
+            assertThat(notification.get("method").asString().value()).isEqualTo("window/logMessage");
+
+            final var response = client.readMessage();
+            assertThat(response.has("result")).isTrue();
+        }
+    }
+
+    @Test
+    void shouldStillRespondToShutdownWhenHookThrows() throws Exception {
+        final var server = LspServer.builder()
+            .onShutdown(ctx -> {
+                throw new RuntimeException("boom");
+            })
+            .build();
+
+        try (final var client = new LspTestClient(server)) {
+            final var response = client.sendRequest(1, "shutdown", null);
+            assertThat(response.has("result")).isTrue();
+            assertThat(response.has("error")).isFalse();
+        }
+    }
+
+    @Test
+    void shouldRespondToShutdownWithoutHookRegistered() throws Exception {
         final var server = LspServer.builder().build();
 
         try (final var client = new LspTestClient(server)) {
@@ -305,7 +363,7 @@ class LspTransportTests {
             return Json.parse(new String(body)).asObject();
         }
 
-        private void writeMessage(final String json) throws IOException {
+        void writeMessage(final String json) throws IOException {
             final var bytes = json.getBytes(StandardCharsets.UTF_8);
             final var header = ("Content-Length: " + bytes.length + "\r\n\r\n").getBytes(StandardCharsets.UTF_8);
             this.out.write(header);

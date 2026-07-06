@@ -161,6 +161,11 @@ public final class LspTransport {
             }
             if ("shutdown".equals(methodStr)) {
                 shutdownRequested.set(true);
+                try {
+                    server.shutdown(ctx);
+                } catch (final Exception e) {
+                    // the client must still receive a response so it can proceed to `exit`
+                }
                 sendResponse(out, lock, id, JsonNull.INSTANCE);
                 continue;
             }
