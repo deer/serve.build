@@ -25,7 +25,7 @@ package build.serve.lsp.types;
  * @param scopeUri the scope to resolve the setting for, or {@code null} for the global scope
  * @param section  the dotted configuration section name, or {@code null} for the whole scope
  * @author reed.vonredwitz
- * @since Apr-2026
+ * @since Jul-2026
  */
 public record ConfigurationItem(String scopeUri, String section) implements LspType {
 }

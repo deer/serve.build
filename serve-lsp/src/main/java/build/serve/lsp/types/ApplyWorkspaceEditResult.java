@@ -25,7 +25,7 @@ package build.serve.lsp.types;
  * @param applied       whether the edit was applied
  * @param failureReason an optional textual description of why the edit was not applied
  * @author reed.vonredwitz
- * @since Apr-2026
+ * @since Jul-2026
  */
 public record ApplyWorkspaceEditResult(boolean applied, String failureReason) {
 }

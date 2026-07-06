@@ -25,7 +25,7 @@ package build.serve.lsp.types;
  * @param uri  the folder's URI
  * @param name the folder's display name
  * @author reed.vonredwitz
- * @since Apr-2026
+ * @since Jul-2026
  */
 public record WorkspaceFolder(String uri, String name) {
 }
