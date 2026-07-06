@@ -63,6 +63,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -76,6 +77,16 @@ public interface LspServer {
     LspResponse handle(LspRequest request, LspContext ctx);
 
     void handle(LspNotification notification, LspContext ctx);
+
+    /**
+     * Called when the client sends {@code shutdown}, before the transport responds to it and before
+     * the JVM is terminated on the subsequent {@code exit} notification. Implementations can flush
+     * state, close resources, or cancel in-flight work here. Does nothing by default.
+     *
+     * @param ctx the LSP context
+     */
+    default void shutdown(final LspContext ctx) {
+    }
 
     static Builder builder() {
         return new Builder();
@@ -93,6 +104,7 @@ public interface LspServer {
             new EnumMap<>(LspRequestMethod.class);
         private final EnumMap<LspNotificationMethod, BiConsumer<LspNotification, LspContext>> notificationHandlers =
             new EnumMap<>(LspNotificationMethod.class);
+        private Consumer<LspContext> shutdownHandler;
 
         private Builder() {
         }
@@ -277,16 +289,30 @@ public interface LspServer {
             return this;
         }
 
+        /**
+         * Registers a hook run when the client sends {@code shutdown}, before the transport responds
+         * to it and before the JVM is terminated on the subsequent {@code exit} notification.
+         *
+         * @param h the shutdown hook
+         * @return this builder
+         */
+        public Builder onShutdown(final Consumer<LspContext> h) {
+            shutdownHandler = h;
+            return this;
+        }
+
         public LspServer build() {
             return new Dispatcher(
                 new EnumMap<>(requestHandlers),
-                new EnumMap<>(notificationHandlers));
+                new EnumMap<>(notificationHandlers),
+                shutdownHandler);
         }
 
         // LspResponse.MethodNotFound is intentionally never returned by Dispatcher — unregistered methods
         // return Ok(null), which the LSP spec treats as a valid "no result" response.
         private record Dispatcher(EnumMap<LspRequestMethod, BiFunction<LspRequest, LspContext, Object>> requestHandlers,
-                                  EnumMap<LspNotificationMethod, BiConsumer<LspNotification, LspContext>> notificationHandlers) implements LspServer {
+                                  EnumMap<LspNotificationMethod, BiConsumer<LspNotification, LspContext>> notificationHandlers,
+                                  Consumer<LspContext> shutdownHandler) implements LspServer {
 
             @Override
             public LspResponse handle(final LspRequest request, final LspContext ctx) {
@@ -303,6 +329,13 @@ public interface LspServer {
                     }
                 } catch (final Exception e) {
                     // silently ignore notification errors
+                }
+            }
+
+            @Override
+            public void shutdown(final LspContext ctx) {
+                if (shutdownHandler != null) {
+                    shutdownHandler.accept(ctx);
                 }
             }
         }
