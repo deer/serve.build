@@ -20,17 +20,12 @@
 package build.serve.lsp.types;
 
 /**
- * Sealed marker interface for all LSP domain types.
+ * The client's response to a {@code workspace/applyEdit} request.
  *
+ * @param applied       whether the edit was applied
+ * @param failureReason an optional textual description of why the edit was not applied
  * @author reed.vonredwitz
- * @since Apr-2026
+ * @since Jul-2026
  */
-public sealed interface LspType
-    permits CallHierarchyIncomingCall, CallHierarchyItem, CallHierarchyOutgoingCall,
-    ClientCapabilities, CodeAction, Command, CompletionItem, ConfigurationItem, Diagnostic,
-    DocumentHighlight, DocumentSymbol, FoldingRange, Hover, InlayHint, Location,
-    MarkupContent, ParameterInformation, Position, Range, SelectionRange,
-    ServerCapabilities, ShowMessageParams, SignatureHelp, SignatureInformation,
-    SymbolInformation, TextDocumentContentChangeEvent, TextDocumentIdentifier,
-    TextDocumentItem, TextEdit, TypeHierarchyItem, VersionedTextDocumentIdentifier, WorkspaceEdit {
+public record ApplyWorkspaceEditResult(boolean applied, String failureReason) {
 }

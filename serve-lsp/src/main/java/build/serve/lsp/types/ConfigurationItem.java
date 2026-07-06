@@ -20,17 +20,12 @@
 package build.serve.lsp.types;
 
 /**
- * Sealed marker interface for all LSP domain types.
+ * A single item requested via {@code workspace/configuration}.
  *
+ * @param scopeUri the scope to resolve the setting for, or {@code null} for the global scope
+ * @param section  the dotted configuration section name, or {@code null} for the whole scope
  * @author reed.vonredwitz
- * @since Apr-2026
+ * @since Jul-2026
  */
-public sealed interface LspType
-    permits CallHierarchyIncomingCall, CallHierarchyItem, CallHierarchyOutgoingCall,
-    ClientCapabilities, CodeAction, Command, CompletionItem, ConfigurationItem, Diagnostic,
-    DocumentHighlight, DocumentSymbol, FoldingRange, Hover, InlayHint, Location,
-    MarkupContent, ParameterInformation, Position, Range, SelectionRange,
-    ServerCapabilities, ShowMessageParams, SignatureHelp, SignatureInformation,
-    SymbolInformation, TextDocumentContentChangeEvent, TextDocumentIdentifier,
-    TextDocumentItem, TextEdit, TypeHierarchyItem, VersionedTextDocumentIdentifier, WorkspaceEdit {
+public record ConfigurationItem(String scopeUri, String section) implements LspType {
 }

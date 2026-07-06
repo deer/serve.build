@@ -25,8 +25,12 @@ import build.base.json.JsonNumber;
 import build.base.json.JsonObject;
 import build.base.json.JsonString;
 import build.base.json.JsonValue;
+import build.serve.lsp.types.ApplyWorkspaceEditResult;
+import build.serve.lsp.types.ConfigurationItem;
 import build.serve.lsp.types.Diagnostic;
 import build.serve.lsp.types.ShowMessageParams;
+import build.serve.lsp.types.WorkspaceEdit;
+import build.serve.lsp.types.WorkspaceFolder;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -140,6 +144,35 @@ public final class LspTransport {
                 pendingRequests.put(id, future);
                 sendOutboundRequest(out, lock, id, method, params);
                 return future;
+            }
+
+            @Override
+            public CompletableFuture<ApplyWorkspaceEditResult> applyEdit(final WorkspaceEdit edit) {
+                return applyEdit(null, edit);
+            }
+
+            @Override
+            public CompletableFuture<ApplyWorkspaceEditResult> applyEdit(final String label,
+                                                                         final WorkspaceEdit edit) {
+                final var b = JsonObject.builder().put("edit", LspJson.toJson(edit));
+                if (label != null) {
+                    b.put("label", label);
+                }
+                return sendRequest("workspace/applyEdit", b.build())
+                    .thenApply(LspJson::parseApplyWorkspaceEditResult);
+            }
+
+            @Override
+            public CompletableFuture<List<JsonValue>> configuration(final List<ConfigurationItem> items) {
+                final var params = JsonObject.builder().put("items", LspJson.toJson(items)).build();
+                return sendRequest("workspace/configuration", params)
+                    .thenApply(LspJson::parseConfigurationResult);
+            }
+
+            @Override
+            public CompletableFuture<List<WorkspaceFolder>> workspaceFolders() {
+                return sendRequest("workspace/workspaceFolders", JsonObject.builder().build())
+                    .thenApply(LspJson::parseWorkspaceFolders);
             }
 
             private JsonObject showMessageNode(final ShowMessageParams params) {
