@@ -48,6 +48,7 @@ import build.serve.lsp.params.TextDocumentPositionParams;
 import build.serve.lsp.params.TypeHierarchySubtypesParams;
 import build.serve.lsp.params.TypeHierarchySupertypesParams;
 import build.serve.lsp.params.WorkspaceSymbolParams;
+import build.serve.lsp.types.ApplyWorkspaceEditResult;
 import build.serve.lsp.types.CallHierarchyIncomingCall;
 import build.serve.lsp.types.CallHierarchyItem;
 import build.serve.lsp.types.CallHierarchyOutgoingCall;
@@ -55,6 +56,7 @@ import build.serve.lsp.types.ClientCapabilities;
 import build.serve.lsp.types.CodeAction;
 import build.serve.lsp.types.Command;
 import build.serve.lsp.types.CompletionItem;
+import build.serve.lsp.types.ConfigurationItem;
 import build.serve.lsp.types.Diagnostic;
 import build.serve.lsp.types.DiagnosticSeverity;
 import build.serve.lsp.types.DocumentHighlight;
@@ -82,6 +84,7 @@ import build.serve.lsp.types.TextEdit;
 import build.serve.lsp.types.TypeHierarchyItem;
 import build.serve.lsp.types.VersionedTextDocumentIdentifier;
 import build.serve.lsp.types.WorkspaceEdit;
+import build.serve.lsp.types.WorkspaceFolder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -343,6 +346,16 @@ final class LspJson {
                 .put("type", smp.type())
                 .put("message", smp.message())
                 .build();
+            case ConfigurationItem ci -> {
+                final var b = JsonObject.builder();
+                if (ci.scopeUri() != null) {
+                    b.put("scopeUri", ci.scopeUri());
+                }
+                if (ci.section() != null) {
+                    b.put("section", ci.section());
+                }
+                yield b.build();
+            }
             case ClientCapabilities __ -> JsonObject.builder().build();
         };
     }
@@ -423,6 +436,33 @@ final class LspJson {
             parseRange(o.get("selectionRange").asObject()),
             o.has("data") ? o.get("data") : null
         );
+    }
+
+    static ApplyWorkspaceEditResult parseApplyWorkspaceEditResult(final JsonValue value) {
+        final var o = value.asObject();
+        return new ApplyWorkspaceEditResult(
+            o.has("applied") && o.get("applied").asBoolean().value(),
+            o.has("failureReason") ? o.get("failureReason").asString().value() : null
+        );
+    }
+
+    static List<JsonValue> parseConfigurationResult(final JsonValue value) {
+        final var result = new ArrayList<JsonValue>();
+        if (value instanceof JsonArray a) {
+            result.addAll(a.values());
+        }
+        return result;
+    }
+
+    static List<WorkspaceFolder> parseWorkspaceFolders(final JsonValue value) {
+        final var result = new ArrayList<WorkspaceFolder>();
+        if (value instanceof JsonArray a) {
+            for (final var item : a.values()) {
+                final var o = item.asObject();
+                result.add(new WorkspaceFolder(o.get("uri").asString().value(), o.get("name").asString().value()));
+            }
+        }
+        return result;
     }
 
     // ── Params parsers ────────────────────────────────────────────────────────

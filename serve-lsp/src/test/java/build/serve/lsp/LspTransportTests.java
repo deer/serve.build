@@ -3,12 +3,18 @@ package build.serve.lsp;
 import build.base.json.Json;
 import build.base.json.JsonObject;
 import build.base.json.JsonValue;
+import build.serve.lsp.types.ApplyWorkspaceEditResult;
 import build.serve.lsp.types.CompletionItem;
 import build.serve.lsp.types.CompletionItemKind;
+import build.serve.lsp.types.ConfigurationItem;
 import build.serve.lsp.types.Hover;
+import build.serve.lsp.types.Range;
 import build.serve.lsp.types.ServerCapabilities;
 import build.serve.lsp.types.ServerCapability;
 import build.serve.lsp.types.ShowMessageParams;
+import build.serve.lsp.types.TextEdit;
+import build.serve.lsp.types.WorkspaceEdit;
+import build.serve.lsp.types.WorkspaceFolder;
 import org.junit.jupiter.api.Test;
 
 import java.io.BufferedReader;
@@ -20,6 +26,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -178,6 +185,143 @@ class LspTransportTests {
             final var error = (LspClientErrorException) errorRef.get();
             assertThat(error.code()).isEqualTo(-32000);
             assertThat(error.getMessage()).isEqualTo("declined");
+        }
+    }
+
+    @Test
+    void shouldApplyWorkspaceEditWithoutLabel() throws Exception {
+        final var resultRef = new AtomicReference<ApplyWorkspaceEditResult>();
+        final var edit = new WorkspaceEdit(Map.of("file:///test.java",
+            List.of(new TextEdit(Range.of(0, 0, 0, 5), "hello"))));
+        final var server = LspServer.builder()
+            .onDidOpen((params, ctx) -> ctx.applyEdit(edit).thenAccept(resultRef::set))
+            .build();
+
+        try (final var client = new LspTestClient(server)) {
+            client.sendNotification("textDocument/didOpen",
+                """
+                    {"textDocument":{"uri":"file:///test.java","languageId":"java","version":1,"text":"hello"}}
+                    """);
+
+            final var outboundRequest = client.readMessage();
+            assertThat(outboundRequest.get("method").asString().value()).isEqualTo("workspace/applyEdit");
+            final var params = outboundRequest.get("params").asObject();
+            assertThat(params.has("label")).isFalse();
+            assertThat(params.get("edit").asObject().get("changes").asObject().has("file:///test.java")).isTrue();
+            final var outboundId = outboundRequest.get("id").asNumber().toNumber().intValue();
+
+            client.writeMessage(
+                "{\"jsonrpc\":\"2.0\",\"id\":" + outboundId + ",\"result\":{\"applied\":true}}");
+
+            client.sendRequest(99, "shutdown", null);
+            assertThat(resultRef.get().applied()).isTrue();
+            assertThat(resultRef.get().failureReason()).isNull();
+        }
+    }
+
+    @Test
+    void shouldApplyWorkspaceEditWithLabelAndReportFailure() throws Exception {
+        final var resultRef = new AtomicReference<ApplyWorkspaceEditResult>();
+        final var edit = new WorkspaceEdit(Map.of());
+        final var server = LspServer.builder()
+            .onDidOpen((params, ctx) -> ctx.applyEdit("rename foo to bar", edit).thenAccept(resultRef::set))
+            .build();
+
+        try (final var client = new LspTestClient(server)) {
+            client.sendNotification("textDocument/didOpen",
+                """
+                    {"textDocument":{"uri":"file:///test.java","languageId":"java","version":1,"text":"hello"}}
+                    """);
+
+            final var outboundRequest = client.readMessage();
+            assertThat(outboundRequest.get("params").asObject().get("label").asString().value())
+                .isEqualTo("rename foo to bar");
+            final var outboundId = outboundRequest.get("id").asNumber().toNumber().intValue();
+
+            client.writeMessage(
+                "{\"jsonrpc\":\"2.0\",\"id\":" + outboundId
+                    + ",\"result\":{\"applied\":false,\"failureReason\":\"stale document\"}}");
+
+            client.sendRequest(99, "shutdown", null);
+            assertThat(resultRef.get().applied()).isFalse();
+            assertThat(resultRef.get().failureReason()).isEqualTo("stale document");
+        }
+    }
+
+    @Test
+    void shouldRequestConfiguration() throws Exception {
+        final var resultRef = new AtomicReference<List<JsonValue>>();
+        final var server = LspServer.builder()
+            .onDidOpen((params, ctx) -> ctx.configuration(List.of(new ConfigurationItem(null, "myServer.trace")))
+                .thenAccept(resultRef::set))
+            .build();
+
+        try (final var client = new LspTestClient(server)) {
+            client.sendNotification("textDocument/didOpen",
+                """
+                    {"textDocument":{"uri":"file:///test.java","languageId":"java","version":1,"text":"hello"}}
+                    """);
+
+            final var outboundRequest = client.readMessage();
+            assertThat(outboundRequest.get("method").asString().value()).isEqualTo("workspace/configuration");
+            final var items = outboundRequest.get("params").asObject().get("items").asArray().values();
+            assertThat(items).hasSize(1);
+            assertThat(items.get(0).asObject().get("section").asString().value()).isEqualTo("myServer.trace");
+            final var outboundId = outboundRequest.get("id").asNumber().toNumber().intValue();
+
+            client.writeMessage("{\"jsonrpc\":\"2.0\",\"id\":" + outboundId + ",\"result\":[\"verbose\"]}");
+
+            client.sendRequest(99, "shutdown", null);
+            assertThat(resultRef.get()).hasSize(1);
+            assertThat(resultRef.get().get(0).asString().value()).isEqualTo("verbose");
+        }
+    }
+
+    @Test
+    void shouldRequestWorkspaceFolders() throws Exception {
+        final var resultRef = new AtomicReference<List<WorkspaceFolder>>();
+        final var server = LspServer.builder()
+            .onDidOpen((params, ctx) -> ctx.workspaceFolders().thenAccept(resultRef::set))
+            .build();
+
+        try (final var client = new LspTestClient(server)) {
+            client.sendNotification("textDocument/didOpen",
+                """
+                    {"textDocument":{"uri":"file:///test.java","languageId":"java","version":1,"text":"hello"}}
+                    """);
+
+            final var outboundRequest = client.readMessage();
+            assertThat(outboundRequest.get("method").asString().value()).isEqualTo("workspace/workspaceFolders");
+            final var outboundId = outboundRequest.get("id").asNumber().toNumber().intValue();
+
+            client.writeMessage("{\"jsonrpc\":\"2.0\",\"id\":" + outboundId
+                + ",\"result\":[{\"uri\":\"file:///proj\",\"name\":\"proj\"}]}");
+
+            client.sendRequest(99, "shutdown", null);
+            assertThat(resultRef.get()).containsExactly(new WorkspaceFolder("file:///proj", "proj"));
+        }
+    }
+
+    @Test
+    void shouldReturnEmptyListWhenClientHasNoWorkspaceFolders() throws Exception {
+        final var resultRef = new AtomicReference<List<WorkspaceFolder>>();
+        final var server = LspServer.builder()
+            .onDidOpen((params, ctx) -> ctx.workspaceFolders().thenAccept(resultRef::set))
+            .build();
+
+        try (final var client = new LspTestClient(server)) {
+            client.sendNotification("textDocument/didOpen",
+                """
+                    {"textDocument":{"uri":"file:///test.java","languageId":"java","version":1,"text":"hello"}}
+                    """);
+
+            final var outboundRequest = client.readMessage();
+            final var outboundId = outboundRequest.get("id").asNumber().toNumber().intValue();
+
+            client.writeMessage("{\"jsonrpc\":\"2.0\",\"id\":" + outboundId + ",\"result\":null}");
+
+            client.sendRequest(99, "shutdown", null);
+            assertThat(resultRef.get()).isEmpty();
         }
     }
 

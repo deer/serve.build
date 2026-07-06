@@ -21,8 +21,12 @@ package build.serve.lsp;
 
 import build.base.json.JsonObject;
 import build.base.json.JsonValue;
+import build.serve.lsp.types.ApplyWorkspaceEditResult;
+import build.serve.lsp.types.ConfigurationItem;
 import build.serve.lsp.types.Diagnostic;
 import build.serve.lsp.types.ShowMessageParams;
+import build.serve.lsp.types.WorkspaceEdit;
+import build.serve.lsp.types.WorkspaceFolder;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -63,7 +67,7 @@ public interface LspContext {
      *
      * @param params the message parameters
      * @return a future completing with the client's response, or completing exceptionally with
-     *         {@link LspClientErrorException} if the client responds with a JSON-RPC error
+     * {@link LspClientErrorException} if the client responds with a JSON-RPC error
      */
     CompletableFuture<JsonValue> showMessageRequest(ShowMessageParams params);
 
@@ -74,7 +78,46 @@ public interface LspContext {
      * @param method the JSON-RPC method name
      * @param params the request parameters
      * @return a future completing with the client's result value, or completing exceptionally
-     *         with {@link LspClientErrorException} if the client responds with a JSON-RPC error
+     * with {@link LspClientErrorException} if the client responds with a JSON-RPC error
      */
     CompletableFuture<JsonValue> sendRequest(String method, JsonObject params);
+
+    /**
+     * Asks the client to apply the given workspace edit.
+     *
+     * @param edit the edit to apply
+     * @return a future completing with the client's response, or completing exceptionally with
+     * {@link LspClientErrorException} if the client responds with a JSON-RPC error
+     */
+    CompletableFuture<ApplyWorkspaceEditResult> applyEdit(WorkspaceEdit edit);
+
+    /**
+     * Asks the client to apply the given workspace edit, labelled for presentation
+     * (e.g. in an undo stack) as {@code label}.
+     *
+     * @param label a human-readable label describing the edit
+     * @param edit  the edit to apply
+     * @return a future completing with the client's response, or completing exceptionally with
+     * {@link LspClientErrorException} if the client responds with a JSON-RPC error
+     */
+    CompletableFuture<ApplyWorkspaceEditResult> applyEdit(String label, WorkspaceEdit edit);
+
+    /**
+     * Requests configuration settings from the client for the given items.
+     *
+     * @param items the configuration items to resolve
+     * @return a future completing with one settings value per requested item, in the same
+     * order, or completing exceptionally with {@link LspClientErrorException} if the
+     * client responds with a JSON-RPC error
+     */
+    CompletableFuture<List<JsonValue>> configuration(List<ConfigurationItem> items);
+
+    /**
+     * Requests the client's current workspace folders.
+     *
+     * @return a future completing with the client's workspace folders (empty if the client has
+     * none open), or completing exceptionally with {@link LspClientErrorException} if
+     * the client responds with a JSON-RPC error
+     */
+    CompletableFuture<List<WorkspaceFolder>> workspaceFolders();
 }

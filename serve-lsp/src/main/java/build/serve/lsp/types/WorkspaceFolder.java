@@ -20,17 +20,12 @@
 package build.serve.lsp.types;
 
 /**
- * Sealed marker interface for all LSP domain types.
+ * A workspace folder, as returned by the client in response to {@code workspace/workspaceFolders}.
  *
+ * @param uri  the folder's URI
+ * @param name the folder's display name
  * @author reed.vonredwitz
  * @since Apr-2026
  */
-public sealed interface LspType
-    permits CallHierarchyIncomingCall, CallHierarchyItem, CallHierarchyOutgoingCall,
-    ClientCapabilities, CodeAction, Command, CompletionItem, ConfigurationItem, Diagnostic,
-    DocumentHighlight, DocumentSymbol, FoldingRange, Hover, InlayHint, Location,
-    MarkupContent, ParameterInformation, Position, Range, SelectionRange,
-    ServerCapabilities, ShowMessageParams, SignatureHelp, SignatureInformation,
-    SymbolInformation, TextDocumentContentChangeEvent, TextDocumentIdentifier,
-    TextDocumentItem, TextEdit, TypeHierarchyItem, VersionedTextDocumentIdentifier, WorkspaceEdit {
+public record WorkspaceFolder(String uri, String name) {
 }
