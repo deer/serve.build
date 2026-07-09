@@ -51,7 +51,7 @@ That's it. Routes are code, wired at startup. One virtual thread per request, st
 ## Features
 
 - **Virtual threads** — every request runs on its own virtual thread. No thread pools to tune.
-- **19 JPMS modules** — real `module-info.java` with explicit `requires`/`exports`; take only what you need
+- **24 JPMS modules** — real `module-info.java` with explicit `requires`/`exports`; take only what you need
 - **Type-safe routing** — path parameters (`/users/{id}`), HTTP method matching, nested routers
 - **Middleware pipeline** — `Middleware` wraps `Handler`, applied in registration order
 - **Dependency injection** — Jakarta `@Inject` via [codemodel.build](https://github.com/Workday/codemodel.build), resolved at startup
@@ -86,8 +86,8 @@ That's it. Routes are code, wired at startup. One virtual thread per request, st
 |-------------------|--------------------------|------------------------------------|--------------------------------------------------------------|
 | `serve-websocket` | `build.serve.websocket`  | RFC 6455 WebSocket                 | `WebSocketUpgrade`, `WebSocketHandler`, `WebSocket`          |
 | `serve-sse`       | `build.serve.sse`        | Server-Sent Events (RFC 8895)      | `SseUpgrade`, `SseHandler`, `SseEmitter`, `SseEvent`         |
-| `serve-mcp`       | `build.serve.mcp`        | Model Context Protocol             | `McpServer`, `McpTool`, `McpToolResult`                      |
-| `serve-lsp`       | `build.serve.lsp`        | Language Server Protocol 3.17      | `LspTransport`, `LspServer`, `LspContext`                    |
+| `serve-mcp`       | `build.serve.mcp`        | Model Context Protocol             | `McpServer`, `ToolDef`, `McpResource`, `McpPrompt`, `McpToolResult` |
+| `serve-lsp`       | `build.serve.lsp`        | Language Server Protocol 3.17      | `LspTransport`, `LspServer`, `LspContext`, `TextDocumentStore`      |
 | `serve-graphql`   | `build.serve.graphql`    | GraphQL over HTTP                  | `GraphQlHandler`, `GraphQlSchema`, `GraphiQlHandler`         |
 
 ### Middleware
@@ -101,6 +101,9 @@ That's it. Routes are code, wired at startup. One virtual thread per request, st
 | `serve-ratelimit`    | `build.serve.ratelimit`       | Token-bucket rate limiting | `RateLimitMiddleware`        |
 | `serve-health`       | `build.serve.health`          | Health/readiness checks   | `HealthHandler`, `HealthCheck` |
 | `serve-staticfiles`  | `build.serve.staticfiles`     | Static file serving       | `StaticFileHandler`           |
+| `serve-auth`         | `build.serve.auth`            | Authentication             | `AuthMiddleware`, `AuthStrategy`, `BasicAuthStrategy` |
+| `serve-session`      | `build.serve.session`         | Cookie-based sessions     | `SessionMiddleware`, `SessionStore`, `InMemorySessionStore` |
+| `serve-form`         | `build.serve.form`            | Form/multipart parsing    | `FormData`, `FormPart`, `MultipartData` |
 
 ### Templates
 
@@ -109,6 +112,13 @@ That's it. Routes are code, wired at startup. One virtual thread per request, st
 | `serve-template`  | `build.serve.template`   | Engine-agnostic template SPI    | `Template`, `TemplateEngine`, `TemplateHandler`  |
 | `serve-jte`       | `build.serve.jte`        | JTE template engine             | `JteTemplateEngine`                              |
 | `serve-htmx`      | `build.serve.htmx`       | HTMX request/response helpers   | `HtmxRequest`, `HtmxResponse`, `HtmxMiddleware` |
+
+### Developer Experience
+
+| Module            | Java Module              | Purpose                         | Key Types                                        |
+|-------------------|--------------------------|---------------------------------|--------------------------------------------------|
+| `serve-devtools`  | `build.serve.devtools`   | Chrome DevTools integration      | `ChromeDevToolsHandler`                          |
+| `serve-example`   | `build.serve.example`    | Reference application            | Task manager demo (HTMX + REST + GraphQL)        |
 
 ## Modern Java
 
@@ -254,7 +264,7 @@ serve.build builds on the `*.build` open-source ecosystem:
 
 ## Status
 
-**Experimental / pre-release.** 200+ tests passing across all 19 modules.
+**Experimental / pre-release.** 600+ tests passing across all 24 modules.
 
 - ✅ Core abstractions (Exchange, Handler, Middleware, Router)
 - ✅ HTTP transport with virtual threads
@@ -262,10 +272,12 @@ serve.build builds on the `*.build` open-source ecosystem:
 - ✅ JSON body reading/writing
 - ✅ WebSocket (RFC 6455)
 - ✅ Server-Sent Events (RFC 8895)
-- ✅ MCP (Model Context Protocol 2025-03-26)
-- ✅ LSP (Language Server Protocol 3.17)
+- ✅ MCP (Model Context Protocol 2025-03-26 — tools, resources, prompts, logging, completion, progress)
+- ✅ LSP (Language Server Protocol 3.17 — call/type hierarchy, server-initiated requests, document tracking)
 - ✅ GraphQL over HTTP with GraphiQL
-- ✅ CORS, security headers, compression, logging, health, static files
+- ✅ CORS, security headers, compression, logging, health, static files, rate limiting
+- ✅ Auth (Basic, Bearer, API key) and cookie-based sessions
+- ✅ Form/multipart body parsing
 - ✅ Template SPI with JTE + HTMX helpers
 - ✅ TLS/HTTPS, cookies, graceful shutdown
 - ✅ Test harness
