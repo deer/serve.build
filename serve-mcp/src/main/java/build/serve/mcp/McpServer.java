@@ -101,6 +101,7 @@ public final class McpServer {
     private final List<TemplateEntry> templates;
     private final Map<String, McpPrompt> prompts;
     private final Set<String> allowedOrigins;
+    private final Set<String> allowedHosts;
     private final int maxSessions;
     private final int maxSubscriptionsPerSession;
     private final TelemetryRecorder recorder;
@@ -114,6 +115,7 @@ public final class McpServer {
         this.info = new McpServerInfo(builder.name, builder.version);
         this.instructions = builder.instructions;
         this.allowedOrigins = Set.copyOf(builder.allowedOrigins);
+        this.allowedHosts = Set.copyOf(builder.allowedHosts);
         this.maxSessions = builder.maxSessions;
         this.maxSubscriptionsPerSession = builder.maxSubscriptionsPerSession;
         this.recorder = builder.recorder;
@@ -198,7 +200,7 @@ public final class McpServer {
      */
     public Handler handler() {
         return exchange -> {
-            if (!isOriginAllowed(exchange)) {
+            if (!isOriginAllowed(exchange) || !isHostAllowed(exchange)) {
                 exchange.response().status(403).send("Forbidden");
                 return;
             }
@@ -466,12 +468,53 @@ public final class McpServer {
         return Optional.of(arr.build());
     }
 
+    /**
+     * Fail-closed by default: any request carrying an {@code Origin} header (i.e. from a
+     * browser) must match an entry registered via {@link Builder#allowOrigin(String)}, even
+     * if no origins have been registered. This is the primary DNS-rebinding defense — a
+     * malicious webpage's {@code fetch()} always carries an {@code Origin} header. Requests
+     * without an {@code Origin} header (server-to-server clients, the Anthropic API's remote
+     * MCP client, {@code curl}) are not browser-originated and are always allowed through this
+     * check.
+     */
     private boolean isOriginAllowed(final Exchange exchange) {
-        if (allowedOrigins.isEmpty()) {
-            return true;
-        }
         final var origin = exchange.request().header("Origin");
         return origin.isEmpty() || allowedOrigins.contains(origin.get());
+    }
+
+    /**
+     * Fail-closed by default: unless {@link Builder#allowHost(String)} has registered explicit
+     * hosts, only requests whose {@code Host} header names a loopback address are accepted.
+     * This stops the DNS-rebinding class of attack where an attacker-controlled domain resolves
+     * to {@code 127.0.0.1} — the request's {@code Origin} can be spoofed to look same-origin,
+     * but the {@code Host} header still names the rebound domain.
+     */
+    private boolean isHostAllowed(final Exchange exchange) {
+        final var host = exchange.request().header("Host");
+        if (host.isEmpty()) {
+            return false;
+        }
+        final var hostname = hostOnly(host.get());
+        if (!allowedHosts.isEmpty()) {
+            return allowedHosts.contains(hostname);
+        }
+        return isLoopbackHost(hostname);
+    }
+
+    private static String hostOnly(final String hostHeader) {
+        if (hostHeader.startsWith("[")) {
+            final var end = hostHeader.indexOf(']');
+            return end >= 0 ? hostHeader.substring(0, end + 1) : hostHeader;
+        }
+        final var colon = hostHeader.indexOf(':');
+        return colon >= 0 ? hostHeader.substring(0, colon) : hostHeader;
+    }
+
+    private static boolean isLoopbackHost(final String hostname) {
+        return "localhost".equalsIgnoreCase(hostname)
+            || "127.0.0.1".equals(hostname)
+            || "[::1]".equals(hostname)
+            || "::1".equals(hostname);
     }
 
     private boolean acceptsSse(final Exchange exchange) {
@@ -1139,6 +1182,7 @@ public final class McpServer {
         private final List<McpResourceTemplate> templates = new ArrayList<>();
         private final List<McpPrompt> prompts = new ArrayList<>();
         private final HashSet<String> allowedOrigins = new HashSet<>();
+        private final HashSet<String> allowedHosts = new HashSet<>();
         private int maxSessions = 10_000;
         private int maxSubscriptionsPerSession = 1_000;
         private Duration sessionIdleTimeout = Duration.ofHours(1);
@@ -1207,17 +1251,37 @@ public final class McpServer {
         }
 
         /**
-         * Adds an allowed {@code Origin} header value for DNS rebinding protection.
+         * Adds an allowed {@code Origin} header value for DNS rebinding / cross-site protection.
          *
-         * <p>When at least one origin is registered, requests with an {@code Origin} header
-         * not in the allowlist are rejected with HTTP 403. Requests without an
-         * {@code Origin} header (e.g. non-browser clients) are always allowed.
+         * <p>Origin enforcement is fail-closed by default: any request carrying an
+         * {@code Origin} header is rejected with HTTP 403 unless it matches an origin
+         * registered here — an empty allowlist rejects every browser-originated request.
+         * Requests without an {@code Origin} header (e.g. non-browser clients, the Anthropic
+         * API's remote MCP client) are always allowed through this check.
          *
          * @param origin the allowed origin (e.g. {@code "https://app.example.com"})
          * @return this builder
          */
         public Builder allowOrigin(final String origin) {
             allowedOrigins.add(origin);
+            return this;
+        }
+
+        /**
+         * Adds an allowed {@code Host} header value, for servers deployed behind a hostname
+         * other than loopback (e.g. a remote MCP server on {@code mcp.example.com}).
+         *
+         * <p>Host enforcement is fail-closed by default: with no hosts registered here, only
+         * requests whose {@code Host} header names a loopback address ({@code localhost},
+         * {@code 127.0.0.1}, {@code ::1}) are accepted — every other request gets HTTP 403.
+         * Once at least one host is registered, only those exact hosts (port excluded) are
+         * accepted; loopback is no longer implicitly allowed.
+         *
+         * @param host the allowed hostname, without port (e.g. {@code "mcp.example.com"})
+         * @return this builder
+         */
+        public Builder allowHost(final String host) {
+            allowedHosts.add(host);
             return this;
         }
 

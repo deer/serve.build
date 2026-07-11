@@ -132,6 +132,28 @@ class WebSocketTests {
         }
     }
 
+    @Test
+    void shouldRejectUpgradeWithOriginByDefault() throws Exception {
+        try (var server = TestServer.of(RouterBuilder.create()
+            .route("/ws", WebSocketUpgrade.upgrade(ws -> {
+            }))
+            .build())) {
+            var statusLine = sendRawUpgradeRequest(server.port(), "https://evil.example.com");
+            assertThat(statusLine).contains("403");
+        }
+    }
+
+    @Test
+    void shouldAllowUpgradeWithNoOriginByDefault() {
+        try (var server = TestServer.of(RouterBuilder.create()
+            .route("/ws", WebSocketUpgrade.upgrade(ws -> {
+            }))
+            .build());
+             var ws = server.connectWebSocket("/ws")) {
+            ws.sendText("hi");
+        }
+    }
+
     private String sendRawUpgradeRequest(final int port, final String origin) throws Exception {
         try (var socket = new Socket("127.0.0.1", port);
              var out = new PrintWriter(socket.getOutputStream(), true);

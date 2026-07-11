@@ -36,6 +36,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -68,15 +70,36 @@ public final class LspTransport {
     }
 
     /**
-     * Creates a TCP transport that listens on the given port and handles each connection in a virtual thread.
-     * Blocks the calling thread until the server socket is closed or an error occurs.
+     * Creates a TCP transport bound to loopback only ({@code 127.0.0.1}) that listens on the
+     * given port and handles each connection in a virtual thread. Blocks the calling thread
+     * until the server socket is closed or an error occurs.
+     *
+     * <p>LSP has no authentication of its own — the {@code exit} notification unconditionally
+     * halts the JVM ({@link Runtime#halt}) — so binding to all interfaces would let any network
+     * peer that can reach the port hard-kill the process. Use {@link #tcp(LspServer, int, InetAddress)}
+     * to bind elsewhere only if the server is genuinely meant to be reachable remotely.
      *
      * @param server the LSP server
      * @param port   the port to listen on
      * @throws IOException if an error occurs opening or accepting on the server socket
      */
     public static void tcp(final LspServer server, final int port) throws IOException {
-        try (var serverSocket = new java.net.ServerSocket(port)) {
+        tcp(server, port, InetAddress.getLoopbackAddress());
+    }
+
+    /**
+     * Creates a TCP transport bound to the given address and listens on the given port,
+     * handling each connection in a virtual thread. Blocks the calling thread until the server
+     * socket is closed or an error occurs.
+     *
+     * @param server      the LSP server
+     * @param port        the port to listen on
+     * @param bindAddress the address to bind to
+     * @throws IOException if an error occurs opening or accepting on the server socket
+     */
+    public static void tcp(final LspServer server, final int port, final InetAddress bindAddress) throws IOException {
+        try (var serverSocket = new java.net.ServerSocket()) {
+            serverSocket.bind(new InetSocketAddress(bindAddress, port));
             while (true) {
                 try {
                     final var socket = serverSocket.accept();

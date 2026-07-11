@@ -81,16 +81,24 @@ public final class WebSocketUpgrade {
     }
 
     /**
-     * Creates a {@link Handler} that upgrades HTTP connections to WebSocket.
+     * Creates a {@link Handler} that upgrades HTTP connections to WebSocket, with fail-closed
+     * {@code Origin} enforcement.
      * <p>
      * The returned handler checks for a valid WebSocket upgrade request, performs the
      * opening handshake, and then delegates to the specified {@link WebSocketHandler}.
+     * <p>
+     * <strong>Origin policy:</strong> since no origins are registered, any upgrade request
+     * carrying an {@code Origin} header (i.e. from a browser) is rejected with
+     * {@code 403 Forbidden} — this is the primary DNS-rebinding defense, as a malicious
+     * webpage's upgrade attempt always carries an {@code Origin} header. Requests without an
+     * {@code Origin} header (non-browser clients) are allowed through this check. To accept
+     * specific browser origins, use {@link #upgrade(WebSocketHandler, Set)}.
      *
      * @param wsHandler the handler for the established WebSocket connection
      * @return a {@link Handler} that performs the WebSocket upgrade
      */
     public static Handler upgrade(final WebSocketHandler wsHandler) {
-        return upgrade(wsHandler, Set.of());
+        return upgrade(wsHandler, Set.of(), true);
     }
 
     /**
@@ -99,13 +107,20 @@ public final class WebSocketUpgrade {
      * <p>
      * If {@code allowedOrigins} is non-empty, the {@code Origin} request header must exactly
      * match one of the allowed values (e.g. {@code "https://example.com"}); otherwise the
-     * upgrade is rejected with {@code 403 Forbidden}.
+     * upgrade is rejected with {@code 403 Forbidden}. If {@code allowedOrigins} is empty, no
+     * {@code Origin} check is performed by this overload — pass an explicit allowlist, or use
+     * {@link #upgrade(WebSocketHandler)} for the fail-closed default.
      *
      * @param wsHandler      the handler for the established WebSocket connection
      * @param allowedOrigins the set of permitted {@code Origin} values; empty means no check
      * @return a {@link Handler} that performs the WebSocket upgrade
      */
     public static Handler upgrade(final WebSocketHandler wsHandler, final Set<String> allowedOrigins) {
+        return upgrade(wsHandler, allowedOrigins, false);
+    }
+
+    private static Handler upgrade(final WebSocketHandler wsHandler, final Set<String> allowedOrigins,
+                                   final boolean failClosedByDefault) {
         return exchange -> {
             final var request = exchange.request();
 
@@ -130,6 +145,10 @@ public final class WebSocketUpgrade {
 
                     return;
                 }
+            } else if (failClosedByDefault && request.header("Origin").isPresent()) {
+                exchange.response().status(403).send("Forbidden: Origin not allowed");
+
+                return;
             }
 
             // Compute accept key
