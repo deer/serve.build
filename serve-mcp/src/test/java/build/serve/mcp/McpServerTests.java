@@ -698,6 +698,53 @@ class McpServerTests {
     }
 
     @Test
+    void shouldRejectRequestWithOriginByDefault() throws IOException {
+        try (final var defaultClient = McpTestClient.start(McpServer.builder("default-origin-server", "1.0.0")
+            .build())) {
+
+            assertThat(rawPost(defaultClient.port(), Map.of("Origin", "https://evil.example.com"))).isEqualTo(403);
+        }
+    }
+
+    @Test
+    void shouldAllowRequestWithNoOriginByDefault() throws IOException {
+        try (final var defaultClient = McpTestClient.start(McpServer.builder("default-origin-server", "1.0.0")
+            .build())) {
+
+            assertThat(rawPost(defaultClient.port(), Map.of())).isEqualTo(200);
+        }
+    }
+
+    @Test
+    void shouldRejectRequestWithNonLoopbackHostByDefault() throws IOException {
+        try (final var defaultClient = McpTestClient.start(McpServer.builder("default-host-server", "1.0.0")
+            .build())) {
+
+            assertThat(rawPostWithHost(defaultClient.port(), "attacker.example.com")).isEqualTo(403);
+        }
+    }
+
+    @Test
+    void shouldAllowRequestWithAllowlistedHost() throws IOException {
+        try (final var hostClient = McpTestClient.start(McpServer.builder("allow-host-server", "1.0.0")
+            .allowHost("mcp.example.com")
+            .build())) {
+
+            assertThat(rawPostWithHost(hostClient.port(), "mcp.example.com")).isEqualTo(200);
+        }
+    }
+
+    @Test
+    void shouldRejectLoopbackHostOnceAllowlistIsConfigured() throws IOException {
+        try (final var hostClient = McpTestClient.start(McpServer.builder("allow-host-server", "1.0.0")
+            .allowHost("mcp.example.com")
+            .build())) {
+
+            assertThat(rawPostWithHost(hostClient.port(), "127.0.0.1")).isEqualTo(403);
+        }
+    }
+
+    @Test
     void shouldIncludeInstructionsInInitializeResult() {
         try (final var instrClient = McpTestClient.start(McpServer.builder("instr-server", "1.0.0")
             .instructions("Use the get_weather tool to answer weather questions.")
@@ -1458,6 +1505,25 @@ class McpServerTests {
         for (final var entry : extraHeaders.entrySet()) {
             sb.append(entry.getKey()).append(": ").append(entry.getValue()).append("\r\n");
         }
+        sb.append("\r\n").append(body);
+
+        try (var socket = new Socket("127.0.0.1", port);
+             var in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
+            socket.getOutputStream().write(sb.toString().getBytes(StandardCharsets.US_ASCII));
+            socket.getOutputStream().flush();
+            final var statusLine = in.readLine();
+            return Integer.parseInt(statusLine.split(" ")[1]);
+        }
+    }
+
+    private static int rawPostWithHost(final int port, final String hostHeader) throws IOException {
+        final var body = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}";
+        final var bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+        final var sb = new StringBuilder();
+        sb.append("POST /mcp HTTP/1.1\r\n");
+        sb.append("Host: ").append(hostHeader).append("\r\n");
+        sb.append("Content-Type: application/json\r\n");
+        sb.append("Content-Length: ").append(bodyBytes.length).append("\r\n");
         sb.append("\r\n").append(body);
 
         try (var socket = new Socket("127.0.0.1", port);
