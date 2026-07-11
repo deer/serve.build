@@ -86,6 +86,7 @@ public final class SessionMiddleware implements Middleware {
             final var session = exchange.request().cookie(cookieName)
                 .flatMap(c -> store.load(c.value()))
                 .orElseGet(this::newSession);
+            final var originalId = session.id();
 
             runWithSession(session, () -> {
                 try {
@@ -101,8 +102,12 @@ public final class SessionMiddleware implements Middleware {
                 store.delete(session.id());
                 exchange.response().deleteCookie(cookieName);
             } else {
+                final var idChanged = !session.id().equals(originalId);
+                if (idChanged) {
+                    store.delete(originalId);
+                }
                 store.save(session);
-                if (session.isNew()) {
+                if (session.isNew() || idChanged) {
                     exchange.response().cookie(buildCookie(session.id()));
                 }
             }

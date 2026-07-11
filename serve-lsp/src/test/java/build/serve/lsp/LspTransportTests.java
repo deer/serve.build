@@ -393,6 +393,17 @@ class LspTransportTests {
     }
 
     @Test
+    void shouldCloseConnectionWhenContentLengthExceedsCap() throws Exception {
+        final var server = LspServer.builder().build();
+
+        try (final var client = new LspTestClient(server)) {
+            client.writeHeaderOnly(Integer.MAX_VALUE);
+
+            assertThat(client.awaitServerThreadDone(2000)).isTrue();
+        }
+    }
+
+    @Test
     void shouldAcceptTcpConnectionAndHandleRequest() throws Exception {
         final var server = LspServer.builder()
             .onInitialize(params -> ServerCapabilities.of(ServerCapability.HOVER))
@@ -576,6 +587,17 @@ class LspTransportTests {
             this.out.write(header);
             this.out.write(bytes);
             this.out.flush();
+        }
+
+        void writeHeaderOnly(final long claimedLength) throws IOException {
+            final var header = ("Content-Length: " + claimedLength + "\r\n\r\n").getBytes(StandardCharsets.UTF_8);
+            this.out.write(header);
+            this.out.flush();
+        }
+
+        boolean awaitServerThreadDone(final long millis) throws InterruptedException {
+            serverThread.join(millis);
+            return !serverThread.isAlive();
         }
 
         private int readContentLength() throws IOException {

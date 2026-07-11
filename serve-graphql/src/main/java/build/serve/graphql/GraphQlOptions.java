@@ -41,11 +41,27 @@ public final class GraphQlOptions {
 
     /**
      * Returns {@link GraphQlOptions} with no restrictions — introspection enabled, no depth or complexity limits.
+     * <p>
+     * This is an explicit, unrestricted opt-in — prefer {@link #safeDefaults()} unless you have a
+     * specific reason to run without depth/complexity limits (e.g. a trusted internal caller).
      *
      * @return default {@link GraphQlOptions}
      */
     public static GraphQlOptions defaults() {
         return builder().build();
+    }
+
+    /**
+     * Returns {@link GraphQlOptions} with sane out-of-the-box limits: introspection enabled,
+     * max query depth {@code 15}, max query complexity {@code 10,000}. Used by
+     * {@link GraphQlHandler#graphql(GraphQlSchema)} so that endpoint is not open to unbounded
+     * nested-query denial of service by default. Call {@link #builder()} directly for different
+     * limits, or {@link #defaults()} for no limits at all.
+     *
+     * @return safe default {@link GraphQlOptions}
+     */
+    public static GraphQlOptions safeDefaults() {
+        return builder().maxDepth(15).maxComplexity(10_000).build();
     }
 
     /**

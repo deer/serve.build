@@ -27,6 +27,7 @@ import build.serve.foundation.option.MaxRequestSize;
 import com.sun.net.httpserver.HttpExchange;
 
 import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -149,6 +150,11 @@ public class HttpRequest
     @Override
     public Optional<String> header(final String name) {
         return Optional.ofNullable(httpExchange.getRequestHeaders().getFirst(name));
+    }
+
+    @Override
+    public Optional<InetSocketAddress> remoteAddress() {
+        return Optional.ofNullable(httpExchange.getRemoteAddress());
     }
 
     private static final int MAX_COOKIES = 50;

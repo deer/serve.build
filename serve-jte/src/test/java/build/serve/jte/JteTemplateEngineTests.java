@@ -69,6 +69,19 @@ class JteTemplateEngineTests {
     }
 
     @Test
+    void developmentModeEscapesHtmlSpecialCharactersInDynamicContent() throws Exception {
+        var engine = JteTemplateEngine.development(TEMPLATE_DIR);
+        var template = engine.template("hello.jte");
+        var output = TemplateOutput.capture();
+
+        template.render(output, Map.of("name", "<script>alert('x')</script> & friends"));
+
+        assertThat(output.get())
+            .contains("&lt;script&gt;alert('x')&lt;/script&gt; &amp; friends")
+            .doesNotContain("<script>");
+    }
+
+    @Test
     void missingTemplateThrowsTemplateNotFoundException() {
         var engine = JteTemplateEngine.development(TEMPLATE_DIR);
 

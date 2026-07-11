@@ -36,8 +36,9 @@ import java.util.function.Function;
  * Requests within the configured limit pass through; requests exceeding it receive a 429 response
  * with {@code Retry-After}, {@code X-RateLimit-Limit}, and {@code X-RateLimit-Remaining} headers.
  * <p>
- * The default rate limit key is the first IP in the {@code X-Forwarded-For} header. Use
- * {@link Builder#keyExtractor(Function)} to rate limit by user ID, API key, or any other dimension.
+ * The default rate limit key is the remote TCP peer address — not spoofable by a client-supplied
+ * header. Use {@link Builder#keyExtractor(Function)} to rate limit by user ID, API key, or (in a
+ * trusted reverse-proxy deployment) {@code X-Forwarded-For}.
  *
  * @author reed.vonredwitz
  * @since Apr-2026
@@ -56,8 +57,8 @@ public final class RateLimitMiddleware implements Middleware {
         this.per = builder.per;
         this.keyExtractor = builder.keyExtractor != null
             ? builder.keyExtractor
-            : req -> req.header("X-Forwarded-For")
-                     .map(v -> v.split(",")[0].trim())
+            : req -> req.remoteAddress()
+                     .map(a -> a.getAddress().getHostAddress())
                      .orElse("unknown");
         this.clock = builder.clock != null ? builder.clock : Clock.systemUTC();
         this.maxBuckets = builder.maxBuckets;
@@ -77,13 +78,7 @@ public final class RateLimitMiddleware implements Middleware {
         return exchange -> {
             final var key = keyExtractor.apply(exchange.request());
             if (!buckets.containsKey(key) && buckets.size() >= maxBuckets) {
-                exchange.response()
-                    .header("X-RateLimit-Limit", String.valueOf(capacity))
-                    .header("X-RateLimit-Remaining", "0")
-                    .header("Retry-After", "1")
-                    .status(429)
-                    .send("");
-                return;
+                evictLeastRecentlyUsed();
             }
             final var bucket = buckets.computeIfAbsent(key, k -> new Bucket(capacity, clock.instant()));
             final var result = bucket.consume(clock.instant(), capacity, per);
@@ -101,6 +96,25 @@ public final class RateLimitMiddleware implements Middleware {
                     .send("");
             }
         };
+    }
+
+    /**
+     * Evicts the least-recently-used bucket to make room for a new key, so that {@code maxBuckets}
+     * bounds memory without ever permanently locking out legitimate clients once the cap is hit.
+     */
+    private void evictLeastRecentlyUsed() {
+        String oldestKey = null;
+        Instant oldest = null;
+        for (final var entry : buckets.entrySet()) {
+            final var lastAccessedAt = entry.getValue().lastAccessedAt();
+            if (oldest == null || lastAccessedAt.isBefore(oldest)) {
+                oldest = lastAccessedAt;
+                oldestKey = entry.getKey();
+            }
+        }
+        if (oldestKey != null) {
+            buckets.remove(oldestKey);
+        }
     }
 
     private record ConsumeResult(boolean allowed, int remaining, long retryAfterSeconds) {
@@ -132,6 +146,10 @@ public final class RateLimitMiddleware implements Middleware {
             final long retryNanos = (long) Math.ceil((1.0 - tokens) * per.toNanos() / capacity);
             final long retrySeconds = Math.max(1L, (retryNanos + 999_999_999L) / 1_000_000_000L);
             return new ConsumeResult(false, 0, retrySeconds);
+        }
+
+        synchronized Instant lastAccessedAt() {
+            return lastRefillAt;
         }
     }
 
@@ -177,11 +195,13 @@ public final class RateLimitMiddleware implements Middleware {
         /**
          * Sets a custom function that extracts the rate limit key from a request.
          * <p>
-         * Defaults to the first IP in {@code X-Forwarded-For}, or {@code "unknown"} if absent.
-         * <strong>Warning:</strong> {@code X-Forwarded-For} is client-controlled and can be spoofed
-         * to bypass per-IP limits. In trusted reverse-proxy deployments, configure your proxy to
-         * overwrite this header with the actual client IP. For other deployments, supply a
-         * {@code keyExtractor} that uses a non-spoofable dimension such as an authenticated user ID.
+         * Defaults to the remote TCP peer address ({@link Request#remoteAddress()}), or
+         * {@code "unknown"} if the transport doesn't expose one. This default is not spoofable by
+         * a client-supplied header. In a trusted reverse-proxy deployment where the real client
+         * address is only available via a header (e.g. {@code X-Forwarded-For} set by a proxy you
+         * control), supply a {@code keyExtractor} that reads it — but note that header is
+         * client-controlled unless your proxy strips/overwrites it first. For other deployments,
+         * a non-spoofable dimension such as an authenticated user ID is another good choice.
          *
          * @param keyExtractor the key extraction function
          * @return this {@link Builder}
@@ -193,8 +213,9 @@ public final class RateLimitMiddleware implements Middleware {
 
         /**
          * Sets the maximum number of distinct rate limit keys tracked simultaneously.
-         * When this limit is reached, requests with new (unseen) keys receive a 429 response
-         * until existing buckets are evicted.
+         * When this limit is reached, the least-recently-used tracked key is evicted to make room
+         * for the new one — the cap bounds memory without permanently locking out legitimate
+         * clients once it's reached.
          * <p>
          * Defaults to {@code 100_000}.
          *

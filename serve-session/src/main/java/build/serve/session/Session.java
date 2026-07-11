@@ -29,9 +29,13 @@ import java.util.Optional;
  * {@link SessionStore}. Mutations are persisted automatically at the end of each request.
  * <p>
  * To propagate an authenticated principal through subsequent requests, store it under
- * {@link SessionMiddleware#PRINCIPAL_KEY}:
+ * {@link SessionMiddleware#PRINCIPAL_KEY} and regenerate the session ID in the same step to
+ * defend against session fixation:
  * <pre>{@code
- * SessionContext.current().ifPresent(s -> s.set(SessionMiddleware.PRINCIPAL_KEY, principal));
+ * SessionContext.current().ifPresent(s -> {
+ *     s.set(SessionMiddleware.PRINCIPAL_KEY, principal);
+ *     s.regenerateId();
+ * });
  * }</pre>
  * {@link SessionMiddleware} will then bind it to {@code RequestContext.PRINCIPAL} for the duration
  * of each request, making it available via {@code AuthContext.current()}.
@@ -78,6 +82,21 @@ public interface Session {
      * cookie is cleared at the end of the current request.
      */
     void invalidate();
+
+    /**
+     * Regenerates this session's ID, keeping its attributes but replacing its identity. The old
+     * ID is deleted from the store and a new session cookie is issued at the end of the current
+     * request.
+     * <p>
+     * Call this immediately after authenticating a user (i.e. right after storing
+     * {@link SessionMiddleware#PRINCIPAL_KEY}) to defend against session fixation — an attacker
+     * who planted a session ID in the victim's browser before login cannot hijack the
+     * authenticated session afterward, since the ID changes on login and the planted ID is no
+     * longer valid.
+     *
+     * @return the new session ID
+     */
+    String regenerateId();
 
     /**
      * Returns whether {@link #invalidate()} has been called on this session.

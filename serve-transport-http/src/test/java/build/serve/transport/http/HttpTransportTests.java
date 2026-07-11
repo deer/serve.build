@@ -204,6 +204,21 @@ class HttpTransportTests {
     }
 
     @Test
+    void httpsWithRequestTimeoutBindsToPort() throws Exception {
+        var ctx = SSLContext.getDefault();
+        transport = HttpTransport.https(new InetSocketAddress("127.0.0.1", 0), 0,
+            exchange -> exchange.response().status(200).send("OK"),
+            new DefaultErrorHandler(),
+            MaxRequestSize.DEFAULT,
+            ctx,
+            TlsOptions.defaults(),
+            RequestTimeout.ofSeconds(1));
+        transport.start();
+
+        assertThat(transport.address().getPort()).isGreaterThan(0);
+    }
+
+    @Test
     void shouldFilterProtocolsBelowMinimum() {
         var protocols = new String[]{"TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"};
 

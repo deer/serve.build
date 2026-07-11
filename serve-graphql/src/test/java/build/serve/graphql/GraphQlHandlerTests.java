@@ -212,6 +212,39 @@ class GraphQlHandlerTests {
     }
 
     @Test
+    void shouldRejectDeeplyNestedQueryByDefault() throws Exception {
+        var schema = GraphQlSchema.builder("""
+                type Query { user: User }
+                type User { friend: User name: String }
+                """)
+            .fetcher("Query", "user", env -> java.util.Map.of())
+            .fetcher("User", "friend", env -> java.util.Map.of("name", "Bob"))
+            .build();
+
+        var defaultServer = TestServer.of(
+            RouterBuilder.create()
+                .post("/graphql", GraphQlHandler.graphql(schema))
+                .build());
+
+        try {
+            final var open = "{ user { friend ".repeat(20);
+            final var close = "} ".repeat(20) + "}";
+            final var query = open + "name" + close;
+
+            var response = defaultServer.post("/graphql")
+                .header("Content-Type", "application/json")
+                .body("{\"query\":\"" + query + "\"}")
+                .send()
+                .assertStatus(200);
+
+            var json = Json.parse(response.body()).asObject();
+            assertThat(((JsonArray) json.get("errors")).values()).isNotEmpty();
+        } finally {
+            defaultServer.close();
+        }
+    }
+
+    @Test
     void shouldReturnErrorsForUnknownField() throws Exception {
         final var response = server.post("/graphql")
             .header("Content-Type", "application/json")

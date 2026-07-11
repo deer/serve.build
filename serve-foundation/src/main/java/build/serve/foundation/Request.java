@@ -23,6 +23,7 @@ import build.base.json.JsonValue;
 import build.serve.foundation.http.Cookie;
 
 import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
@@ -139,4 +140,16 @@ public interface Request {
      * @return the parsed {@link build.base.json.JsonValue}
      */
     JsonValue bodyAsJson();
+
+    /**
+     * Obtains the remote TCP peer address for this {@link Request}, i.e. the actual socket the
+     * connection was accepted from — not derived from any client-supplied header, and therefore
+     * not spoofable the way {@code X-Forwarded-For} is. Empty if the underlying transport
+     * doesn't expose one (e.g. a test double).
+     *
+     * @return an {@link Optional} containing the remote {@link InetSocketAddress}, or empty
+     */
+    default Optional<InetSocketAddress> remoteAddress() {
+        return Optional.empty();
+    }
 }

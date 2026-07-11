@@ -156,6 +156,61 @@ class SessionMiddlewareTests {
         assertThat(store.load("del-session-id")).isEmpty();
     }
 
+    // --- session fixation (regenerateId) ---
+
+    @Test
+    void shouldIssueNewCookieOnRegenerateId() throws Exception {
+        var store = InMemorySessionStore.create();
+        var existing = new MapSession("fixation-session-id", false);
+        store.save(existing);
+        var response = new StubResponse();
+
+        SessionMiddleware.builder().store(store).build()
+            .apply(ex -> SessionContext.current().ifPresent(Session::regenerateId))
+            .handle(exchange(List.of(Cookie.of("session", "fixation-session-id")), response));
+
+        assertThat(response.cookies).hasSize(1);
+        assertThat(response.cookies.getFirst().value()).isNotEqualTo("fixation-session-id");
+    }
+
+    @Test
+    void shouldDeleteOldIdFromStoreOnRegenerateId() throws Exception {
+        var store = InMemorySessionStore.create();
+        var existing = new MapSession("old-fixation-id", false);
+        existing.set("userId", "reed");
+        store.save(existing);
+        var response = new StubResponse();
+
+        SessionMiddleware.builder().store(store).build()
+            .apply(ex -> SessionContext.current().ifPresent(Session::regenerateId))
+            .handle(exchange(List.of(Cookie.of("session", "old-fixation-id")), response));
+
+        var newId = response.cookies.getFirst().value();
+        assertThat(store.load("old-fixation-id")).isEmpty();
+        assertThat(store.load(newId)).isPresent();
+        assertThat(store.load(newId).flatMap(s -> s.get("userId", String.class))).contains("reed");
+    }
+
+    @Test
+    void shouldRejectRequestsUsingThePreRegenerationSessionId() throws Exception {
+        var store = InMemorySessionStore.create();
+        var existing = new MapSession("pre-fixation-id", false);
+        store.save(existing);
+        var middleware = SessionMiddleware.builder().store(store).build();
+
+        middleware.apply(ex -> SessionContext.current().ifPresent(Session::regenerateId))
+            .handle(exchange(List.of(Cookie.of("session", "pre-fixation-id")), new StubResponse()));
+
+        // An attacker who planted "pre-fixation-id" before login now gets a brand-new session
+        // rather than riding the victim's authenticated one.
+        var captured = new AtomicReference<Session>();
+        middleware.apply(ex -> captured.set(SessionContext.current().orElseThrow()))
+            .handle(exchange(List.of(Cookie.of("session", "pre-fixation-id")), new StubResponse()));
+
+        assertThat(captured.get().isNew()).isTrue();
+        assertThat(captured.get().id()).isNotEqualTo("pre-fixation-id");
+    }
+
     // --- principal propagation ---
 
     @Test
