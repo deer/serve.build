@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -33,7 +34,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 final class MapSession implements Session {
 
-    private final String id;
+    private volatile String id;
     private final ConcurrentHashMap<String, Object> attributes = new ConcurrentHashMap<>();
     private final boolean isNew;
     private volatile boolean invalidated = false;
@@ -79,6 +80,13 @@ final class MapSession implements Session {
     @Override
     public void invalidate() {
         invalidated = true;
+    }
+
+    @Override
+    public String regenerateId() {
+        final var newId = UUID.randomUUID().toString();
+        id = newId;
+        return newId;
     }
 
     @Override

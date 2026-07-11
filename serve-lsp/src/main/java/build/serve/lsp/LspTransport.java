@@ -55,6 +55,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class LspTransport {
 
+    /**
+     * Maximum accepted {@code Content-Length} for a single LSP message (10 MiB), matching
+     * {@code serve-transport-http}'s default HTTP body size cap. A client-supplied
+     * {@code Content-Length} beyond this is never passed to {@link InputStream#readNBytes(int)} —
+     * without a cap, a malicious or buggy client could request an allocation up to ~2 GiB.
+     */
+    private static final int MAX_CONTENT_LENGTH = 10 * 1024 * 1024;
+
     private LspTransport() {
     }
 
@@ -218,7 +226,7 @@ public final class LspTransport {
                                 final Map<Integer, CompletableFuture<JsonValue>> pendingRequests) throws IOException {
         while (true) {
             final var contentLength = readContentLength(in);
-            if (contentLength < 0) {
+            if (contentLength < 0 || contentLength > MAX_CONTENT_LENGTH) {
                 return;
             }
 

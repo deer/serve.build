@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
@@ -139,7 +140,7 @@ class RateLimitMiddlewareTests {
     }
 
     @Test
-    void shouldUseXForwardedForAsDefaultKey() throws Exception {
+    void shouldUseRemoteAddressAsDefaultKey() throws Exception {
         var middleware = RateLimitMiddleware.builder()
             .limit(1)
             .per(Duration.ofSeconds(10))
@@ -156,7 +157,7 @@ class RateLimitMiddlewareTests {
     }
 
     @Test
-    void shouldUseFirstIpFromXForwardedForChain() throws Exception {
+    void shouldNotBeBypassedBySpoofedXForwardedForHeader() throws Exception {
         var middleware = RateLimitMiddleware.builder()
             .limit(1)
             .per(Duration.ofSeconds(10))
@@ -164,12 +165,46 @@ class RateLimitMiddlewareTests {
 
         var handler = middleware.apply(ex -> {
         });
-        handler.handle(createExchange("5.6.7.8, 10.0.0.1, 10.0.0.2", new StubResponse()));
+        // Same remote address, different spoofed X-Forwarded-For on each request — the default
+        // key extractor no longer trusts that client-controlled header, so this must not bypass
+        // the limit the way the old X-Forwarded-For-based default would have.
+        handler.handle(new SimpleExchange(
+            new StubRequest(Map.of("X-Forwarded-For", "1.1.1.1"), new InetSocketAddress("5.6.7.8", 0)),
+            new StubResponse()));
 
         var response = new StubResponse();
-        handler.handle(createExchange("5.6.7.8", response));
+        handler.handle(new SimpleExchange(
+            new StubRequest(Map.of("X-Forwarded-For", "2.2.2.2"), new InetSocketAddress("5.6.7.8", 0)),
+            response));
 
         assertThat(response.statusCode).isEqualTo(429);
+    }
+
+    @Test
+    void shouldEvictLeastRecentlyUsedBucketInsteadOfPermanentlyLockingOut() throws Exception {
+        var middleware = RateLimitMiddleware.builder()
+            .limit(1)
+            .per(Duration.ofSeconds(10))
+            .maxBuckets(2)
+            .build();
+
+        var handler = middleware.apply(ex -> {
+        });
+
+        handler.handle(createExchange("10.0.0.1", new StubResponse()));
+        handler.handle(createExchange("10.0.0.2", new StubResponse()));
+
+        // Both tracked keys are now at capacity (2 == maxBuckets). A brand new key must still be
+        // served by evicting the least-recently-used bucket, rather than being permanently 429'd.
+        var responseC = new StubResponse();
+        handler.handle(createExchange("10.0.0.3", responseC));
+        assertThat(responseC.statusCode).isEqualTo(200);
+
+        // 10.0.0.1 was the least-recently-used and was evicted to make room for 10.0.0.3 above,
+        // so it's treated as a fresh key here too.
+        var responseA2 = new StubResponse();
+        handler.handle(createExchange("10.0.0.1", responseA2));
+        assertThat(responseA2.statusCode).isEqualTo(200);
     }
 
     @Test
@@ -215,7 +250,9 @@ class RateLimitMiddlewareTests {
     }
 
     private static Exchange createExchange(final String ip, final StubResponse response) {
-        return new SimpleExchange(new StubRequest(Map.of("X-Forwarded-For", ip)), response);
+        return new SimpleExchange(
+            new StubRequest(Map.of("X-Forwarded-For", ip), new InetSocketAddress(ip, 0)),
+            response);
     }
 
     private static Exchange createExchangeWithHeader(
@@ -223,7 +260,7 @@ class RateLimitMiddlewareTests {
         final String headerValue,
         final StubResponse response
     ) {
-        return new SimpleExchange(new StubRequest(Map.of(headerName, headerValue)), response);
+        return new SimpleExchange(new StubRequest(Map.of(headerName, headerValue), null), response);
     }
 
     static final class MutableClock extends Clock {
@@ -257,9 +294,16 @@ class RateLimitMiddlewareTests {
     private static final class StubRequest implements Request {
 
         private final Map<String, String> headers;
+        private final InetSocketAddress remoteAddress;
 
-        StubRequest(final Map<String, String> headers) {
+        StubRequest(final Map<String, String> headers, final InetSocketAddress remoteAddress) {
             this.headers = headers;
+            this.remoteAddress = remoteAddress;
+        }
+
+        @Override
+        public Optional<InetSocketAddress> remoteAddress() {
+            return Optional.ofNullable(remoteAddress);
         }
 
         @Override

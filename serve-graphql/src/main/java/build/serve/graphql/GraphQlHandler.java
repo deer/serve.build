@@ -37,7 +37,9 @@ public final class GraphQlHandler {
     }
 
     /**
-     * Creates a {@link Handler} that processes GraphQL requests against the given schema.
+     * Creates a {@link Handler} that processes GraphQL requests against the given schema, using
+     * {@link GraphQlOptions#safeDefaults()} (max depth 15, max complexity 10,000) so the endpoint
+     * isn't open to unbounded nested-query denial of service out of the box.
      * <p>
      * The handler expects a JSON POST body containing a {@link GraphQlRequest} and
      * returns a JSON response with the {@link GraphQlResult}.
@@ -46,7 +48,7 @@ public final class GraphQlHandler {
      * @return a new {@link Handler}
      */
     public static Handler graphql(final GraphQlSchema schema) {
-        return graphql(schema, GraphQlOptions.defaults());
+        return graphql(schema, GraphQlOptions.safeDefaults());
     }
 
     /**

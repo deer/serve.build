@@ -224,6 +224,37 @@ public class HttpTransport {
                                       final MaxRequestSize maxRequestSize,
                                       final SSLContext sslContext,
                                       final TlsOptions tlsOptions) throws IOException {
+        return https(address, backlog, handler, errorHandler, maxRequestSize, sslContext, tlsOptions,
+            RequestTimeout.NONE);
+    }
+
+    /**
+     * Creates an HTTPS {@link HttpTransport} with TLS hardening options and a request timeout.
+     * <p>
+     * Every other {@code https(...)} overload defaults to {@link RequestTimeout#NONE} — a
+     * slow-body or Slowloris-style attack over TLS can pin a virtual thread indefinitely unless
+     * a timeout is supplied here, mirroring the plain-HTTP constructor that accepts
+     * {@link RequestTimeout}.
+     *
+     * @param address        the address to bind to
+     * @param backlog        the maximum number of queued incoming connections (0 for system default)
+     * @param handler        the {@link Handler} to dispatch requests to
+     * @param errorHandler   the {@link ErrorHandler} for unhandled exceptions
+     * @param maxRequestSize the maximum allowed request body size
+     * @param sslContext     the {@link SSLContext} used for TLS
+     * @param tlsOptions     the {@link TlsOptions} controlling minimum TLS version and cipher filtering
+     * @param requestTimeout the maximum time a request handler may run before being interrupted
+     * @return a new HTTPS {@link HttpTransport}
+     * @throws IOException if the server cannot be created
+     */
+    public static HttpTransport https(final InetSocketAddress address,
+                                      final int backlog,
+                                      final Handler handler,
+                                      final ErrorHandler errorHandler,
+                                      final MaxRequestSize maxRequestSize,
+                                      final SSLContext sslContext,
+                                      final TlsOptions tlsOptions,
+                                      final RequestTimeout requestTimeout) throws IOException {
         Objects.requireNonNull(sslContext, "sslContext must not be null");
         Objects.requireNonNull(tlsOptions, "tlsOptions must not be null");
 
@@ -251,7 +282,7 @@ public class HttpTransport {
             }
         });
 
-        return new HttpTransport(server, address, handler, errorHandler, maxRequestSize, RequestTimeout.NONE);
+        return new HttpTransport(server, address, handler, errorHandler, maxRequestSize, requestTimeout);
     }
 
     static String[] filterProtocols(final String[] protocols, final String minProtocol) {

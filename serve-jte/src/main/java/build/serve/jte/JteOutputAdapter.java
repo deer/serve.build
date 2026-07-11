@@ -41,7 +41,7 @@ final class JteOutputAdapter implements gg.jte.TemplateOutput {
     }
 
     @Override
-    public void writeContent(final String value, final int offset, final int length) {
-        output.writeContent(value.substring(offset, offset + length));
+    public void writeContent(final String value, final int beginIndex, final int endIndex) {
+        output.writeContent(value.substring(beginIndex, endIndex));
     }
 }
