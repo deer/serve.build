@@ -130,6 +130,48 @@ class MultipartDataTests {
     }
 
     @Test
+    void shouldStripPathTraversalFromFilename() {
+        var data = MultipartData.parse(body(
+            "--" + BOUNDARY,
+            "Content-Disposition: form-data; name=\"file\"; filename=\"../../etc/passwd\"",
+            "Content-Type: text/plain",
+            "",
+            "DATA",
+            "--" + BOUNDARY + "--"
+        ), BOUNDARY);
+
+        assertThat(data.get("file").orElseThrow().filename()).contains("passwd");
+    }
+
+    @Test
+    void shouldStripWindowsStylePathFromFilename() {
+        var data = MultipartData.parse(body(
+            "--" + BOUNDARY,
+            "Content-Disposition: form-data; name=\"file\"; filename=\"C:\\\\Windows\\\\evil.exe\"",
+            "Content-Type: application/octet-stream",
+            "",
+            "DATA",
+            "--" + BOUNDARY + "--"
+        ), BOUNDARY);
+
+        assertThat(data.get("file").orElseThrow().filename()).contains("evil.exe");
+    }
+
+    @Test
+    void shouldFallBackToPlaceholderForBareTraversalFilename() {
+        var data = MultipartData.parse(body(
+            "--" + BOUNDARY,
+            "Content-Disposition: form-data; name=\"file\"; filename=\"../\"",
+            "Content-Type: text/plain",
+            "",
+            "DATA",
+            "--" + BOUNDARY + "--"
+        ), BOUNDARY);
+
+        assertThat(data.get("file").orElseThrow().filename()).contains("unnamed");
+    }
+
+    @Test
     void shouldReturnEmptyFilenameForPlainField() {
         var data = MultipartData.parse(body(
             "--" + BOUNDARY,

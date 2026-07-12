@@ -25,6 +25,7 @@ import build.serve.foundation.routing.Router;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Objects;
@@ -57,6 +58,13 @@ import java.util.Objects;
  */
 public final class StaticFileHandler
     implements Router {
+
+    /**
+     * Default maximum file size (bytes) served from disk, matching {@code serve-transport-http}'s
+     * default request body size cap. Prevents an unbounded {@code Files.readAllBytes} allocation
+     * — and the memory-exhaustion DoS that comes with it — from serving an arbitrarily large file.
+     */
+    private static final long DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;
 
     /**
      * Common MIME type mappings for web assets.
@@ -108,6 +116,11 @@ public final class StaticFileHandler
     private final String cacheControl;
 
     /**
+     * The maximum file size (bytes) served from disk; larger files receive a 413 response.
+     */
+    private final long maxFileSize;
+
+    /**
      * Constructs a {@link StaticFileHandler}.
      *
      * @param directory      the filesystem root directory, or {@code null}
@@ -115,17 +128,20 @@ public final class StaticFileHandler
      * @param resourcePrefix the classpath resource prefix, or {@code null}
      * @param index          the index file name, or {@code null}
      * @param cacheControl   the Cache-Control header value, or {@code null}
+     * @param maxFileSize    the maximum file size (bytes) served from disk
      */
     private StaticFileHandler(final Path directory,
                               final Class<?> resourceClass,
                               final String resourcePrefix,
                               final String index,
-                              final String cacheControl) {
+                              final String cacheControl,
+                              final long maxFileSize) {
         this.directory = directory;
         this.resourceClass = resourceClass;
         this.resourcePrefix = resourcePrefix;
         this.index = index;
         this.cacheControl = cacheControl;
+        this.maxFileSize = maxFileSize;
     }
 
     /**
@@ -137,7 +153,7 @@ public final class StaticFileHandler
     public static StaticFileHandler directory(final Path directory) {
         Objects.requireNonNull(directory, "directory must not be null");
 
-        return new StaticFileHandler(directory, null, null, "index.html", null);
+        return new StaticFileHandler(directory, null, null, "index.html", null, DEFAULT_MAX_FILE_SIZE);
     }
 
     /**
@@ -152,7 +168,7 @@ public final class StaticFileHandler
         Objects.requireNonNull(anchorClass, "anchorClass must not be null");
         Objects.requireNonNull(resourcePrefix, "resourcePrefix must not be null");
 
-        return new StaticFileHandler(null, anchorClass, resourcePrefix, null, null);
+        return new StaticFileHandler(null, anchorClass, resourcePrefix, null, null, DEFAULT_MAX_FILE_SIZE);
     }
 
     /**
@@ -194,7 +210,8 @@ public final class StaticFileHandler
         final var response = exchange.response();
         var filePath = directory.resolve(stripLeadingSlash(path)).normalize();
 
-        // Ensure the resolved path is within the root directory
+        // Ensure the resolved path is syntactically within the root directory (cheap first pass,
+        // rejects ".." traversal without touching the filesystem)
         if (!filePath.startsWith(directory.toAbsolutePath().normalize())) {
             response.status(400).send("Bad Request");
 
@@ -212,8 +229,35 @@ public final class StaticFileHandler
             return;
         }
 
-        final var lastModified = Files.getLastModifiedTime(filePath).toMillis();
+        // Resolve symlinks and re-check against the real root: normalize()+startsWith() alone
+        // doesn't catch a symlink inside the root whose target points outside it.
+        final Path realPath;
+        final Path realRoot;
+
+        try {
+            realPath = filePath.toRealPath();
+            realRoot = directory.toRealPath();
+        } catch (final NoSuchFileException e) {
+            response.status(404).send("Not Found");
+
+            return;
+        }
+
+        if (!realPath.startsWith(realRoot)) {
+            response.status(404).send("Not Found");
+
+            return;
+        }
+
         final var size = Files.size(filePath);
+
+        if (size > maxFileSize) {
+            response.status(413).send("Payload Too Large");
+
+            return;
+        }
+
+        final var lastModified = Files.getLastModifiedTime(filePath).toMillis();
         final var etag = "\"" + Long.toHexString(lastModified) + "-" + Long.toHexString(size) + "\"";
 
         // Check If-None-Match
@@ -351,6 +395,11 @@ public final class StaticFileHandler
         private String cacheControl;
 
         /**
+         * The maximum file size (bytes) served from disk.
+         */
+        private long maxFileSize = DEFAULT_MAX_FILE_SIZE;
+
+        /**
          * Constructs a {@link Builder}.
          */
         private Builder() {
@@ -408,12 +457,26 @@ public final class StaticFileHandler
         }
 
         /**
+         * Sets the maximum file size (bytes) served from disk. Requests for larger files receive
+         * a {@code 413 Payload Too Large} response instead of being buffered fully into memory.
+         * Defaults to 10 MiB.
+         *
+         * @param bytes the maximum file size in bytes
+         * @return this {@link Builder} for fluent chaining
+         */
+        public Builder maxFileSize(final long bytes) {
+            this.maxFileSize = bytes;
+
+            return this;
+        }
+
+        /**
          * Builds the {@link StaticFileHandler}.
          *
          * @return a new {@link StaticFileHandler}
          */
         public StaticFileHandler build() {
-            return new StaticFileHandler(directory, resourceClass, resourcePrefix, index, cacheControl);
+            return new StaticFileHandler(directory, resourceClass, resourcePrefix, index, cacheControl, maxFileSize);
         }
     }
 }

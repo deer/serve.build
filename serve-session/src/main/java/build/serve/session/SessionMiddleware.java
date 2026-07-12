@@ -179,8 +179,15 @@ public final class SessionMiddleware implements Middleware {
         }
 
         /**
-         * Sets the {@code Secure} flag on the session cookie. Defaults to {@code true}.
-         * Set to {@code false} only in plain-HTTP development environments.
+         * Sets the {@code Secure} flag on the session cookie. Defaults to {@code true}, which is
+         * the correct value for production and should be left alone there.
+         * <p>
+         * <strong>Passing {@code false} disables this protection and transmits the session cookie
+         * in plaintext over HTTP.</strong> The only legitimate reason to do so is a local-only,
+         * plain-HTTP development environment with no real user data — and even then, prefer
+         * running local dev over HTTPS (e.g. a self-signed cert) so this never needs to be
+         * touched. If you do disable it for local dev, make sure the setting can't leak into a
+         * production configuration.
          *
          * @param secure {@code true} to require HTTPS for the session cookie
          * @return this {@link Builder}

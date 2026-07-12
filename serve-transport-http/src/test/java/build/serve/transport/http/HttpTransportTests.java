@@ -142,6 +142,34 @@ class HttpTransportTests {
     }
 
     @Test
+    void shouldDropOversizedQueryParamValue() throws Exception {
+        startWith(exchange -> {
+            var value = exchange.request().queryParam("x");
+            exchange.response().send(value.isPresent() ? "present" : "absent");
+        });
+
+        var oversized = "a".repeat(9000);
+        var conn = openConnection("/?x=" + oversized);
+        conn.connect();
+
+        assertThat(readBody(conn)).isEqualTo("absent");
+    }
+
+    @Test
+    void shouldDropOversizedCookieValue() throws Exception {
+        startWith(exchange -> {
+            var cookies = exchange.request().cookies();
+            exchange.response().send(String.valueOf(cookies.size()));
+        });
+
+        var conn = openConnection("/");
+        conn.setRequestProperty("Cookie", "big=" + "a".repeat(9000));
+        conn.connect();
+
+        assertThat(Integer.parseInt(readBody(conn))).isEqualTo(0);
+    }
+
+    @Test
     void shouldReturn413WhenBodyExceedsMaxRequestSize() throws Exception {
         var address = new InetSocketAddress("127.0.0.1", 0);
         transport = new HttpTransport(address, 0,
@@ -250,13 +278,27 @@ class HttpTransportTests {
         var ciphers = new String[]{
             "TLS_AES_128_GCM_SHA256",
             "TLS_RSA_WITH_NULL_SHA",
-            "TLS_RSA_WITH_AES_128_CBC_SHA",
+            "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
             "TLS_ECDHE_EXPORT_WITH_RC4_40_SHA"
         };
 
         var result = HttpTransport.filterCiphers(ciphers, "TLSv1.2");
 
-        assertThat(result).containsExactly("TLS_AES_128_GCM_SHA256", "TLS_RSA_WITH_AES_128_CBC_SHA");
+        assertThat(result).containsExactly("TLS_AES_128_GCM_SHA256", "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256");
+    }
+
+    @Test
+    void shouldFilterCbcAnd3DesCiphersForTls12MinimumToo() {
+        var ciphers = new String[]{
+            "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+            "TLS_RSA_WITH_AES_128_CBC_SHA",
+            "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
+            "SSL_RSA_WITH_3DES_EDE_CBC_SHA"
+        };
+
+        var result = HttpTransport.filterCiphers(ciphers, "TLSv1.2");
+
+        assertThat(result).containsExactly("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256");
     }
 
     @Test

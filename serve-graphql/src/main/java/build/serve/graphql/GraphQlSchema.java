@@ -77,13 +77,32 @@ public final class GraphQlSchema {
 
         final List<GraphQlError> errors = result.getErrors().stream()
             .map(e -> new GraphQlError(
-                e.getMessage(),
+                sanitizeMessage(e.getMessage()),
                 e.getPath() != null
                     ? e.getPath().stream().map(Object::toString).toList()
                     : null))
             .toList();
 
         return new GraphQlResult(result.getData(), errors);
+    }
+
+    /**
+     * Strips control characters from a data-fetcher exception message before it reaches the
+     * client. graphql-java's default exception handler forwards a thrown exception's
+     * {@code getMessage()} verbatim into the error response; this matches the same
+     * control-character stripping {@code DefaultErrorHandler} and {@code McpServer} apply to
+     * exception messages at the HTTP and MCP layers, defending against CRLF/control-character
+     * injection via a data fetcher's exception message.
+     *
+     * @param message the raw exception message, or {@code null}
+     * @return the sanitized message, or {@code null} if the input was {@code null}
+     */
+    private static String sanitizeMessage(final String message) {
+        if (message == null) {
+            return null;
+        }
+
+        return message.replaceAll("[\\r\\n\\t\\x00-\\x1F\\x7F]", " ");
     }
 
     /**

@@ -139,6 +139,38 @@ class GraphQlHandlerTests {
     }
 
     @Test
+    void shouldStripControlCharactersFromDataFetcherExceptionMessage() throws Exception {
+        final var throwingSchema = GraphQlSchema.builder("""
+                type Query {
+                    boom: String
+                }
+                """)
+            .fetcher("Query", "boom", env -> {
+                throw new RuntimeException("line one\r\nline two\tinjected");
+            })
+            .build();
+
+        final var throwingRouter = RouterBuilder.create()
+            .post("/graphql", GraphQlHandler.graphql(throwingSchema))
+            .build();
+
+        try (var throwingServer = TestServer.of(throwingRouter)) {
+            final var response = throwingServer.post("/graphql")
+                .header("Content-Type", "application/json")
+                .body("{\"query\":\"{ boom }\"}")
+                .send()
+                .assertStatus(200);
+
+            final var json = Json.parse(response.body()).asObject();
+            final var errors = (JsonArray) json.get("errors");
+            final var message = errors.values().get(0).asObject().getString("message");
+
+            assertThat(message).doesNotContain("\r").doesNotContain("\n").doesNotContain("\t");
+            assertThat(message).contains("line one  line two injected");
+        }
+    }
+
+    @Test
     void shouldBlockIntrospectionWhenDisabled() throws Exception {
         var schema = GraphQlSchema.builder("""
                 type Query { hello: String }

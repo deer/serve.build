@@ -58,8 +58,8 @@ public final class RateLimitMiddleware implements Middleware {
         this.keyExtractor = builder.keyExtractor != null
             ? builder.keyExtractor
             : req -> req.remoteAddress()
-                     .map(a -> a.getAddress().getHostAddress())
-                     .orElse("unknown");
+            .map(a -> a.getAddress().getHostAddress())
+            .orElse("unknown");
         this.clock = builder.clock != null ? builder.clock : Clock.systemUTC();
         this.maxBuckets = builder.maxBuckets;
     }
