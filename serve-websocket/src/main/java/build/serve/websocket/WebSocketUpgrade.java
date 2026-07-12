@@ -174,20 +174,22 @@ public final class WebSocketUpgrade {
             }
             final InetSocketAddress remoteAddress = httpExchange.getRemoteAddress();
 
-            // Write 101 Switching Protocols response directly to raw stream
-            final var response = "HTTP/1.1 101 Switching Protocols\r\n"
-                + "Upgrade: websocket\r\n"
-                + "Connection: Upgrade\r\n"
-                + "Sec-WebSocket-Accept: " + acceptKey + "\r\n"
-                + "\r\n";
-            rawOut.write(response.getBytes(StandardCharsets.US_ASCII));
-            rawOut.flush();
-
-            // Create the WebSocket connection and hand off to the handler
+            // Create the WebSocket connection and hand off to the handler before writing the
+            // 101 response, so the connection is registered with the handler before the client
+            // can consider the handshake complete and send anything.
             final var wsConnection = new WebSocketConnection(rawIn, rawOut, remoteAddress);
 
             try {
                 wsHandler.handle(wsConnection);
+
+                // Write 101 Switching Protocols response directly to raw stream
+                final var response = "HTTP/1.1 101 Switching Protocols\r\n"
+                    + "Upgrade: websocket\r\n"
+                    + "Connection: Upgrade\r\n"
+                    + "Sec-WebSocket-Accept: " + acceptKey + "\r\n"
+                    + "\r\n";
+                rawOut.write(response.getBytes(StandardCharsets.US_ASCII));
+                rawOut.flush();
 
                 // Run the read loop on this virtual thread (blocking)
                 wsConnection.readLoop();
