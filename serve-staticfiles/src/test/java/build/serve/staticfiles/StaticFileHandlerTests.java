@@ -81,6 +81,58 @@ class StaticFileHandlerTests {
     }
 
     @Test
+    void symlinkEscapingRootIsBlocked() throws Exception {
+        var outsideDir = Files.createTempDirectory("outside");
+        var secretFile = outsideDir.resolve("secret.txt");
+        Files.writeString(secretFile, "top secret");
+
+        var link = tempDir.resolve("escape.txt");
+        Files.createSymbolicLink(link, secretFile);
+
+        var handler = StaticFileHandler.directory(tempDir);
+        var response = new StubResponse();
+        var exchange = createExchange("GET", "/escape.txt", response);
+
+        handler.handle(exchange);
+
+        assertThat(response.statusCode).isEqualTo(404);
+    }
+
+    @Test
+    void symlinkWithinRootIsServed() throws Exception {
+        var realFile = tempDir.resolve("real.txt");
+        Files.writeString(realFile, "hello");
+
+        var link = tempDir.resolve("link.txt");
+        Files.createSymbolicLink(link, realFile);
+
+        var handler = StaticFileHandler.directory(tempDir);
+        var response = new StubResponse();
+        var exchange = createExchange("GET", "/link.txt", response);
+
+        handler.handle(exchange);
+
+        assertThat(response.statusCode).isEqualTo(200);
+        assertThat(new String(response.bodyBytes)).isEqualTo("hello");
+    }
+
+    @Test
+    void filesLargerThanMaxSizeReturn413() throws Exception {
+        Files.writeString(tempDir.resolve("big.txt"), "0123456789");
+
+        var handler = StaticFileHandler.builder()
+            .directory(tempDir)
+            .maxFileSize(5)
+            .build();
+        var response = new StubResponse();
+        var exchange = createExchange("GET", "/big.txt", response);
+
+        handler.handle(exchange);
+
+        assertThat(response.statusCode).isEqualTo(413);
+    }
+
+    @Test
     void servesIndexFileForDirectoryPath() throws Exception {
         Files.writeString(tempDir.resolve("index.html"), "<h1>Index</h1>");
 

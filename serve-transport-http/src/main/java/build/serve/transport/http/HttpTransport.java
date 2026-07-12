@@ -295,14 +295,9 @@ public class HttpTransport {
     }
 
     static String[] filterCiphers(final String[] ciphers, final String minProtocol) {
-        if ("TLSv1.3".equals(minProtocol)) {
-            return Arrays.stream(ciphers)
-                .filter(c -> !c.contains("_CBC_") && !c.startsWith("TLS_RSA_"))
-                .toArray(String[]::new);
-        }
-
         return Arrays.stream(ciphers)
-            .filter(c -> !c.contains("_NULL_") && !c.contains("_anon_") && !c.contains("EXPORT"))
+            .filter(c -> !c.contains("_NULL_") && !c.contains("_anon_") && !c.contains("EXPORT")
+                && !c.contains("_CBC_") && !c.contains("_3DES_") && !c.startsWith("TLS_RSA_"))
             .toArray(String[]::new);
     }
 

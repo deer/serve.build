@@ -25,6 +25,7 @@
  */
 module build.serve.auth {
     requires transitive build.serve.foundation;
+    requires build.base.logging;
 
     exports build.serve.auth;
 }

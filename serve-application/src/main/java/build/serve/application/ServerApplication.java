@@ -22,12 +22,14 @@ package build.serve.application;
 import build.base.logging.Logger;
 import build.base.network.option.Port;
 import build.codemodel.injection.Context;
+import build.serve.foundation.Handler;
 import build.serve.foundation.error.DefaultErrorHandler;
 import build.serve.foundation.error.ErrorHandler;
 import build.serve.foundation.option.ListenAddress;
 import build.serve.foundation.option.ShutdownTimeout;
 import build.serve.foundation.option.TlsConfig;
 import build.serve.foundation.routing.Router;
+import build.serve.security.SecurityHeadersMiddleware;
 import build.serve.transport.http.HttpTransport;
 import build.spawn.application.Addressable;
 import build.spawn.application.Lifecycle;
@@ -171,6 +173,25 @@ public interface ServerApplication
         }
 
         /**
+         * Obtains the {@link SecurityHeadersMiddleware} applied to every response.
+         * <p>
+         * Defaults to {@link SecurityHeadersMiddleware#defaults()} so a default app gets standard
+         * hardening headers (X-Frame-Options, X-Content-Type-Options, HSTS, etc.) without needing
+         * to opt in. Subclasses may override to customize the headers, or return {@code null} to
+         * disable this middleware entirely.
+         *
+         * @return the {@link SecurityHeadersMiddleware}, or {@code null} to disable it
+         */
+        protected SecurityHeadersMiddleware securityHeaders() {
+            return SecurityHeadersMiddleware.defaults();
+        }
+
+        private Handler applySecurityHeaders(final Router router) {
+            final var securityHeaders = securityHeaders();
+            return securityHeaders != null ? securityHeaders.apply(router) : router;
+        }
+
+        /**
          * Starts this {@link ServerApplication} with the default {@link ShutdownTimeout}.
          *
          * @param listenAddress the address to bind to
@@ -198,7 +219,7 @@ public interface ServerApplication
 
             final var address = new InetSocketAddress(listenAddress.value(), listenPort.get());
 
-            this.transport = new HttpTransport(address, 0, router, errorHandler());
+            this.transport = new HttpTransport(address, 0, applySecurityHeaders(router), errorHandler());
             this.transport.start();
 
             this.shutdownHook = new Thread(this::stop, "serve-shutdown");
@@ -241,7 +262,8 @@ public interface ServerApplication
 
             final var address = new InetSocketAddress(listenAddress.value(), listenPort.get());
 
-            this.transport = HttpTransport.https(address, 0, router, errorHandler(), tls.sslContext());
+            this.transport = HttpTransport.https(address, 0, applySecurityHeaders(router), errorHandler(),
+                tls.sslContext());
             this.transport.start();
 
             this.shutdownHook = new Thread(this::stop, "serve-shutdown");

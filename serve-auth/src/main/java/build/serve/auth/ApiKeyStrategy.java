@@ -19,6 +19,7 @@
  */
 package build.serve.auth;
 
+import build.base.logging.Logger;
 import build.serve.foundation.Request;
 
 import java.util.Objects;
@@ -36,6 +37,8 @@ import java.util.function.Function;
  * @since Apr-2026
  */
 public final class ApiKeyStrategy implements AuthStrategy {
+
+    private static final Logger LOGGER = Logger.get(ApiKeyStrategy.class);
 
     private final Function<Request, Optional<String>> extractor;
     private final Function<String, Optional<Principal>> validator;
@@ -62,6 +65,12 @@ public final class ApiKeyStrategy implements AuthStrategy {
 
     /**
      * Creates an {@link ApiKeyStrategy} that reads the key from a query parameter.
+     * <p>
+     * <strong>Prefer {@link #fromHeader(String, Function)} where possible.</strong> A key carried
+     * in the URL ends up in server access logs, proxy logs, and browser history, and is exposed
+     * by anything that logs or shares the request URL — none of which apply to a header value.
+     * Use this only when the caller genuinely cannot set a header (e.g. a webhook provider that
+     * only supports query-string authentication).
      *
      * @param paramName the query parameter name (e.g., {@code "api_key"})
      * @param validator a function mapping the key to a {@link Principal}, or empty if invalid
@@ -71,6 +80,9 @@ public final class ApiKeyStrategy implements AuthStrategy {
                                                 final Function<String, Optional<Principal>> validator) {
         Objects.requireNonNull(paramName, "paramName");
         Objects.requireNonNull(validator, "validator");
+        LOGGER.warn("ApiKeyStrategy.fromQueryParam(\"" + paramName + "\") carries the API key in the URL —"
+            + " it will appear in access logs, proxy logs, and browser history. Prefer fromHeader(...)"
+            + " unless the caller cannot set a header.");
         return new ApiKeyStrategy(req -> req.queryParam(paramName), validator);
     }
 

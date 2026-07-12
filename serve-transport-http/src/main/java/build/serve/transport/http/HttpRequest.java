@@ -109,6 +109,13 @@ public class HttpRequest
 
     private static final int MAX_QUERY_PARAMS = 100;
 
+    /**
+     * Maximum length (characters, before URL-decoding) of a single query-param or cookie value.
+     * Bounds per-value memory/CPU independent of the count caps above, which only bound the
+     * number of entries — a single absurdly long value could otherwise still exhaust memory.
+     */
+    private static final int MAX_VALUE_LENGTH = 8192;
+
     @Override
     public List<String> queryParams(final String name) {
         final var query = httpExchange.getRequestURI().getQuery();
@@ -123,6 +130,10 @@ public class HttpRequest
         for (final var param : query.split("&")) {
             if (++paramCount > MAX_QUERY_PARAMS) {
                 break;
+            }
+
+            if (param.length() > MAX_VALUE_LENGTH) {
+                continue;
             }
 
             final var parts = param.split("=", 2);
@@ -173,6 +184,10 @@ public class HttpRequest
         for (final var pair : cookieHeader.get().split(";")) {
             if (++cookieCount > MAX_COOKIES) {
                 break;
+            }
+
+            if (pair.length() > MAX_VALUE_LENGTH) {
+                continue;
             }
 
             final var trimmed = pair.trim();

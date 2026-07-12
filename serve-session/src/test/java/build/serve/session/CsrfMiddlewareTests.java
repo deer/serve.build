@@ -135,7 +135,8 @@ class CsrfMiddlewareTests {
         var csrfMw = CsrfMiddleware.builder().build();
 
         assertThatThrownBy(() ->
-            csrfMw.apply(ex -> { }).handle(exchange("GET", Map.of(), List.of(), new StubResponse())))
+            csrfMw.apply(ex -> {
+            }).handle(exchange("GET", Map.of(), List.of(), new StubResponse())))
             .isInstanceOf(IllegalStateException.class);
     }
 

@@ -55,7 +55,12 @@ public final class FormPart {
     }
 
     /**
-     * The original filename, if this part represents a file upload.
+     * The client-supplied filename, if this part represents a file upload.
+     * <p>
+     * Any path components the client embedded (e.g. {@code ../../etc/passwd}) have already been
+     * stripped, so this is always a bare filename — safe to use as the final path segment when
+     * saving the upload, but callers should still resolve it against a known directory rather than
+     * trusting it as a full path.
      *
      * @return the filename, or empty for plain form fields
      */

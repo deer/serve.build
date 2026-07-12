@@ -26,6 +26,7 @@
 module build.serve.application {
     requires transitive build.serve.foundation;
     requires build.serve.transport.http;
+    requires transitive build.serve.security;
     requires transitive build.spawn.application;
     requires transitive build.codemodel.injection;
     requires transitive jakarta.inject;

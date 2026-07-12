@@ -29,8 +29,12 @@ import java.util.function.Function;
  * An {@link AuthStrategy} that validates {@code Authorization: Bearer <token>} credentials.
  * <pre>{@code
  * BearerTokenStrategy.of(token ->
- *     token.equals(secret) ? Optional.of(SimplePrincipal.of("reed")) : Optional.empty())
+ *     Credentials.equal(token, secret) ? Optional.of(SimplePrincipal.of("reed")) : Optional.empty())
  * }</pre>
+ * <p>
+ * Use {@link Credentials#equal(String, String)} rather than {@link String#equals(Object)} when
+ * comparing against a secret — {@code equals} short-circuits on the first mismatched character,
+ * which leaks timing information an attacker can use to recover the secret byte-by-byte.
  *
  * @author reed.vonredwitz
  * @since Apr-2026

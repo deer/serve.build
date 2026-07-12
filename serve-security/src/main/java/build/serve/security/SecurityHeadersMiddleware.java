@@ -86,8 +86,6 @@ public final class SecurityHeadersMiddleware implements Middleware {
     @Override
     public Handler apply(final Handler next) {
         return exchange -> {
-            next.handle(exchange);
-
             final var response = exchange.response();
 
             setIfNonNull(response, "X-Frame-Options", xFrameOptions);
@@ -103,6 +101,8 @@ public final class SecurityHeadersMiddleware implements Middleware {
             for (final var header : removeHeaders) {
                 response.removeHeader(header);
             }
+
+            next.handle(exchange);
         };
     }
 

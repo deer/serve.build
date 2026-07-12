@@ -149,7 +149,7 @@ public final class MultipartData {
                     }
                     final var filenameMatcher = FILENAME_PATTERN.matcher(headerLine);
                     if (filenameMatcher.find()) {
-                        filename = Optional.of(filenameMatcher.group(1));
+                        filename = Optional.of(sanitizeFilename(filenameMatcher.group(1)));
                     }
                 } else if (lower.startsWith("content-type:")) {
                     contentType = Optional.of(headerLine.substring("content-type:".length()).strip());
@@ -162,6 +162,30 @@ public final class MultipartData {
         }
 
         return new MultipartData(parts);
+    }
+
+    /**
+     * Strips any path components from a client-supplied filename, keeping only the final segment.
+     * <p>
+     * The {@code Content-Disposition} filename is attacker-controlled and, unsanitized, is a
+     * classic path-traversal footgun for any consumer that saves the upload using that filename
+     * directly (e.g. {@code Files.write(uploadDir.resolve(part.filename()), part.bytes())}).
+     * Handles both {@code /} and {@code \} separators, and falls back to a safe placeholder if
+     * nothing but path components or dots remain.
+     *
+     * @param rawFilename the filename as supplied by the client
+     * @return the sanitized filename, containing no path separators
+     */
+    private static String sanitizeFilename(final String rawFilename) {
+        final var normalized = rawFilename.replace('\\', '/');
+        final var lastSlash = normalized.lastIndexOf('/');
+        final var basename = lastSlash >= 0 ? normalized.substring(lastSlash + 1) : normalized;
+
+        if (basename.isBlank() || basename.equals(".") || basename.equals("..")) {
+            return "unnamed";
+        }
+
+        return basename;
     }
 
     /**
