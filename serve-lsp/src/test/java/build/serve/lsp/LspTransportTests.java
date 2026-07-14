@@ -2,6 +2,7 @@ package build.serve.lsp;
 
 import build.base.json.Json;
 import build.base.json.JsonObject;
+import build.base.json.JsonString;
 import build.base.json.JsonValue;
 import build.serve.lsp.types.ApplyWorkspaceEditResult;
 import build.serve.lsp.types.CompletionItem;
@@ -13,6 +14,7 @@ import build.serve.lsp.types.ServerCapabilities;
 import build.serve.lsp.types.ServerCapability;
 import build.serve.lsp.types.ShowMessageParams;
 import build.serve.lsp.types.TextEdit;
+import build.serve.lsp.types.WorkDoneProgress;
 import build.serve.lsp.types.WorkspaceEdit;
 import build.serve.lsp.types.WorkspaceFolder;
 import org.junit.jupiter.api.Test;
@@ -28,6 +30,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -503,6 +506,191 @@ class LspTransportTests {
 
             assertThat(response.getString("id")).isEqualTo("req-abc");
             assertThat(response.has("error")).isFalse();
+        }
+    }
+
+    @Test
+    void shouldProcessSecondRequestWhileFirstIsStillBlocked() throws Exception {
+        final var release = new CountDownLatch(1);
+        final var server = LspServer.builder()
+            .onHover((params, ctx) -> {
+                try {
+                    release.await();
+                } catch (final InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return Hover.of("first");
+            })
+            .onCompletion((params, ctx) -> List.of(CompletionItem.of("second", CompletionItemKind.METHOD)))
+            .build();
+
+        try (final var client = new LspTestClient(server)) {
+            client.writeMessage(
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"textDocument/hover\","
+                    + "\"params\":{\"textDocument\":{\"uri\":\"file:///test.java\"},\"position\":{\"line\":0,\"character\":0}}}");
+            client.writeMessage(
+                "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"textDocument/completion\","
+                    + "\"params\":{\"textDocument\":{\"uri\":\"file:///test.java\"},\"position\":{\"line\":0,\"character\":0}}}");
+
+            final var second = client.readMessage();
+            assertThat(second.get("id").asNumber().toNumber().intValue()).isEqualTo(2);
+
+            release.countDown();
+            final var first = client.readMessage();
+            assertThat(first.get("id").asNumber().toNumber().intValue()).isEqualTo(1);
+        }
+    }
+
+    @Test
+    void shouldRespondWithRequestCancelledWhenClientCancelsInFlightRequest() throws Exception {
+        final var started = new CountDownLatch(1);
+        final var server = LspServer.builder()
+            .onHover((params, ctx) -> {
+                started.countDown();
+                try {
+                    Thread.sleep(5000);
+                } catch (final InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return Hover.of("should not be delivered");
+            })
+            .build();
+
+        try (final var client = new LspTestClient(server)) {
+            client.writeMessage(
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"textDocument/hover\","
+                    + "\"params\":{\"textDocument\":{\"uri\":\"file:///test.java\"},\"position\":{\"line\":0,\"character\":0}}}");
+
+            assertThat(started.await(2, TimeUnit.SECONDS)).isTrue();
+
+            client.writeMessage("{\"jsonrpc\":\"2.0\",\"method\":\"$/cancelRequest\",\"params\":{\"id\":1}}");
+
+            final var response = client.readMessage();
+            assertThat(response.has("error")).isTrue();
+            assertThat(response.get("error").asObject().get("code").asNumber().toNumber().intValue()).isEqualTo(-32800);
+        }
+    }
+
+    @Test
+    void shouldRespondWithRequestCancelledWhenHandlerLetsInterruptedExceptionEscapeUnwrapped() throws Exception {
+        final var started = new CountDownLatch(1);
+        final var server = LspServer.builder()
+            .onHover((params, ctx) -> {
+                started.countDown();
+                sleepPropagatingInterrupt(5000);
+                return Hover.of("should not be delivered");
+            })
+            .build();
+
+        try (final var client = new LspTestClient(server)) {
+            client.writeMessage(
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"textDocument/hover\","
+                    + "\"params\":{\"textDocument\":{\"uri\":\"file:///test.java\"},\"position\":{\"line\":0,\"character\":0}}}");
+
+            assertThat(started.await(2, TimeUnit.SECONDS)).isTrue();
+
+            client.writeMessage("{\"jsonrpc\":\"2.0\",\"method\":\"$/cancelRequest\",\"params\":{\"id\":1}}");
+
+            final var response = client.readMessage();
+            assertThat(response.has("error")).isTrue();
+            assertThat(response.get("error").asObject().get("code").asNumber().toNumber().intValue()).isEqualTo(-32800);
+        }
+    }
+
+    /**
+     * Sleeps, letting a caught {@link InterruptedException} escape unwrapped and without
+     * re-interrupting the thread — simulating a handler whose blocking call's interruption isn't
+     * handled specially, rather than the well-behaved catch-and-reinterrupt idiom.
+     */
+    private static void sleepPropagatingInterrupt(final long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (final InterruptedException e) {
+            sneakyThrow(e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void sneakyThrow(final Throwable t) throws T {
+        throw (T) t;
+    }
+
+    @Test
+    void shouldIgnoreCancelRequestForUnknownId() throws Exception {
+        final var server = LspServer.builder()
+            .onHover((params, ctx) -> Hover.of("hi"))
+            .build();
+
+        try (final var client = new LspTestClient(server)) {
+            client.writeMessage("{\"jsonrpc\":\"2.0\",\"method\":\"$/cancelRequest\",\"params\":{\"id\":999}}");
+
+            final var response = client.sendRequest(1, "textDocument/hover",
+                """
+                    {"textDocument":{"uri":"file:///test.java"},"position":{"line":0,"character":0}}
+                    """);
+
+            assertThat(response.has("error")).isFalse();
+            assertThat(response.get("result").asObject().get("contents").asObject().get("value").asString().value())
+                .isEqualTo("hi");
+        }
+    }
+
+    @Test
+    void shouldSendProgressNotifications() throws Exception {
+        final var server = LspServer.builder()
+            .onDidOpen((params, ctx) -> {
+                ctx.progress(JsonString.of("tok-1"), WorkDoneProgress.Begin.of("Indexing"));
+                ctx.progress(JsonString.of("tok-1"), WorkDoneProgress.Report.of(50));
+                ctx.progress(JsonString.of("tok-1"), WorkDoneProgress.End.of());
+            })
+            .build();
+
+        try (final var client = new LspTestClient(server)) {
+            client.sendNotification("textDocument/didOpen",
+                """
+                    {"textDocument":{"uri":"file:///test.java","languageId":"java","version":1,"text":"hello"}}
+                    """);
+
+            final var begin = client.readMessage();
+            assertThat(begin.get("method").asString().value()).isEqualTo("$/progress");
+            assertThat(begin.get("params").asObject().get("token").asString().value()).isEqualTo("tok-1");
+            final var beginValue = begin.get("params").asObject().get("value").asObject();
+            assertThat(beginValue.get("kind").asString().value()).isEqualTo("begin");
+            assertThat(beginValue.get("title").asString().value()).isEqualTo("Indexing");
+
+            final var report = client.readMessage();
+            final var reportValue = report.get("params").asObject().get("value").asObject();
+            assertThat(reportValue.get("kind").asString().value()).isEqualTo("report");
+            assertThat(reportValue.get("percentage").asNumber().toNumber().intValue()).isEqualTo(50);
+
+            final var end = client.readMessage();
+            assertThat(end.get("params").asObject().get("value").asObject().get("kind").asString().value())
+                .isEqualTo("end");
+        }
+    }
+
+    @Test
+    void shouldCreateWorkDoneProgressAndReturnToken() throws Exception {
+        final var tokenRef = new AtomicReference<JsonValue>();
+        final var server = LspServer.builder()
+            .onDidOpen((params, ctx) -> ctx.createWorkDoneProgress().thenAccept(tokenRef::set))
+            .build();
+
+        try (final var client = new LspTestClient(server)) {
+            client.sendNotification("textDocument/didOpen",
+                """
+                    {"textDocument":{"uri":"file:///test.java","languageId":"java","version":1,"text":"hello"}}
+                    """);
+
+            final var outboundRequest = client.readMessage();
+            assertThat(outboundRequest.get("method").asString().value()).isEqualTo("window/workDoneProgress/create");
+            final var requestedToken = outboundRequest.get("params").asObject().get("token").asString().value();
+            final var outboundId = outboundRequest.get("id").asNumber().toNumber().intValue();
+
+            client.writeMessage("{\"jsonrpc\":\"2.0\",\"id\":" + outboundId + ",\"result\":null}");
+
+            client.sendRequest(99, "shutdown", null);
+            assertThat(tokenRef.get().asString().value()).isEqualTo(requestedToken);
         }
     }
 

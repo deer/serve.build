@@ -25,6 +25,7 @@ import build.serve.lsp.types.ApplyWorkspaceEditResult;
 import build.serve.lsp.types.ConfigurationItem;
 import build.serve.lsp.types.Diagnostic;
 import build.serve.lsp.types.ShowMessageParams;
+import build.serve.lsp.types.WorkDoneProgress;
 import build.serve.lsp.types.WorkspaceEdit;
 import build.serve.lsp.types.WorkspaceFolder;
 
@@ -120,4 +121,25 @@ public interface LspContext {
      * the client responds with a JSON-RPC error
      */
     CompletableFuture<List<WorkspaceFolder>> workspaceFolders();
+
+    /**
+     * Sends a {@code $/progress} notification reporting work-done progress against the given
+     * token. The token is typically either supplied by the client (a request's
+     * {@code workDoneToken}) or obtained from {@link #createWorkDoneProgress()}.
+     *
+     * @param token the progress token
+     * @param value the progress value — a {@link WorkDoneProgress.Begin}, {@link WorkDoneProgress.Report},
+     *              or {@link WorkDoneProgress.End}
+     */
+    void progress(JsonValue token, WorkDoneProgress value);
+
+    /**
+     * Asks the client's permission to create a server-initiated work-done-progress token, per
+     * {@code window/workDoneProgress/create}. On success, completes with a fresh token that can
+     * be passed to {@link #progress(JsonValue, WorkDoneProgress)}.
+     *
+     * @return a future completing with the new token, or completing exceptionally with
+     * {@link LspClientErrorException} if the client declines
+     */
+    CompletableFuture<JsonValue> createWorkDoneProgress();
 }

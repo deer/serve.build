@@ -29,6 +29,7 @@ import build.serve.lsp.types.ApplyWorkspaceEditResult;
 import build.serve.lsp.types.ConfigurationItem;
 import build.serve.lsp.types.Diagnostic;
 import build.serve.lsp.types.ShowMessageParams;
+import build.serve.lsp.types.WorkDoneProgress;
 import build.serve.lsp.types.WorkspaceEdit;
 import build.serve.lsp.types.WorkspaceFolder;
 
@@ -42,8 +43,12 @@ import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -140,8 +145,32 @@ public final class LspTransport {
     public static void run(final LspServer server, final InputStream in, final OutputStream out) throws Exception {
         final var shutdownRequested = new AtomicBoolean(false);
         final var outboundId = new AtomicInteger(0);
-        final var lock = new Object();
         final Map<Integer, CompletableFuture<JsonValue>> pendingRequests = new ConcurrentHashMap<>();
+        final Map<Object, Thread> activeRequests = new ConcurrentHashMap<>();
+        final var writer = new LspWriter();
+
+        // Single writer thread owns all writes to `out`; every other thread (the read loop, and now
+        // one virtual thread per in-flight request — see dispatchRequest) enqueues frames instead of
+        // writing directly. Piped streams (used in tests, and a legitimate concern for any consumer
+        // wrapping one) tie a PipedInputStream's "write end" liveness to whichever thread wrote to it
+        // last; with multiple writer threads, one dying mid-connection makes the pipe look dead to a
+        // reader even though other writer threads are still alive.
+        final var writerThread = Thread.ofVirtual().name("lsp-writer").start(() -> {
+            try {
+                Optional<byte[]> item;
+                while ((item = writer.queue.take()).isPresent()) {
+                    out.write(item.get());
+                    out.flush();
+                }
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (final IOException e) {
+                // stream closed/broken; stop writing and start dropping further frames instead of
+                // queueing them forever — the read loop and any still-running handlers wind down
+                // on their own, but shouldn't be able to grow an unbounded backlog while they do
+                writer.alive.set(false);
+            }
+        });
 
         final LspContext ctx = new LspContext() {
             @Override
@@ -150,17 +179,17 @@ public final class LspTransport {
                     .put("uri", uri)
                     .put("diagnostics", LspJson.toJson(diagnostics))
                     .build();
-                sendNotification(out, lock, LspServerPushMethod.PUBLISH_DIAGNOSTICS, params);
+                sendNotification(writer, LspServerPushMethod.PUBLISH_DIAGNOSTICS, params);
             }
 
             @Override
             public void showMessage(final ShowMessageParams params) {
-                sendNotification(out, lock, LspServerPushMethod.SHOW_MESSAGE, showMessageNode(params));
+                sendNotification(writer, LspServerPushMethod.SHOW_MESSAGE, showMessageNode(params));
             }
 
             @Override
             public void logMessage(final ShowMessageParams params) {
-                sendNotification(out, lock, LspServerPushMethod.LOG_MESSAGE, showMessageNode(params));
+                sendNotification(writer, LspServerPushMethod.LOG_MESSAGE, showMessageNode(params));
             }
 
             @Override
@@ -173,7 +202,7 @@ public final class LspTransport {
                 final var id = outboundId.incrementAndGet();
                 final var future = new CompletableFuture<JsonValue>();
                 pendingRequests.put(id, future);
-                sendOutboundRequest(out, lock, id, method, params);
+                sendOutboundRequest(writer, id, method, params);
                 return future;
             }
 
@@ -206,6 +235,22 @@ public final class LspTransport {
                     .thenApply(LspJson::parseWorkspaceFolders);
             }
 
+            @Override
+            public void progress(final JsonValue token, final WorkDoneProgress value) {
+                final var params = JsonObject.builder()
+                    .put("token", token)
+                    .put("value", LspJson.toJson(value))
+                    .build();
+                sendNotification(writer, LspServerPushMethod.PROGRESS, params);
+            }
+
+            @Override
+            public CompletableFuture<JsonValue> createWorkDoneProgress() {
+                final var token = JsonString.of(UUID.randomUUID().toString());
+                final var params = JsonObject.builder().put("token", token).build();
+                return sendRequest("window/workDoneProgress/create", params).thenApply(ignored -> token);
+            }
+
             private JsonObject showMessageNode(final ShowMessageParams params) {
                 return JsonObject.builder()
                     .put("type", params.type())
@@ -215,15 +260,25 @@ public final class LspTransport {
         };
 
         try {
-            runLoop(server, in, out, ctx, shutdownRequested, lock, pendingRequests);
+            runLoop(server, in, ctx, shutdownRequested, writer, pendingRequests, activeRequests);
         } finally {
             failPendingRequests(pendingRequests);
+            writer.shutdown();
+            try {
+                writerThread.join(5_000);
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
-    private static void runLoop(final LspServer server, final InputStream in, final OutputStream out,
-                                final LspContext ctx, final AtomicBoolean shutdownRequested, final Object lock,
-                                final Map<Integer, CompletableFuture<JsonValue>> pendingRequests) throws IOException {
+    private static void runLoop(final LspServer server,
+                                final InputStream in,
+                                final LspContext ctx,
+                                final AtomicBoolean shutdownRequested,
+                                final LspWriter writer,
+                                final Map<Integer, CompletableFuture<JsonValue>> pendingRequests,
+                                final Map<Object, Thread> activeRequests) throws IOException {
         while (true) {
             final var contentLength = readContentLength(in);
             if (contentLength < 0 || contentLength > MAX_CONTENT_LENGTH) {
@@ -252,7 +307,11 @@ public final class LspTransport {
                 } catch (final Exception e) {
                     // the client must still receive a response so it can proceed to `exit`
                 }
-                sendResponse(out, lock, id, JsonNull.INSTANCE);
+                sendResponse(writer, id, JsonNull.INSTANCE);
+                continue;
+            }
+            if ("$/cancelRequest".equals(methodStr)) {
+                cancelActiveRequest(activeRequests, params);
                 continue;
             }
 
@@ -264,19 +323,13 @@ public final class LspTransport {
                 }
                 final var methodOpt = LspRequestMethod.from(methodStr);
                 if (methodOpt.isEmpty()) {
-                    sendErrorResponse(out, lock, id, -32601, "Method not found");
+                    sendErrorResponse(writer, id, -32601, "Method not found");
                     continue;
                 }
-                try {
-                    final var request = LspRequest.parse(methodOpt.get(), params);
-                    switch (server.handle(request, ctx)) {
-                        case LspResponse.Ok ok -> sendResponse(out, lock, id, LspJson.toJson(ok.value()));
-                        case LspResponse.MethodNotFound __ ->
-                            sendErrorResponse(out, lock, id, -32601, "Method not found");
-                    }
-                } catch (final Exception e) {
-                    sendErrorResponse(out, lock, id, -32603, "Internal error");
-                }
+                // Each request runs on its own virtual thread so a later `$/cancelRequest` can
+                // interrupt it — request handling is otherwise concurrent with respect to other
+                // requests (responses may arrive out of order, which JSON-RPC id correlation allows).
+                dispatchRequest(server, ctx, writer, activeRequests, methodOpt.get(), params, id);
             } else {
                 final var methodOpt = LspNotificationMethod.from(methodStr);
                 if (methodOpt.isPresent()) {
@@ -288,6 +341,74 @@ public final class LspTransport {
                 }
             }
         }
+    }
+
+    /**
+     * Runs one request's handler on its own virtual thread, registering it in {@code activeRequests}
+     * before starting so a {@code $/cancelRequest} read immediately afterward on the main loop thread
+     * can always find it. If the thread was interrupted (cancelled) by the time the handler returns —
+     * whether or not the handler itself is interruption-aware — a {@code RequestCancelled} error is
+     * sent instead of the handler's result, per spec.
+     */
+    private static void dispatchRequest(final LspServer server, final LspContext ctx,
+                                        final LspWriter writer,
+                                        final Map<Object, Thread> activeRequests,
+                                        final LspRequestMethod method, final JsonObject params, final JsonValue id) {
+        final var key = requestKey(id);
+        final var thread = Thread.ofVirtual().unstarted(() -> {
+            try {
+                final var request = LspRequest.parse(method, params);
+                switch (server.handle(request, ctx)) {
+                    case LspResponse.Ok ok -> {
+                        if (Thread.interrupted()) {
+                            sendErrorResponse(writer, id, -32800, "Request cancelled");
+                        } else {
+                            sendResponse(writer, id, LspJson.toJson(ok.value()));
+                        }
+                    }
+                    case LspResponse.MethodNotFound __ -> sendErrorResponse(writer, id, -32601, "Method not found");
+                }
+            } catch (final Exception e) {
+                // Thread.sleep/wait/blocking I/O clear the interrupt flag the instant they throw
+                // InterruptedException, so a handler that lets it propagate uncaught (rather than
+                // catching it and re-interrupting itself) would otherwise be misreported as an
+                // internal error instead of a cancellation.
+                if (e instanceof InterruptedException || Thread.interrupted()) {
+                    sendErrorResponse(writer, id, -32800, "Request cancelled");
+                } else {
+                    sendErrorResponse(writer, id, -32603, "Internal error");
+                }
+            } finally {
+                if (key != null) {
+                    activeRequests.remove(key);
+                }
+            }
+        });
+        if (key != null) {
+            activeRequests.put(key, thread);
+        }
+        thread.start();
+    }
+
+    private static void cancelActiveRequest(final Map<Object, Thread> activeRequests, final JsonObject params) {
+        if (params == null || !params.has("id")) {
+            return;
+        }
+        final var key = requestKey(params.get("id"));
+        final var thread = key != null ? activeRequests.get(key) : null;
+        if (thread != null) {
+            thread.interrupt();
+        }
+    }
+
+    private static Object requestKey(final JsonValue id) {
+        if (id instanceof JsonNumber n) {
+            return n.toNumber().intValue();
+        }
+        if (id instanceof JsonString s) {
+            return s.value();
+        }
+        return null;
     }
 
     private static void failPendingRequests(final Map<Integer, CompletableFuture<JsonValue>> pendingRequests) {
@@ -354,15 +475,15 @@ public final class LspTransport {
         return contentLength;
     }
 
-    private static void sendResponse(final OutputStream out, final Object lock,
+    private static void sendResponse(final LspWriter writer,
                                      final JsonValue id, final JsonValue result) {
-        writeMessage(out, lock, responseBase(id).put("result", result).build());
+        writeMessage(writer, responseBase(id).put("result", result).build());
     }
 
-    private static void sendErrorResponse(final OutputStream out, final Object lock,
+    private static void sendErrorResponse(final LspWriter writer,
                                           final JsonValue id, final int code, final String message) {
         final var error = JsonObject.builder().put("code", code).put("message", message).build();
-        writeMessage(out, lock, responseBase(id).put("error", error).build());
+        writeMessage(writer, responseBase(id).put("error", error).build());
     }
 
     private static JsonObject.Builder responseBase(final JsonValue id) {
@@ -377,18 +498,18 @@ public final class LspTransport {
         return b;
     }
 
-    private static void sendNotification(final OutputStream out, final Object lock,
+    private static void sendNotification(final LspWriter writer,
                                          final LspServerPushMethod method, final JsonObject params) {
-        writeMessage(out, lock, JsonObject.builder()
+        writeMessage(writer, JsonObject.builder()
             .put("jsonrpc", "2.0")
             .put("method", method.methodName)
             .put("params", params)
             .build());
     }
 
-    private static void sendOutboundRequest(final OutputStream out, final Object lock,
+    private static void sendOutboundRequest(final LspWriter writer,
                                             final int id, final String method, final JsonObject params) {
-        writeMessage(out, lock, JsonObject.builder()
+        writeMessage(writer, JsonObject.builder()
             .put("jsonrpc", "2.0")
             .put("id", id)
             .put("method", method)
@@ -396,17 +517,33 @@ public final class LspTransport {
             .build());
     }
 
-    private static void writeMessage(final OutputStream out, final Object lock, final JsonObject message) {
-        try {
-            final var json = message.toJsonString().getBytes(StandardCharsets.UTF_8);
-            final var header = ("Content-Length: " + json.length + "\r\n\r\n").getBytes(StandardCharsets.UTF_8);
-            synchronized (lock) {
-                out.write(header);
-                out.write(json);
-                out.flush();
+    private static void writeMessage(final LspWriter writer, final JsonObject message) {
+        final var json = message.toJsonString().getBytes(StandardCharsets.UTF_8);
+        final var header = ("Content-Length: " + json.length + "\r\n\r\n").getBytes(StandardCharsets.UTF_8);
+        final var framed = new byte[header.length + json.length];
+        System.arraycopy(header, 0, framed, 0, header.length);
+        System.arraycopy(json, 0, framed, header.length, json.length);
+        writer.enqueue(framed);
+    }
+
+    /**
+     * The single writer thread's outbound frame queue, paired with a liveness flag so that once
+     * the writer thread has given up on a broken stream, further frames are dropped instead of
+     * queueing forever — otherwise a still-running handler that keeps calling {@code progress()}
+     * after the connection dies would grow the queue without bound.
+     */
+    private static final class LspWriter {
+        private final BlockingQueue<Optional<byte[]>> queue = new LinkedBlockingQueue<>();
+        private final AtomicBoolean alive = new AtomicBoolean(true);
+
+        void enqueue(final byte[] frame) {
+            if (alive.get()) {
+                queue.add(Optional.of(frame));
             }
-        } catch (final IOException e) {
-            throw new RuntimeException(e);
+        }
+
+        void shutdown() {
+            queue.offer(Optional.empty());
         }
     }
 }
