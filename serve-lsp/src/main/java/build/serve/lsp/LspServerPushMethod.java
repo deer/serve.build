@@ -28,6 +28,7 @@ package build.serve.lsp;
 public enum LspServerPushMethod {
 
     LOG_MESSAGE("window/logMessage"),
+    PROGRESS("$/progress"),
     PUBLISH_DIAGNOSTICS("textDocument/publishDiagnostics"),
     SHOW_MESSAGE("window/showMessage");
 

@@ -83,6 +83,7 @@ import build.serve.lsp.types.TextDocumentItem;
 import build.serve.lsp.types.TextEdit;
 import build.serve.lsp.types.TypeHierarchyItem;
 import build.serve.lsp.types.VersionedTextDocumentIdentifier;
+import build.serve.lsp.types.WorkDoneProgress;
 import build.serve.lsp.types.WorkspaceEdit;
 import build.serve.lsp.types.WorkspaceFolder;
 
@@ -357,6 +358,39 @@ final class LspJson {
                 yield b.build();
             }
             case ClientCapabilities __ -> JsonObject.builder().build();
+            case WorkDoneProgress.Begin b -> {
+                final var o = JsonObject.builder().put("kind", "begin").put("title", b.title());
+                if (b.cancellable() != null) {
+                    o.put("cancellable", b.cancellable());
+                }
+                if (b.message() != null) {
+                    o.put("message", b.message());
+                }
+                if (b.percentage() != null) {
+                    o.put("percentage", b.percentage());
+                }
+                yield o.build();
+            }
+            case WorkDoneProgress.Report r -> {
+                final var o = JsonObject.builder().put("kind", "report");
+                if (r.cancellable() != null) {
+                    o.put("cancellable", r.cancellable());
+                }
+                if (r.message() != null) {
+                    o.put("message", r.message());
+                }
+                if (r.percentage() != null) {
+                    o.put("percentage", r.percentage());
+                }
+                yield o.build();
+            }
+            case WorkDoneProgress.End e -> {
+                final var o = JsonObject.builder().put("kind", "end");
+                if (e.message() != null) {
+                    o.put("message", e.message());
+                }
+                yield o.build();
+            }
         };
     }
 

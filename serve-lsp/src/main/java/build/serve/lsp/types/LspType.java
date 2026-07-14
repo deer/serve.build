@@ -32,5 +32,6 @@ public sealed interface LspType
     MarkupContent, ParameterInformation, Position, Range, SelectionRange,
     ServerCapabilities, ShowMessageParams, SignatureHelp, SignatureInformation,
     SymbolInformation, TextDocumentContentChangeEvent, TextDocumentIdentifier,
-    TextDocumentItem, TextEdit, TypeHierarchyItem, VersionedTextDocumentIdentifier, WorkspaceEdit {
+    TextDocumentItem, TextEdit, TypeHierarchyItem, VersionedTextDocumentIdentifier, WorkDoneProgress,
+    WorkspaceEdit {
 }
