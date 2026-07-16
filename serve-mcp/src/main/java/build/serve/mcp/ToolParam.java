@@ -53,6 +53,17 @@ import java.util.function.Supplier;
  * var pipeline = ToolParam.array("pipeline", "Ordered steps", step);
  * }</pre>
  *
+ * <p><b>Self-referential / recursive types:</b> {@link #object} and {@link #array} both build their
+ * schema eagerly, by calling {@code propertySchema()} on their field/item arguments at construction
+ * time. A builder method that calls itself to construct its own field or item schema (a tree node
+ * whose children are themselves tree nodes, for example) therefore recurses without bound at the Java
+ * call-stack level and crashes with {@link StackOverflowError} — no amount of library-side cycle
+ * detection can catch this, since the recursive call happens while evaluating the argument, before
+ * {@code object}/{@code array} are ever entered. Self-reference (direct or mutual) must go through
+ * {@link #lazy}, deferring construction behind a {@link java.util.function.Supplier} instead of
+ * building it inline. See {@code ToolParamTest.shouldSupportSelfReferentialRecursiveSchema} for the
+ * pattern.
+ *
  * @param <T> the extracted Java type
  * @author reed.vonredwitz
  * @since May-2026
@@ -147,7 +158,8 @@ public interface ToolParam<T> {
                 .put("type", "array")
                 .put("description", description)
                 .put("items", itemSchema.propertySchema())
-                .build());
+                .build(),
+            itemSchema);
     }
 
     static ObjectParam object(final String name,
@@ -175,7 +187,7 @@ public interface ToolParam<T> {
                 }
                 return obj;
             },
-            schema);
+            schema, fields);
     }
 
     static <T> ToolParam<T> of(final String name,
@@ -232,7 +244,12 @@ public interface ToolParam<T> {
             .build();
         return new GenericParam<>(name, description, true, null,
             val -> val.asObject(),
-            schema);
+            schema,
+            () -> {
+                final var merged = new LinkedHashMap<String, JsonObject>();
+                variants.forEach(v -> Defs.mergeInto(merged, v.defs()));
+                return merged;
+            });
     }
 
     /**
@@ -270,16 +287,22 @@ public interface ToolParam<T> {
                 }
                 return variant.extractSelf(val);
             },
-            schema);
+            schema,
+            () -> {
+                final var merged = new LinkedHashMap<String, JsonObject>();
+                lookup.values().forEach(v -> Defs.mergeInto(merged, v.defs()));
+                return merged;
+            });
     }
 
     /**
      * A lazy reference for recursive schemas — emits {@code {"$ref":"#/$defs/<defName>"}} as the
      * property schema, and resolves the supplier on first use to populate the {@code $defs} entry.
      *
-     * <p><b>Transitivity limitation:</b> only top-level params in {@code ToolDef.params()} have their
-     * {@code defs()} hoisted by {@code inputSchema()}. Nested {@code $defs} (defs of defs) are not
-     * collected automatically — avoid nesting {@code lazy} params inside other lazy suppliers.
+     * <p>{@code defs()} walks the resolved schema transitively, so nesting {@code lazy} params inside
+     * other lazy suppliers (including mutual recursion, A referencing B and B referencing A) is
+     * supported: every reachable {@code $defs} entry is hoisted by {@code ToolDef.inputSchema()}, not
+     * just the top-level param's own def.
      */
     static <T> ToolParam<T> lazy(final String name,
                                  final String description,

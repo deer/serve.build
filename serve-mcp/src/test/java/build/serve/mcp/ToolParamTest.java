@@ -481,6 +481,26 @@ class ToolParamTest {
         assertThat(param.extract(Json.parse("{\"n\":42}"))).isEqualTo("42");
     }
 
+    /**
+     * {@code map()} wraps its result in a {@code GenericParam}, which has no {@code defs()} override, so
+     * any {@code lazy()}-backed recursive field nested inside the mapped param's schema is dropped —
+     * leaving a dangling {@code $ref} with no matching {@code $defs} entry. This is exactly the pattern
+     * the discriminated {@code oneOf}'s own javadoc recommends (mapping a variant's raw extraction result
+     * to a shared type), so a recursive variant silently produces an invalid schema.
+     */
+    @Test
+    void shouldPreserveNestedDefsAfterMap() {
+        final ToolParam<JsonObject>[] holder = new ToolParam[1];
+        final var childRef = ToolParam.lazy("child", "Child node", "Node", () -> holder[0]);
+        final var node = ToolParam.object("node", "A tree node", List.of(
+            ToolParam.string("value", "Node value"),
+            childRef.optional()));
+        holder[0] = node;
+
+        final var mapped = node.map(obj -> obj);
+        assertThat(mapped.defs()).containsKey("Node");
+    }
+
     // --- enumParam ---
 
     @Test
@@ -532,6 +552,24 @@ class ToolParamTest {
         final var schema = ToolParam.oneOf("s", "One of", List.of(p1, p2)).propertySchema();
         assertThat(schema.has("oneOf")).isTrue();
         assertThat(schema.get("oneOf").asArray().values()).hasSize(2);
+    }
+
+    /**
+     * {@code oneOf} wraps its result in a {@code GenericParam} built purely from each variant's
+     * {@code propertySchema()}, never calling {@code variant.defs()} — so a variant containing a
+     * {@code lazy()}-backed recursive field has its {@code $defs} entry silently dropped.
+     */
+    @Test
+    void shouldIncludeVariantDefsInUntypedOneOfSchema() {
+        final ToolParam<JsonObject>[] holder = new ToolParam[1];
+        final var childRef = ToolParam.lazy("child", "Child node", "Node", () -> holder[0]);
+        final var recursiveVariant = ToolParam.object("shape", "Recursive", List.of(
+            ToolParam.string("value", "Value"), childRef.optional()));
+        holder[0] = recursiveVariant;
+        final var other = ToolParam.object("shape", "Other", List.of(ToolParam.string("x", "X")));
+
+        final var param = ToolParam.oneOf("shape", "A shape", List.of(recursiveVariant, other));
+        assertThat(param.defs()).containsKey("Node");
     }
 
     // --- oneOf (discriminated) ---
@@ -586,6 +624,24 @@ class ToolParamTest {
         assertThatThrownBy(() -> ToolParam.oneOf("x", "x", "kind", List.of(Map.entry("a", bare))))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("properties");
+    }
+
+    /**
+     * Same defect as the untyped {@code oneOf}: the discriminated variant is wrapped in a
+     * {@code GenericParam} built from {@code propertySchema()} alone, so a variant containing a
+     * {@code lazy()}-backed recursive field loses its {@code $defs} entry.
+     */
+    @Test
+    void shouldIncludeVariantDefsInDiscriminatedOneOfSchema() {
+        final ToolParam<JsonObject>[] holder = new ToolParam[1];
+        final var childRef = ToolParam.lazy("child", "Child node", "Node", () -> holder[0]);
+        final var recursiveVariant = ToolParam.object("shape", "Recursive", List.of(
+            ToolParam.string("kind", "Kind"), childRef.optional()));
+        holder[0] = recursiveVariant;
+
+        final var param = ToolParam.<JsonObject>oneOf("shape", "A shape", "kind",
+            List.of(Map.entry("recursive", recursiveVariant)));
+        assertThat(param.defs()).containsKey("Node");
     }
 
     // --- lazy ---
@@ -717,5 +773,59 @@ class ToolParamTest {
             .param(ToolParam.string("x", "x"))
             .handle(args -> McpToolResult.text("ok"));
         assertThat(tool.inputSchema().has("$defs")).isFalse();
+    }
+
+    /**
+     * For mutually recursive types (A references B via {@code lazy}, and B references A back via
+     * {@code lazy}), the def contributed by the nested lazy param must still be hoisted into the root
+     * {@code $defs} block, not just the top-level param's own def — otherwise the emitted schema has a
+     * {@code $ref} with no matching {@code $defs} entry.
+     */
+    @Test
+    void shouldIncludeTransitiveDefsWhenMutuallyRecursiveLazyParamsAreNested() {
+        final ToolParam<JsonObject>[] aHolder = new ToolParam[1];
+        final ToolParam<JsonObject>[] bHolder = new ToolParam[1];
+
+        final var bRef = ToolParam.lazy("b", "B node", "B", () -> bHolder[0]);
+        final var aParam = ToolParam.object("a", "A node", List.of(
+            ToolParam.string("value", "A value"),
+            bRef.optional()));
+        aHolder[0] = aParam;
+
+        final var aRef = ToolParam.lazy("a", "A node", "A", () -> aHolder[0]);
+        final var bParam = ToolParam.object("b", "B node", List.of(
+            ToolParam.string("value", "B value"),
+            aRef.optional()));
+        bHolder[0] = bParam;
+
+        final var topLevelA = ToolParam.lazy("root", "Root A node", "A", () -> aHolder[0]);
+        final var tool = ToolDef.of("t", "t").param(topLevelA).handle(args -> McpToolResult.text("ok"));
+
+        final var schema = tool.inputSchema();
+        final var defs = schema.get("$defs").asObject();
+        assertThat(defs.has("A")).isTrue();
+        assertThat(defs.has("B")).isTrue();
+    }
+
+    /**
+     * Every {@code $defs} merge point ({@code ToolDef.schemaOf()}, {@code ObjectParam.defs()},
+     * {@code LazyParam.defs()}) uses a plain {@code Map.putAll} keyed by the author-chosen
+     * {@code defName} string, with no collision detection. Two independently-declared {@code lazy}
+     * params that happen to share a {@code defName} but resolve to different schemas should not be
+     * allowed to silently clobber each other — whichever is merged last would otherwise silently win,
+     * leaving the other param's {@code $ref} pointing at the wrong schema. This asserts the desired
+     * behavior (a clear failure) rather than a silent, wrong result.
+     */
+    @Test
+    void shouldRejectConflictingDefsForSameDefName() {
+        final var nodeA = ToolParam.lazy("a", "A", "Node",
+            () -> ToolParam.object("a", "A", List.of(ToolParam.string("value", "A value"))));
+        final var nodeB = ToolParam.lazy("b", "B", "Node",
+            () -> ToolParam.object("b", "B", List.of(ToolParam.string("other", "B other"))));
+        final var tool = ToolDef.of("t", "t").param(nodeA).param(nodeB).handle(args -> McpToolResult.text("ok"));
+
+        assertThatThrownBy(tool::inputSchema)
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Node");
     }
 }

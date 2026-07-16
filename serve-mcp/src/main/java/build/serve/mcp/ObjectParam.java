@@ -21,20 +21,41 @@ package build.serve.mcp;
 
 import build.base.json.JsonObject;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 public final class ObjectParam extends ToolParamBase<JsonObject, ObjectParam> {
+
+    private final List<ToolParam<?>> fields;
 
     ObjectParam(final String name,
                 final String description,
                 final boolean required,
                 final JsonObject defaultValue,
                 final ToolParam.Extractor<JsonObject> extractor,
-                final JsonObject propertySchema) {
+                final JsonObject propertySchema,
+                final List<ToolParam<?>> fields) {
         super(name, description, required, defaultValue, extractor, propertySchema);
+        this.fields = fields;
     }
 
     @Override
     protected ObjectParam copy(final boolean required, final JsonObject defaultValue,
                                final ToolParam.Extractor<JsonObject> extractor, final JsonObject propertySchema) {
-        return new ObjectParam(name, description, required, defaultValue, extractor, propertySchema);
+        return new ObjectParam(name, description, required, defaultValue, extractor, propertySchema, fields);
+    }
+
+    /**
+     * Aggregates {@code defs()} from every field, evaluated lazily at call time (not at construction)
+     * so that fields backed by {@link ToolParam#lazy} do not have their supplier resolved prematurely.
+     */
+    @Override
+    public Map<String, JsonObject> defs() {
+        final var merged = new LinkedHashMap<String, JsonObject>();
+        for (final ToolParam<?> field : fields) {
+            Defs.mergeInto(merged, field.defs());
+        }
+        return merged;
     }
 }
