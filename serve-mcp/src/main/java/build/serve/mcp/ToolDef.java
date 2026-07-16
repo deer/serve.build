@@ -99,7 +99,7 @@ public interface ToolDef extends McpTool {
             if (param.isRequired()) {
                 required.add(param.name());
             }
-            allDefs.putAll(param.defs());
+            Defs.mergeInto(allDefs, param.defs());
         }
         final var builder = JsonObject.builder()
             .put("type", "object")

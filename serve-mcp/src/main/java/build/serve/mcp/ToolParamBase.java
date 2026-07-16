@@ -120,7 +120,7 @@ sealed abstract class ToolParamBase<T, Self extends ToolParamBase<T, Self>>
         final var outer = extractor;
         return new GenericParam<>(name, description, required, mappedDefault,
             val -> transform.apply(outer.extract(val)),
-            propertySchema);
+            propertySchema, this::defs);
     }
 
     final JsonObject.Builder schemaBuilder() {

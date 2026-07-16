@@ -23,7 +23,10 @@ import build.base.json.JsonNull;
 import build.base.json.JsonObject;
 import build.base.json.JsonValue;
 
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -34,14 +37,19 @@ import java.util.function.Supplier;
  * so that {@link #propertySchema()} never triggers the supplier. The supplier is resolved exactly once,
  * on the first call to {@link #extract}, {@link #extractSelf}, or {@link #defs}.
  *
- * <p><b>Transitivity limitation:</b> {@link ToolDef#inputSchema()} only hoists {@code defs()} from
- * top-level params. If the resolved schema itself contains further {@code $ref}s with their own
- * {@code defs()}, those nested entries are not collected automatically.
+ * <p>{@link #defs()} walks the resolved schema transitively, collecting {@code defs()} of every nested
+ * param (including further {@code lazy} params reachable through it), so {@link ToolDef#inputSchema()}
+ * ends up with a complete {@code $defs} block even for mutually recursive types. A thread-local guard
+ * keyed on {@code defName} breaks cycles: once a def name is being collected, re-entering it (directly
+ * self-referential, or via a longer mutual-recursion chain) short-circuits to an empty map instead of
+ * recursing forever, since an ancestor frame is already contributing that entry.
  *
  * @author reed.vonredwitz
  * @since May-2026
  */
 final class LazyParam<T> implements ToolParam<T> {
+
+    private static final ThreadLocal<Set<String>> DEFS_IN_PROGRESS = ThreadLocal.withInitial(LinkedHashSet::new);
 
     private final String name;
     private final String description;
@@ -96,7 +104,19 @@ final class LazyParam<T> implements ToolParam<T> {
 
     @Override
     public Map<String, JsonObject> defs() {
-        return Map.of(defName, resolve().propertySchema());
+        final Set<String> inProgress = DEFS_IN_PROGRESS.get();
+        if (!inProgress.add(defName)) {
+            return Map.of();
+        }
+        try {
+            final var resolvedParam = resolve();
+            final var merged = new LinkedHashMap<String, JsonObject>();
+            merged.put(defName, resolvedParam.propertySchema());
+            Defs.mergeInto(merged, resolvedParam.defs());
+            return merged;
+        } finally {
+            inProgress.remove(defName);
+        }
     }
 
     @Override
