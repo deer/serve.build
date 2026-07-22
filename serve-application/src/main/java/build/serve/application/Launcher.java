@@ -24,9 +24,9 @@ import build.base.logging.Logger;
 import build.base.network.option.Port;
 import build.base.telemetry.TelemetryRecorder;
 import build.base.telemetry.foundation.PrintStreamTelemetryRecorder;
-import build.codemodel.injection.ConfigurationResolver;
-import build.codemodel.injection.Context;
-import build.codemodel.injection.InjectionFramework;
+import build.codemodel.dependency.injection.ConfigurationResolver;
+import build.codemodel.dependency.injection.Context;
+import build.codemodel.dependency.injection.InjectionFramework;
 import build.serve.foundation.option.ListenAddress;
 
 import java.io.IOException;

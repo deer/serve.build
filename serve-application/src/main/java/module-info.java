@@ -28,7 +28,7 @@ module build.serve.application {
     requires build.serve.transport.http;
     requires transitive build.serve.security;
     requires transitive build.spawn.application;
-    requires transitive build.codemodel.injection;
+    requires transitive build.codemodel.dependency.injection;
     requires transitive jakarta.inject;
 
     requires build.base.logging;
@@ -36,5 +36,5 @@ module build.serve.application {
     requires build.base.telemetry.foundation;
 
     exports build.serve.application;
-    opens build.serve.application to build.codemodel.injection;
+    opens build.serve.application to build.codemodel.dependency.injection;
 }

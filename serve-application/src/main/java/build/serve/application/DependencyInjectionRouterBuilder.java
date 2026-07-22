@@ -19,7 +19,7 @@
  */
 package build.serve.application;
 
-import build.codemodel.injection.Context;
+import build.codemodel.dependency.injection.Context;
 import build.serve.foundation.Handler;
 import build.serve.foundation.middleware.Middleware;
 import build.serve.foundation.routing.Router;
