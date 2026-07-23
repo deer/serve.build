@@ -32,6 +32,16 @@
             <artifactId>base-json</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>build.base</groupId>
+            <artifactId>base-telemetry</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>build.base</groupId>
+            <artifactId>base-telemetry-foundation</artifactId>
+        </dependency>
+
         <!-- Test Dependencies -->
         <dependency>
             <groupId>build.serve</groupId>

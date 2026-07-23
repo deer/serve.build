@@ -19,10 +19,12 @@
  */
 package build.serve.foundation.error;
 
+import build.base.telemetry.TelemetryRecorder;
+import build.base.telemetry.foundation.PrintStreamTelemetryRecorder;
 import build.serve.foundation.Exchange;
 
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.net.URI;
+import java.util.Objects;
 
 /**
  * A default {@link ErrorHandler} that returns plain text error responses.
@@ -36,9 +38,25 @@ import java.util.logging.Logger;
 public class DefaultErrorHandler implements ErrorHandler {
 
     /**
-     * The {@link Logger} for this class.
+     * The {@link TelemetryRecorder} used to record unhandled exceptions.
      */
-    private static final Logger LOGGER = Logger.getLogger(DefaultErrorHandler.class.getName());
+    private final TelemetryRecorder recorder;
+
+    /**
+     * Constructs a {@link DefaultErrorHandler} that records unhandled exceptions to {@code System.err}.
+     */
+    public DefaultErrorHandler() {
+        this(PrintStreamTelemetryRecorder.of(URI.create("serve://foundation/error"), System.err, System.err));
+    }
+
+    /**
+     * Constructs a {@link DefaultErrorHandler}.
+     *
+     * @param recorder the {@link TelemetryRecorder} to record unhandled exceptions with
+     */
+    public DefaultErrorHandler(final TelemetryRecorder recorder) {
+        this.recorder = Objects.requireNonNull(recorder, "recorder must not be null");
+    }
 
     @Override
     public void handle(final Exchange exchange, final Throwable error) {
@@ -52,7 +70,7 @@ public class DefaultErrorHandler implements ErrorHandler {
             statusCode = 500;
             message = "Internal Server Error";
 
-            LOGGER.log(Level.SEVERE, "Unhandled exception", error);
+            recorder.error(error, "Unhandled exception");
         }
 
         exchange.response()
