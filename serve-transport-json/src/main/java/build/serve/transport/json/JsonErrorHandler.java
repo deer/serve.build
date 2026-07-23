@@ -20,13 +20,15 @@
 package build.serve.transport.json;
 
 import build.base.json.JsonObject;
+import build.base.telemetry.TelemetryRecorder;
+import build.base.telemetry.foundation.PrintStreamTelemetryRecorder;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.error.DefaultErrorHandler;
 import build.serve.foundation.error.ErrorHandler;
 import build.serve.foundation.error.HttpException;
 
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.net.URI;
+import java.util.Objects;
 
 /**
  * An {@link ErrorHandler} that returns JSON error responses.
@@ -36,9 +38,26 @@ import java.util.logging.Logger;
  */
 public class JsonErrorHandler implements ErrorHandler {
 
-    private static final Logger LOGGER = Logger.getLogger(JsonErrorHandler.class.getName());
+    private final TelemetryRecorder recorder;
 
-    private final ErrorHandler fallback = new DefaultErrorHandler();
+    private final ErrorHandler fallback;
+
+    /**
+     * Constructs a {@link JsonErrorHandler} that records unhandled exceptions to {@code System.err}.
+     */
+    public JsonErrorHandler() {
+        this(PrintStreamTelemetryRecorder.of(URI.create("serve://transport-json/error"), System.err, System.err));
+    }
+
+    /**
+     * Constructs a {@link JsonErrorHandler}.
+     *
+     * @param recorder the {@link TelemetryRecorder} to record unhandled exceptions with
+     */
+    public JsonErrorHandler(final TelemetryRecorder recorder) {
+        this.recorder = Objects.requireNonNull(recorder, "recorder must not be null");
+        this.fallback = new DefaultErrorHandler(recorder);
+    }
 
     @Override
     public void handle(final Exchange exchange, final Throwable error) {
@@ -51,7 +70,7 @@ public class JsonErrorHandler implements ErrorHandler {
         } else {
             statusCode = 500;
             message = "Internal Server Error";
-            LOGGER.log(Level.SEVERE, "Unhandled exception", error);
+            recorder.error(error, "Unhandled exception");
         }
 
         final var errorName = statusText(statusCode);
@@ -69,7 +88,7 @@ public class JsonErrorHandler implements ErrorHandler {
                 .header("Content-Type", "application/json")
                 .send(json);
         } catch (final Exception e) {
-            LOGGER.log(Level.WARNING, "Failed to serialize JSON error response", e);
+            recorder.warn(e, "Failed to serialize JSON error response");
             fallback.handle(exchange, error);
         }
     }

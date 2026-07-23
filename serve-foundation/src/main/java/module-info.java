@@ -27,7 +27,7 @@ module build.serve.foundation {
     requires transitive build.base.json;
     requires transitive build.base.configuration;
     requires transitive build.base.telemetry;
-    requires java.logging;
+    requires build.base.telemetry.foundation;
 
     exports build.serve.foundation;
     exports build.serve.foundation.http;

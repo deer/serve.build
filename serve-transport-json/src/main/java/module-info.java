@@ -26,7 +26,7 @@
 module build.serve.transport.json {
     requires transitive build.serve.foundation;
     requires transitive build.base.json;
-    requires java.logging;
+    requires build.base.telemetry.foundation;
 
     exports build.serve.transport.json;
 }
