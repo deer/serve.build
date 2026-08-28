@@ -25,7 +25,8 @@
  */
 module build.serve.transport.http {
     requires transitive build.serve.foundation;
-    requires build.base.logging;
+    requires build.base.telemetry;
+    requires build.base.telemetry.foundation;
     requires jdk.httpserver;
 
     exports build.serve.transport.http;

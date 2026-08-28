@@ -31,7 +31,6 @@ module build.serve.application {
     requires transitive build.codemodel.dependency.injection;
     requires transitive jakarta.inject;
 
-    requires build.base.logging;
     requires build.base.telemetry;
     requires build.base.telemetry.foundation;
 

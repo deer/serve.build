@@ -19,8 +19,8 @@
  */
 package build.serve.application;
 
-import build.base.logging.Logger;
 import build.base.network.option.Port;
+import build.base.telemetry.TelemetryRecorder;
 import build.codemodel.dependency.injection.Context;
 import build.serve.foundation.Handler;
 import build.serve.foundation.error.DefaultErrorHandler;
@@ -37,6 +37,7 @@ import build.spawn.application.Lifecycle;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
@@ -80,9 +81,11 @@ public interface ServerApplication
         implements ServerApplication {
 
         /**
-         * The {@link Logger} for this class.
+         * The {@link TelemetryRecorder} for this server's lifecycle events. Defaults to
+         * {@link ApplicationTelemetry#DEFAULT_RECORDER}; {@link Launcher} replaces it with the
+         * recorder bound into the injection {@link Context}.
          */
-        private static final Logger LOGGER = Logger.get(Implementation.class);
+        private TelemetryRecorder recorder = ApplicationTelemetry.DEFAULT_RECORDER;
 
         /**
          * The {@link Router} for this server.
@@ -153,6 +156,15 @@ public interface ServerApplication
         }
 
         /**
+         * Sets the {@link TelemetryRecorder} used for this server's lifecycle events.
+         *
+         * @param recorder the {@link TelemetryRecorder}
+         */
+        void recorder(final TelemetryRecorder recorder) {
+            this.recorder = Objects.requireNonNull(recorder, "recorder must not be null");
+        }
+
+        /**
          * Configures and returns the {@link Router} for this server.
          * <p>
          * Subclasses must implement this method to define routes.
@@ -219,13 +231,13 @@ public interface ServerApplication
 
             final var address = new InetSocketAddress(listenAddress.value(), listenPort.get());
 
-            this.transport = new HttpTransport(address, 0, applySecurityHeaders(router), errorHandler());
+            this.transport = new HttpTransport(address, 0, applySecurityHeaders(router), errorHandler(), recorder);
             this.transport.start();
 
             this.shutdownHook = new Thread(this::stop, "serve-shutdown");
             Runtime.getRuntime().addShutdownHook(shutdownHook);
 
-            LOGGER.info("ServerApplication started on " + transport.address());
+            recorder.info("ServerApplication started on " + transport.address());
 
             startFuture.complete(this);
         }
@@ -263,13 +275,13 @@ public interface ServerApplication
             final var address = new InetSocketAddress(listenAddress.value(), listenPort.get());
 
             this.transport = HttpTransport.https(address, 0, applySecurityHeaders(router), errorHandler(),
-                tls.sslContext());
+                tls.sslContext(), recorder);
             this.transport.start();
 
             this.shutdownHook = new Thread(this::stop, "serve-shutdown");
             Runtime.getRuntime().addShutdownHook(shutdownHook);
 
-            LOGGER.info("ServerApplication started on " + transport.address() + " (HTTPS)");
+            recorder.info("ServerApplication started on " + transport.address() + " (HTTPS)");
 
             startFuture.complete(this);
         }
@@ -295,7 +307,7 @@ public interface ServerApplication
 
                 exitFuture.complete(this);
 
-                LOGGER.info("ServerApplication stopped");
+                recorder.info("ServerApplication stopped");
             }
         }
 

@@ -25,7 +25,8 @@
  */
 module build.serve.logging {
     requires transitive build.serve.foundation;
-    requires build.base.logging;
+    requires build.base.telemetry;
+    requires build.base.telemetry.foundation;
 
     exports build.serve.logging;
 }

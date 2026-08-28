@@ -19,9 +19,11 @@
  */
 package build.serve.auth;
 
-import build.base.logging.Logger;
+import build.base.telemetry.TelemetryRecorder;
+import build.base.telemetry.foundation.PrintStreamTelemetryRecorder;
 import build.serve.foundation.Request;
 
+import java.net.URI;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
@@ -38,7 +40,8 @@ import java.util.function.Function;
  */
 public final class ApiKeyStrategy implements AuthStrategy {
 
-    private static final Logger LOGGER = Logger.get(ApiKeyStrategy.class);
+    private static final TelemetryRecorder DEFAULT_RECORDER =
+        PrintStreamTelemetryRecorder.of(URI.create("serve://auth"), System.out, System.err);
 
     private final Function<Request, Optional<String>> extractor;
     private final Function<String, Optional<Principal>> validator;
@@ -78,9 +81,30 @@ public final class ApiKeyStrategy implements AuthStrategy {
      */
     public static ApiKeyStrategy fromQueryParam(final String paramName,
                                                 final Function<String, Optional<Principal>> validator) {
+        return fromQueryParam(paramName, validator, DEFAULT_RECORDER);
+    }
+
+    /**
+     * Creates an {@link ApiKeyStrategy} that reads the key from a query parameter.
+     * <p>
+     * <strong>Prefer {@link #fromHeader(String, Function)} where possible.</strong> A key carried
+     * in the URL ends up in server access logs, proxy logs, and browser history, and is exposed
+     * by anything that logs or shares the request URL — none of which apply to a header value.
+     * Use this only when the caller genuinely cannot set a header (e.g. a webhook provider that
+     * only supports query-string authentication).
+     *
+     * @param paramName the query parameter name (e.g., {@code "api_key"})
+     * @param validator a function mapping the key to a {@link Principal}, or empty if invalid
+     * @param recorder  the {@link TelemetryRecorder} to record the query-string usage warning with
+     * @return a new {@link ApiKeyStrategy}
+     */
+    public static ApiKeyStrategy fromQueryParam(final String paramName,
+                                                final Function<String, Optional<Principal>> validator,
+                                                final TelemetryRecorder recorder) {
         Objects.requireNonNull(paramName, "paramName");
         Objects.requireNonNull(validator, "validator");
-        LOGGER.warn("ApiKeyStrategy.fromQueryParam(\"" + paramName + "\") carries the API key in the URL —"
+        Objects.requireNonNull(recorder, "recorder");
+        recorder.warn("ApiKeyStrategy.fromQueryParam(\"" + paramName + "\") carries the API key in the URL —"
             + " it will appear in access logs, proxy logs, and browser history. Prefer fromHeader(...)"
             + " unless the caller cannot set a header.");
         return new ApiKeyStrategy(req -> req.queryParam(paramName), validator);

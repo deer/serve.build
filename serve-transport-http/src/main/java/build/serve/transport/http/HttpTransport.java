@@ -19,7 +19,8 @@
  */
 package build.serve.transport.http;
 
-import build.base.logging.Logger;
+import build.base.telemetry.TelemetryRecorder;
+import build.base.telemetry.foundation.PrintStreamTelemetryRecorder;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.Handler;
 import build.serve.foundation.SimpleExchange;
@@ -35,6 +36,7 @@ import com.sun.net.httpserver.HttpsServer;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -55,9 +57,15 @@ import javax.net.ssl.SSLContext;
 public class HttpTransport {
 
     /**
-     * The {@link Logger} for this class.
+     * The default {@link TelemetryRecorder} used when none is supplied.
      */
-    private static final Logger LOGGER = Logger.get(HttpTransport.class);
+    private static final TelemetryRecorder DEFAULT_RECORDER =
+        PrintStreamTelemetryRecorder.of(URI.create("serve://transport-http"), System.out, System.err);
+
+    /**
+     * The {@link TelemetryRecorder} for this transport.
+     */
+    private final TelemetryRecorder recorder;
 
     /**
      * The underlying JDK {@link HttpServer}.
@@ -110,6 +118,24 @@ public class HttpTransport {
     }
 
     /**
+     * Constructs an {@link HttpTransport} with a custom {@link TelemetryRecorder}.
+     *
+     * @param address      the address to bind to
+     * @param backlog      the maximum number of queued incoming connections (0 for system default)
+     * @param handler      the {@link Handler} to dispatch requests to
+     * @param errorHandler the {@link ErrorHandler} for unhandled exceptions
+     * @param recorder     the {@link TelemetryRecorder} to record lifecycle events with
+     * @throws IOException if the server cannot be created
+     */
+    public HttpTransport(final InetSocketAddress address,
+                         final int backlog,
+                         final Handler handler,
+                         final ErrorHandler errorHandler,
+                         final TelemetryRecorder recorder) throws IOException {
+        this(address, backlog, handler, errorHandler, MaxRequestSize.DEFAULT, RequestTimeout.NONE, recorder);
+    }
+
+    /**
      * Constructs an {@link HttpTransport} with a custom {@link MaxRequestSize}.
      *
      * @param address        the address to bind to
@@ -144,7 +170,31 @@ public class HttpTransport {
                          final ErrorHandler errorHandler,
                          final MaxRequestSize maxRequestSize,
                          final RequestTimeout requestTimeout) throws IOException {
-        this(HttpServer.create(address, backlog), address, handler, errorHandler, maxRequestSize, requestTimeout);
+        this(address, backlog, handler, errorHandler, maxRequestSize, requestTimeout, DEFAULT_RECORDER);
+    }
+
+    /**
+     * Constructs an {@link HttpTransport} with a custom {@link MaxRequestSize}, {@link RequestTimeout}, and
+     * {@link TelemetryRecorder}.
+     *
+     * @param address        the address to bind to
+     * @param backlog        the maximum number of queued incoming connections (0 for system default)
+     * @param handler        the {@link Handler} to dispatch requests to
+     * @param errorHandler   the {@link ErrorHandler} for unhandled exceptions
+     * @param maxRequestSize the maximum allowed request body size
+     * @param requestTimeout the maximum time a request handler may run before being interrupted
+     * @param recorder       the {@link TelemetryRecorder} to record lifecycle events with
+     * @throws IOException if the server cannot be created
+     */
+    public HttpTransport(final InetSocketAddress address,
+                         final int backlog,
+                         final Handler handler,
+                         final ErrorHandler errorHandler,
+                         final MaxRequestSize maxRequestSize,
+                         final RequestTimeout requestTimeout,
+                         final TelemetryRecorder recorder) throws IOException {
+        this(HttpServer.create(address, backlog), address, handler, errorHandler, maxRequestSize, requestTimeout,
+            recorder);
     }
 
     /**
@@ -181,6 +231,28 @@ public class HttpTransport {
                                       final ErrorHandler errorHandler,
                                       final SSLContext sslContext) throws IOException {
         return https(address, backlog, handler, errorHandler, MaxRequestSize.DEFAULT, sslContext);
+    }
+
+    /**
+     * Creates an HTTPS {@link HttpTransport} with a custom {@link TelemetryRecorder}.
+     *
+     * @param address      the address to bind to
+     * @param backlog      the maximum number of queued incoming connections (0 for system default)
+     * @param handler      the {@link Handler} to dispatch requests to
+     * @param errorHandler the {@link ErrorHandler} for unhandled exceptions
+     * @param sslContext   the {@link SSLContext} used for TLS
+     * @param recorder     the {@link TelemetryRecorder} to record lifecycle events with
+     * @return a new HTTPS {@link HttpTransport}
+     * @throws IOException if the server cannot be created
+     */
+    public static HttpTransport https(final InetSocketAddress address,
+                                      final int backlog,
+                                      final Handler handler,
+                                      final ErrorHandler errorHandler,
+                                      final SSLContext sslContext,
+                                      final TelemetryRecorder recorder) throws IOException {
+        return https(address, backlog, handler, errorHandler, MaxRequestSize.DEFAULT, sslContext, TlsOptions.defaults(),
+            RequestTimeout.NONE, recorder);
     }
 
     /**
@@ -255,6 +327,40 @@ public class HttpTransport {
                                       final SSLContext sslContext,
                                       final TlsOptions tlsOptions,
                                       final RequestTimeout requestTimeout) throws IOException {
+        return https(address, backlog, handler, errorHandler, maxRequestSize, sslContext, tlsOptions, requestTimeout,
+            DEFAULT_RECORDER);
+    }
+
+    /**
+     * Creates an HTTPS {@link HttpTransport} with TLS hardening options, a request timeout, and a
+     * {@link TelemetryRecorder}.
+     * <p>
+     * Every other {@code https(...)} overload defaults to {@link RequestTimeout#NONE} — a
+     * slow-body or Slowloris-style attack over TLS can pin a virtual thread indefinitely unless
+     * a timeout is supplied here, mirroring the plain-HTTP constructor that accepts
+     * {@link RequestTimeout}.
+     *
+     * @param address        the address to bind to
+     * @param backlog        the maximum number of queued incoming connections (0 for system default)
+     * @param handler        the {@link Handler} to dispatch requests to
+     * @param errorHandler   the {@link ErrorHandler} for unhandled exceptions
+     * @param maxRequestSize the maximum allowed request body size
+     * @param sslContext     the {@link SSLContext} used for TLS
+     * @param tlsOptions     the {@link TlsOptions} controlling minimum TLS version and cipher filtering
+     * @param requestTimeout the maximum time a request handler may run before being interrupted
+     * @param recorder       the {@link TelemetryRecorder} to record lifecycle events with
+     * @return a new HTTPS {@link HttpTransport}
+     * @throws IOException if the server cannot be created
+     */
+    public static HttpTransport https(final InetSocketAddress address,
+                                      final int backlog,
+                                      final Handler handler,
+                                      final ErrorHandler errorHandler,
+                                      final MaxRequestSize maxRequestSize,
+                                      final SSLContext sslContext,
+                                      final TlsOptions tlsOptions,
+                                      final RequestTimeout requestTimeout,
+                                      final TelemetryRecorder recorder) throws IOException {
         Objects.requireNonNull(sslContext, "sslContext must not be null");
         Objects.requireNonNull(tlsOptions, "tlsOptions must not be null");
 
@@ -282,7 +388,7 @@ public class HttpTransport {
             }
         });
 
-        return new HttpTransport(server, address, handler, errorHandler, maxRequestSize, requestTimeout);
+        return new HttpTransport(server, address, handler, errorHandler, maxRequestSize, requestTimeout, recorder);
     }
 
     static String[] filterProtocols(final String[] protocols, final String minProtocol) {
@@ -309,7 +415,9 @@ public class HttpTransport {
                           final Handler handler,
                           final ErrorHandler errorHandler,
                           final MaxRequestSize maxRequestSize,
-                          final RequestTimeout requestTimeout) {
+                          final RequestTimeout requestTimeout,
+                          final TelemetryRecorder recorder) {
+        this.recorder = Objects.requireNonNull(recorder, "recorder must not be null");
         this.address = Objects.requireNonNull(address, "address must not be null");
         this.maxRequestSize = Objects.requireNonNull(maxRequestSize, "maxRequestSize must not be null");
         Objects.requireNonNull(handler, "handler must not be null");
@@ -360,7 +468,7 @@ public class HttpTransport {
     public void start() {
         httpServer.start();
 
-        LOGGER.info("HttpTransport started on " + address);
+        recorder.info("HttpTransport started on " + address);
     }
 
     /**
@@ -375,7 +483,7 @@ public class HttpTransport {
             timeoutExecutor.close();
         }
 
-        LOGGER.info("HttpTransport stopped");
+        recorder.info("HttpTransport stopped");
     }
 
     /**

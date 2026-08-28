@@ -19,10 +19,12 @@
  */
 package build.serve.devtools;
 
-import build.base.logging.Logger;
+import build.base.telemetry.TelemetryRecorder;
+import build.base.telemetry.foundation.PrintStreamTelemetryRecorder;
 import build.serve.foundation.Handler;
 import build.serve.foundation.util.JsonStrings;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Objects;
@@ -58,7 +60,8 @@ public final class ChromeDevToolsHandler {
 
     private static final String CONTENT_TYPE = "Content-Type";
     private static final String APPLICATION_JSON = "application/json";
-    private static final Logger LOGGER = Logger.get(ChromeDevToolsHandler.class);
+    private static final TelemetryRecorder DEFAULT_RECORDER =
+        PrintStreamTelemetryRecorder.of(URI.create("serve://devtools"), System.out, System.err);
 
     private ChromeDevToolsHandler() {
     }
@@ -85,9 +88,25 @@ public final class ChromeDevToolsHandler {
      */
     public static Handler forWorkspace(final Path root,
                                        final UUID uuid) {
+        return forWorkspace(root, uuid, DEFAULT_RECORDER);
+    }
+
+    /**
+     * Creates a handler that advertises the given {@code root} as the DevTools workspace with the
+     * specified {@code uuid}.
+     *
+     * @param root     the workspace root directory
+     * @param uuid     the stable workspace identifier (DevTools uses this to remember user choices)
+     * @param recorder the {@link TelemetryRecorder} to record the production-exposure warning with
+     * @return a new {@link Handler}
+     */
+    public static Handler forWorkspace(final Path root,
+                                       final UUID uuid,
+                                       final TelemetryRecorder recorder) {
         Objects.requireNonNull(root, "root");
         Objects.requireNonNull(uuid, "uuid");
-        LOGGER.warn("ChromeDevToolsHandler exposes the absolute filesystem path — do not register in production");
+        Objects.requireNonNull(recorder, "recorder");
+        recorder.warn("ChromeDevToolsHandler exposes the absolute filesystem path — do not register in production");
         final var json = buildJson(root.toAbsolutePath().normalize().toString(), uuid);
         return exchange -> exchange.response()
             .status(200)

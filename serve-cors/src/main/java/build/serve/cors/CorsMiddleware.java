@@ -19,11 +19,13 @@
  */
 package build.serve.cors;
 
-import build.base.logging.Logger;
+import build.base.telemetry.TelemetryRecorder;
+import build.base.telemetry.foundation.PrintStreamTelemetryRecorder;
 import build.serve.foundation.Exchange;
 import build.serve.foundation.Handler;
 import build.serve.foundation.middleware.Middleware;
 
+import java.net.URI;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -42,7 +44,8 @@ import java.util.Set;
  */
 public final class CorsMiddleware implements Middleware {
 
-    private static final Logger LOGGER = Logger.get(CorsMiddleware.class);
+    private static final TelemetryRecorder DEFAULT_RECORDER =
+        PrintStreamTelemetryRecorder.of(URI.create("serve://cors"), System.out, System.err);
 
     private final Set<String> allowedOrigins;
     private final boolean anyOrigin;
@@ -82,7 +85,23 @@ public final class CorsMiddleware implements Middleware {
      */
     @Deprecated
     public static CorsMiddleware allowAll() {
-        LOGGER.warn("CorsMiddleware.allowAll() is for development only — permits all origins, methods,"
+        return allowAll(DEFAULT_RECORDER);
+    }
+
+    /**
+     * Creates a permissive {@link CorsMiddleware} that allows all origins, methods, and headers.
+     * <p>
+     * <strong>Development use only.</strong> Do not use in production — this permits every origin,
+     * method, and header with no restrictions.
+     *
+     * @param recorder the {@link TelemetryRecorder} to record the development-only usage warning with
+     * @return a permissive {@link CorsMiddleware}
+     * @deprecated Use {@link #builder()} to configure specific allowed origins, methods, and headers.
+     */
+    @Deprecated
+    public static CorsMiddleware allowAll(final TelemetryRecorder recorder) {
+        Objects.requireNonNull(recorder, "recorder");
+        recorder.warn("CorsMiddleware.allowAll() is for development only — permits all origins, methods,"
             + " and headers. Do not use in production.");
 
         return builder()

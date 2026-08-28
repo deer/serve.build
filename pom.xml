@@ -249,11 +249,6 @@
             </dependency>
             <dependency>
                 <groupId>build.base</groupId>
-                <artifactId>base-logging</artifactId>
-                <version>${base.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>build.base</groupId>
                 <artifactId>base-network</artifactId>
                 <version>${base.version}</version>
             </dependency>
