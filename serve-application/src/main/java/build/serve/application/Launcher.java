@@ -20,17 +20,15 @@
 package build.serve.application;
 
 import build.base.configuration.Configuration;
-import build.base.logging.Logger;
 import build.base.network.option.Port;
 import build.base.telemetry.TelemetryRecorder;
-import build.base.telemetry.foundation.PrintStreamTelemetryRecorder;
 import build.codemodel.dependency.injection.ConfigurationResolver;
 import build.codemodel.dependency.injection.Context;
 import build.codemodel.dependency.injection.InjectionFramework;
 import build.serve.foundation.option.ListenAddress;
 
 import java.io.IOException;
-import java.net.URI;
+import java.util.Objects;
 
 /**
  * A simple launcher for {@link ServerApplication} instances.
@@ -41,11 +39,6 @@ import java.net.URI;
  * @since Mar-2026
  */
 public final class Launcher {
-
-    /**
-     * The {@link Logger} for this class.
-     */
-    private static final Logger LOGGER = Logger.get(Launcher.class);
 
     /**
      * Prevent instantiation.
@@ -68,6 +61,21 @@ public final class Launcher {
     /**
      * Launches a {@link ServerApplication.Implementation} with the specified options.
      *
+     * @param server            the {@link ServerApplication.Implementation} to launch
+     * @param listenPort        the {@link Port} to bind to
+     * @param telemetryRecorder the {@link TelemetryRecorder} to bind into the injection context and record
+     *                          server lifecycle events with
+     * @return the started server
+     */
+    public static ServerApplication.Implementation launch(final ServerApplication.Implementation server,
+                                                          final Port listenPort,
+                                                          final TelemetryRecorder telemetryRecorder) {
+        return launch(server, ListenAddress.DEFAULT, listenPort, telemetryRecorder);
+    }
+
+    /**
+     * Launches a {@link ServerApplication.Implementation} with the specified options.
+     *
      * @param server        the {@link ServerApplication.Implementation} to launch
      * @param listenAddress the {@link ListenAddress} to bind to
      * @param listenPort    the {@link Port} to bind to
@@ -76,6 +84,25 @@ public final class Launcher {
     public static ServerApplication.Implementation launch(final ServerApplication.Implementation server,
                                                           final ListenAddress listenAddress,
                                                           final Port listenPort) {
+        return launch(server, listenAddress, listenPort, ApplicationTelemetry.DEFAULT_RECORDER);
+    }
+
+    /**
+     * Launches a {@link ServerApplication.Implementation} with the specified options.
+     *
+     * @param server            the {@link ServerApplication.Implementation} to launch
+     * @param listenAddress     the {@link ListenAddress} to bind to
+     * @param listenPort        the {@link Port} to bind to
+     * @param telemetryRecorder the {@link TelemetryRecorder} to bind into the injection context and record
+     *                          server lifecycle events with
+     * @return the started server
+     */
+    public static ServerApplication.Implementation launch(final ServerApplication.Implementation server,
+                                                          final ListenAddress listenAddress,
+                                                          final Port listenPort,
+                                                          final TelemetryRecorder telemetryRecorder) {
+        Objects.requireNonNull(telemetryRecorder, "telemetryRecorder");
+
         try {
             // Build configuration from the provided options
             final var configuration = Configuration.of(listenAddress, listenPort);
@@ -90,10 +117,9 @@ public final class Launcher {
             context.bind(Configuration.class).to(configuration);
             context.bind(ServerApplication.class).to(server);
 
-            // Bind a default TelemetryRecorder
-            final var telemetryRecorder = PrintStreamTelemetryRecorder.of(
-                URI.create("serve://application"), System.out, System.err);
+            // Bind the TelemetryRecorder and use it for server lifecycle events
             context.bind(TelemetryRecorder.class).to(telemetryRecorder);
+            server.recorder(telemetryRecorder);
 
             // Add the ConfigurationResolver so Options are injectable
             context.addResolver(ConfigurationResolver.of(configuration));
@@ -108,7 +134,7 @@ public final class Launcher {
 
             return server;
         } catch (final IOException e) {
-            LOGGER.fatal(e, "Failed to launch ServerApplication");
+            telemetryRecorder.fatal(e, "Failed to launch ServerApplication");
 
             throw new RuntimeException("Failed to launch ServerApplication", e);
         }

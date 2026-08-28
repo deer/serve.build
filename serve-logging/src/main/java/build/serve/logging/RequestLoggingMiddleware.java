@@ -19,12 +19,14 @@
  */
 package build.serve.logging;
 
-import build.base.logging.Logger;
+import build.base.telemetry.TelemetryRecorder;
+import build.base.telemetry.foundation.PrintStreamTelemetryRecorder;
 import build.serve.foundation.Handler;
 import build.serve.foundation.context.RequestContext;
 import build.serve.foundation.middleware.Middleware;
 import build.serve.foundation.util.JsonStrings;
 
+import java.net.URI;
 import java.time.Duration;
 import java.util.LinkedHashSet;
 import java.util.Objects;
@@ -41,13 +43,15 @@ import java.util.Set;
  */
 public final class RequestLoggingMiddleware implements Middleware {
 
-    private static final Logger LOGGER = Logger.get(RequestLoggingMiddleware.class);
+    private static final TelemetryRecorder DEFAULT_RECORDER =
+        PrintStreamTelemetryRecorder.of(URI.create("serve://logging"), System.out, System.err);
 
     private final boolean includeHeaders;
     private final boolean includeQueryString;
     private final Set<String> excludedPaths;
     private final Duration slowRequestThreshold;
     private final LogFormat format;
+    private final TelemetryRecorder recorder;
 
     private RequestLoggingMiddleware(final Builder builder) {
         this.includeHeaders = builder.includeHeaders;
@@ -55,6 +59,7 @@ public final class RequestLoggingMiddleware implements Middleware {
         this.excludedPaths = Set.copyOf(builder.excludedPaths);
         this.slowRequestThreshold = builder.slowRequestThreshold;
         this.format = builder.format;
+        this.recorder = builder.recorder;
     }
 
     /**
@@ -100,17 +105,17 @@ public final class RequestLoggingMiddleware implements Middleware {
                 final var slow = slowRequestThreshold != null && durationMs >= slowRequestThreshold.toMillis();
 
                 if (slow) {
-                    LOGGER.warn(format == LogFormat.JSON ? appendJsonField(message, "slow", true) : message + " [SLOW]");
+                    recorder.warn(format == LogFormat.JSON ? appendJsonField(message, "slow", true) : message + " [SLOW]");
                 } else {
-                    LOGGER.info(message);
+                    recorder.info(message);
                 }
 
                 if (includeHeaders && format != LogFormat.JSON) {
-                    LOGGER.info("  Headers: " + request.headers());
+                    recorder.info("  Headers: " + request.headers());
                 }
             } catch (final Exception exception) {
                 final var durationMs = (System.nanoTime() - startTime) / 1_000_000;
-                LOGGER.error(method + " " + displayPath + " -> ERROR (" + durationMs + "ms) "
+                recorder.error(method + " " + displayPath + " -> ERROR (" + durationMs + "ms) "
                     + exception.getClass().getSimpleName());
 
                 throw exception;
@@ -170,6 +175,7 @@ public final class RequestLoggingMiddleware implements Middleware {
         private final Set<String> excludedPaths = new LinkedHashSet<>();
         private Duration slowRequestThreshold;
         private LogFormat format = LogFormat.TEXT;
+        private TelemetryRecorder recorder = DEFAULT_RECORDER;
 
         private Builder() {
         }
@@ -231,6 +237,18 @@ public final class RequestLoggingMiddleware implements Middleware {
          */
         public Builder format(final LogFormat format) {
             this.format = Objects.requireNonNull(format, "format");
+
+            return this;
+        }
+
+        /**
+         * Sets the {@link TelemetryRecorder} to record access log entries with.
+         *
+         * @param recorder the {@link TelemetryRecorder}
+         * @return this {@link Builder}
+         */
+        public Builder recorder(final TelemetryRecorder recorder) {
+            this.recorder = Objects.requireNonNull(recorder, "recorder");
 
             return this;
         }

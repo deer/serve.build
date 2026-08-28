@@ -19,12 +19,14 @@
  */
 package build.serve.devtools;
 
-import build.base.logging.Logger;
+import build.base.telemetry.TelemetryRecorder;
+import build.base.telemetry.foundation.PrintStreamTelemetryRecorder;
 import build.serve.foundation.Handler;
 import build.serve.websocket.WebSocket;
 import build.serve.websocket.WebSocketUpgrade;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.ClosedWatchServiceException;
 import java.nio.file.FileSystems;
 import java.nio.file.FileVisitResult;
@@ -67,14 +69,18 @@ public final class LiveReload implements AutoCloseable {
      */
     public static final String PATH = "/__dev/reload";
 
-    private static final Logger LOGGER = Logger.get(LiveReload.class);
+    private static final TelemetryRecorder DEFAULT_RECORDER =
+        PrintStreamTelemetryRecorder.of(URI.create("serve://devtools/live-reload"), System.out, System.err);
 
     private final CopyOnWriteArraySet<WebSocket> clients = new CopyOnWriteArraySet<>();
     private final WatchService watchService;
     private final Thread watcherThread;
+    private final TelemetryRecorder recorder;
     private volatile boolean running = true;
 
-    private LiveReload(final List<Path> roots) {
+    private LiveReload(final List<Path> roots, final TelemetryRecorder recorder) {
+        this.recorder = Objects.requireNonNull(recorder, "recorder must not be null");
+
         try {
             this.watchService = FileSystems.getDefault().newWatchService();
         } catch (final IOException e) {
@@ -84,7 +90,7 @@ public final class LiveReload implements AutoCloseable {
         final Map<WatchKey, Path> keys = new HashMap<>();
         for (final var root : roots) {
             if (!Files.isDirectory(root)) {
-                LOGGER.warn("LiveReload: skipping non-existent path " + root);
+                recorder.warn("LiveReload: skipping non-existent path " + root);
                 continue;
             }
             registerRecursive(root, keys);
@@ -103,7 +109,20 @@ public final class LiveReload implements AutoCloseable {
      */
     public static LiveReload watching(final Path... roots) {
         Objects.requireNonNull(roots, "roots");
-        return new LiveReload(List.of(roots));
+        return new LiveReload(List.of(roots), DEFAULT_RECORDER);
+    }
+
+    /**
+     * Creates a live-reload handle that watches the given paths recursively.
+     *
+     * @param recorder the {@link TelemetryRecorder} to record watch events with
+     * @param roots    directories to watch (missing directories are skipped with a warning)
+     * @return a new {@link LiveReload}
+     */
+    public static LiveReload watching(final TelemetryRecorder recorder, final Path... roots) {
+        Objects.requireNonNull(recorder, "recorder");
+        Objects.requireNonNull(roots, "roots");
+        return new LiveReload(List.of(roots), recorder);
     }
 
     /**
@@ -193,7 +212,7 @@ public final class LiveReload implements AutoCloseable {
                 }
             });
         } catch (final IOException e) {
-            LOGGER.warn(e, "LiveReload: failed to register " + root);
+            recorder.warn(e, "LiveReload: failed to register " + root);
         }
     }
 
