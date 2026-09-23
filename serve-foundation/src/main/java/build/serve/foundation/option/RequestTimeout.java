@@ -42,6 +42,13 @@ public record RequestTimeout(Duration duration)
     public static final RequestTimeout NONE = new RequestTimeout(Duration.ZERO);
 
     /**
+     * A sane default request timeout (60 seconds), used by {@code ServerApplication} so a default
+     * server isn't exposed to Slowloris-style slow-request attacks. Pass {@link #NONE} explicitly
+     * to opt out.
+     */
+    public static final RequestTimeout DEFAULT = new RequestTimeout(Duration.ofSeconds(60));
+
+    /**
      * Creates a {@link RequestTimeout} for the specified duration.
      *
      * @param duration the request timeout duration

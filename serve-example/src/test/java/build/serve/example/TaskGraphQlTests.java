@@ -22,6 +22,7 @@ package build.serve.example;
 import build.base.json.Json;
 import build.base.json.JsonArray;
 import build.base.json.JsonNull;
+import build.base.telemetry.foundation.NoOpTelemetryRecorder;
 import build.serve.example.domain.TaskService;
 import build.serve.example.graphql.TaskGraphQlHandler;
 import build.serve.foundation.routing.RouterBuilder;
@@ -34,7 +35,7 @@ class TaskGraphQlTests {
 
     private static TestServer server() {
         final var service = new TaskService();
-        final var graphql = new TaskGraphQlHandler(service);
+        final var graphql = new TaskGraphQlHandler(service, NoOpTelemetryRecorder.create());
         return TestServer.of(RouterBuilder.create()
             .post("/graphql", graphql.graphqlHandler())
             .build());

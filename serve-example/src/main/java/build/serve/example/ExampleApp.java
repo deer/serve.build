@@ -95,7 +95,7 @@ public final class ExampleApp extends ServerApplication.Implementation {
         final var service = new TaskService();
         final var broadcaster = new TaskBroadcaster(service);
         final var api = new TaskApiHandler(service);
-        final var graphql = new TaskGraphQlHandler(service);
+        final var graphql = new TaskGraphQlHandler(service, recorder());
         final var web = new TaskWebHandler(service);
 
         final var apiAuth = AuthMiddleware.builder()

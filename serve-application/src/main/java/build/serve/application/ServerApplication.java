@@ -26,11 +26,14 @@ import build.serve.foundation.Handler;
 import build.serve.foundation.error.DefaultErrorHandler;
 import build.serve.foundation.error.ErrorHandler;
 import build.serve.foundation.option.ListenAddress;
+import build.serve.foundation.option.MaxRequestSize;
+import build.serve.foundation.option.RequestTimeout;
 import build.serve.foundation.option.ShutdownTimeout;
 import build.serve.foundation.option.TlsConfig;
 import build.serve.foundation.routing.Router;
 import build.serve.security.SecurityHeadersMiddleware;
 import build.serve.transport.http.HttpTransport;
+import build.serve.transport.http.TlsOptions;
 import build.spawn.application.Addressable;
 import build.spawn.application.Lifecycle;
 
@@ -165,6 +168,17 @@ public interface ServerApplication
         }
 
         /**
+         * Obtains the {@link TelemetryRecorder} bound to this server, for use by
+         * {@link #configure()} when wiring components (e.g. {@code GraphQlSchema}) that need
+         * somewhere to report their own errors instead of defaulting to stdout/stderr.
+         *
+         * @return the {@link TelemetryRecorder}
+         */
+        protected TelemetryRecorder recorder() {
+            return recorder;
+        }
+
+        /**
          * Configures and returns the {@link Router} for this server.
          * <p>
          * Subclasses must implement this method to define routes.
@@ -231,7 +245,8 @@ public interface ServerApplication
 
             final var address = new InetSocketAddress(listenAddress.value(), listenPort.get());
 
-            this.transport = new HttpTransport(address, 0, applySecurityHeaders(router), errorHandler(), recorder);
+            this.transport = new HttpTransport(address, 0, applySecurityHeaders(router), errorHandler(),
+                MaxRequestSize.DEFAULT, RequestTimeout.DEFAULT, recorder);
             this.transport.start();
 
             this.shutdownHook = new Thread(this::stop, "serve-shutdown");
@@ -275,7 +290,7 @@ public interface ServerApplication
             final var address = new InetSocketAddress(listenAddress.value(), listenPort.get());
 
             this.transport = HttpTransport.https(address, 0, applySecurityHeaders(router), errorHandler(),
-                tls.sslContext(), recorder);
+                MaxRequestSize.DEFAULT, tls.sslContext(), TlsOptions.defaults(), RequestTimeout.DEFAULT, recorder);
             this.transport.start();
 
             this.shutdownHook = new Thread(this::stop, "serve-shutdown");

@@ -42,6 +42,8 @@ module build.serve.example {
     requires build.base.network;
     requires build.base.template;
     requires build.base.json;
+    requires build.base.telemetry;
+    requires build.base.telemetry.foundation;
 
     requires static build.base.template.processor;
 
