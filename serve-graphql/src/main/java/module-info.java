@@ -26,6 +26,7 @@
 module build.serve.graphql {
     requires transitive build.serve.foundation;
     requires build.base.json;
+    requires build.base.telemetry.foundation;
     requires com.graphqljava;
 
     exports build.serve.graphql;

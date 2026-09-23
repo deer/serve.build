@@ -139,14 +139,14 @@ class GraphQlHandlerTests {
     }
 
     @Test
-    void shouldStripControlCharactersFromDataFetcherExceptionMessage() throws Exception {
+    void shouldNotLeakDataFetcherExceptionMessageToClient() throws Exception {
         final var throwingSchema = GraphQlSchema.builder("""
                 type Query {
                     boom: String
                 }
                 """)
             .fetcher("Query", "boom", env -> {
-                throw new RuntimeException("line one\r\nline two\tinjected");
+                throw new RuntimeException("line one\r\nline two\tinjected secret internal details");
             })
             .build();
 
@@ -165,9 +165,23 @@ class GraphQlHandlerTests {
             final var errors = (JsonArray) json.get("errors");
             final var message = errors.values().get(0).asObject().getString("message");
 
-            assertThat(message).doesNotContain("\r").doesNotContain("\n").doesNotContain("\t");
-            assertThat(message).contains("line one  line two injected");
+            assertThat(message).isEqualTo("Internal Server Error");
         }
+    }
+
+    @Test
+    void shouldStripControlCharactersFromSyntaxErrorMessage() throws Exception {
+        final var response = server.post("/graphql")
+            .header("Content-Type", "application/json")
+            .body("{\"query\":\"{ \\u0001 }\"}")
+            .send()
+            .assertStatus(200);
+
+        final var json = Json.parse(response.body()).asObject();
+        final var errors = (JsonArray) json.get("errors");
+        final var message = errors.values().get(0).asObject().getString("message");
+
+        assertThat(message).doesNotContain("\r").doesNotContain("\n").doesNotContain("\t");
     }
 
     @Test

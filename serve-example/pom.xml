@@ -100,6 +100,16 @@
             <artifactId>base-json</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>build.base</groupId>
+            <artifactId>base-telemetry</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>build.base</groupId>
+            <artifactId>base-telemetry-foundation</artifactId>
+        </dependency>
+
 
         <!-- Test -->
         <dependency>
@@ -175,6 +185,11 @@
                     <ignoredUnusedDeclaredDependencies>
                         <ignoredUnusedDeclaredDependency>build.base:base-template-processor</ignoredUnusedDeclaredDependency>
                     </ignoredUnusedDeclaredDependencies>
+                    <!-- Only referenced (NoOpTelemetryRecorder) from test code, but must be compile-scoped
+                         because module-info.java requires it for the main sourceset to compile. -->
+                    <ignoredNonTestScopedDependencies>
+                        <ignoredNonTestScopedDependency>build.base:base-telemetry-foundation</ignoredNonTestScopedDependency>
+                    </ignoredNonTestScopedDependencies>
                 </configuration>
             </plugin>
         </plugins>

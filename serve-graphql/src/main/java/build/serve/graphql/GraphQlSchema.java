@@ -19,9 +19,13 @@
  */
 package build.serve.graphql;
 
+import build.base.telemetry.TelemetryRecorder;
+import build.base.telemetry.foundation.PrintStreamTelemetryRecorder;
+import graphql.ExceptionWhileDataFetching;
 import graphql.ExecutionInput;
 import graphql.ExecutionResult;
 import graphql.GraphQL;
+import graphql.GraphQLError;
 import graphql.analysis.MaxQueryComplexityInstrumentation;
 import graphql.analysis.MaxQueryDepthInstrumentation;
 import graphql.execution.instrumentation.ChainedInstrumentation;
@@ -31,6 +35,7 @@ import graphql.schema.idl.SchemaGenerator;
 import graphql.schema.idl.SchemaParser;
 import graphql.schema.idl.TypeDefinitionRegistry;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -47,10 +52,15 @@ import java.util.Objects;
  */
 public final class GraphQlSchema {
 
-    private final GraphQL graphQL;
+    private static final TelemetryRecorder DEFAULT_RECORDER =
+        PrintStreamTelemetryRecorder.of(URI.create("serve://graphql"), System.out, System.err);
 
-    private GraphQlSchema(final GraphQL graphQL) {
+    private final GraphQL graphQL;
+    private final TelemetryRecorder recorder;
+
+    private GraphQlSchema(final GraphQL graphQL, final TelemetryRecorder recorder) {
         this.graphQL = graphQL;
+        this.recorder = recorder;
     }
 
     /**
@@ -76,25 +86,44 @@ public final class GraphQlSchema {
         final ExecutionResult result = graphQL.execute(inputBuilder.build());
 
         final List<GraphQlError> errors = result.getErrors().stream()
-            .map(e -> new GraphQlError(
-                sanitizeMessage(e.getMessage()),
-                e.getPath() != null
-                    ? e.getPath().stream().map(Object::toString).toList()
-                    : null))
+            .map(this::toGraphQlError)
             .toList();
 
         return new GraphQlResult(result.getData(), errors);
     }
 
     /**
-     * Strips control characters from a data-fetcher exception message before it reaches the
-     * client. graphql-java's default exception handler forwards a thrown exception's
-     * {@code getMessage()} verbatim into the error response; this matches the same
-     * control-character stripping {@code DefaultErrorHandler} and {@code McpServer} apply to
-     * exception messages at the HTTP and MCP layers, defending against CRLF/control-character
-     * injection via a data fetcher's exception message.
+     * Converts a graphql-java {@link GraphQLError} into a client-facing {@link GraphQlError}.
+     * <p>
+     * A {@link ExceptionWhileDataFetching} means a data fetcher threw — its message is an
+     * exception message, not a spec-defined client-facing error, and may contain internal details
+     * (stack state, SQL, file paths). It is logged server-side via {@link #recorder} and replaced
+     * with a generic message, matching the pattern {@code DefaultErrorHandler} applies to unhandled
+     * HTTP exceptions. Other error types (validation errors, syntax errors) are part of the GraphQL
+     * spec's client-facing contract and are passed through, only stripped of control characters to
+     * defend against CRLF/control-character injection.
      *
-     * @param message the raw exception message, or {@code null}
+     * @param error the {@link GraphQLError} returned by the execution engine
+     * @return the client-facing {@link GraphQlError}
+     */
+    private GraphQlError toGraphQlError(final GraphQLError error) {
+        final var path = error.getPath() != null
+            ? error.getPath().stream().map(Object::toString).toList()
+            : null;
+
+        if (error instanceof ExceptionWhileDataFetching dataFetchingError) {
+            recorder.error(dataFetchingError.getException(), "Unhandled exception in GraphQL data fetcher");
+            return new GraphQlError("Internal Server Error", path);
+        }
+
+        return new GraphQlError(sanitizeMessage(error.getMessage()), path);
+    }
+
+    /**
+     * Strips control characters from a client-facing error message, defending against
+     * CRLF/control-character injection.
+     *
+     * @param message the raw message, or {@code null}
      * @return the sanitized message, or {@code null} if the input was {@code null}
      */
     private static String sanitizeMessage(final String message) {
@@ -127,7 +156,8 @@ public final class GraphQlSchema {
         return new GraphQlSchema(
             GraphQL.newGraphQL(graphQL.getGraphQLSchema())
                 .instrumentation(new ChainedInstrumentation(instrumentations))
-                .build()
+                .build(),
+            recorder
         );
     }
 
@@ -151,10 +181,23 @@ public final class GraphQlSchema {
 
         private final String sdl;
         private final Map<String, Map<String, DataFetcher<?>>> fetchers;
+        private TelemetryRecorder recorder;
 
         private Builder(final String sdl) {
             this.sdl = Objects.requireNonNull(sdl, "sdl must not be null");
             this.fetchers = new HashMap<>();
+        }
+
+        /**
+         * Sets the {@link TelemetryRecorder} used to record unhandled data-fetcher exceptions.
+         * Defaults to a {@code System.out}/{@code System.err} recorder if not set.
+         *
+         * @param recorder the {@link TelemetryRecorder} to use
+         * @return this builder
+         */
+        public Builder recorder(final TelemetryRecorder recorder) {
+            this.recorder = Objects.requireNonNull(recorder, "recorder must not be null");
+            return this;
         }
 
         /**
@@ -197,7 +240,7 @@ public final class GraphQlSchema {
             final var schema = new SchemaGenerator()
                 .makeExecutableSchema(registry, wiringBuilder.build());
 
-            return new GraphQlSchema(GraphQL.newGraphQL(schema).build());
+            return new GraphQlSchema(GraphQL.newGraphQL(schema).build(), recorder != null ? recorder : DEFAULT_RECORDER);
         }
 
         private static graphql.schema.DataFetcher<?> adaptFetcher(final DataFetcher<?> fetcher) {

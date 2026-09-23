@@ -439,6 +439,38 @@ class LspTransportTests {
     }
 
     @Test
+    void shouldCloseConnectionWithoutHaltingJvmWhenExitReceivedOnNonLoopbackBindAddress() throws Exception {
+        final var server = LspServer.builder().build();
+
+        final int port;
+        try (var s = new ServerSocket(0)) {
+            port = s.getLocalPort();
+        }
+
+        final var bindAddress = java.net.InetAddress.getByName("0.0.0.0");
+        final var serverThread = Thread.ofVirtual().start(() -> {
+            try {
+                LspTransport.tcp(server, port, bindAddress);
+            } catch (final IOException ignored) {
+            }
+        });
+
+        Thread.sleep(100);
+
+        try (var socket = new Socket("localhost", port)) {
+            final var client = new LspTestClient(socket);
+            client.writeMessage("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+
+            // If haltOnExit were mistakenly true here, this call would kill the test JVM instead
+            // of returning. Reading past the connection the server closes on exit confirms the
+            // server only tore down this connection.
+            assertThat(client.clientReader.readLine()).isNull();
+        }
+
+        serverThread.interrupt();
+    }
+
+    @Test
     void shouldHandleMultipleConcurrentTcpConnections() throws Exception {
         final var server = LspServer.builder()
             .onInitialize(params -> ServerCapabilities.of(ServerCapability.COMPLETION))

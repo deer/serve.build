@@ -19,6 +19,7 @@
  */
 package build.serve.example.graphql;
 
+import build.base.telemetry.TelemetryRecorder;
 import build.serve.example.domain.TaskService;
 import build.serve.foundation.Handler;
 import build.serve.graphql.GraphQlHandler;
@@ -73,8 +74,9 @@ public final class TaskGraphQlHandler {
     /**
      * Constructs a {@link TaskGraphQlHandler} backed by the given service.
      */
-    public TaskGraphQlHandler(final TaskService service) {
+    public TaskGraphQlHandler(final TaskService service, final TelemetryRecorder recorder) {
         final var schema = GraphQlSchema.builder(SDL)
+            .recorder(recorder)
             .fetcher("Query", "tasks", env -> service.list())
             .fetcher("Query", "task", env -> {
                 final var id = Long.parseLong(env.<String>getArgument("id"));

@@ -87,10 +87,12 @@ public final class LspTransport {
      * given port and handles each connection in a virtual thread. Blocks the calling thread
      * until the server socket is closed or an error occurs.
      *
-     * <p>LSP has no authentication of its own — the {@code exit} notification unconditionally
-     * halts the JVM ({@link Runtime#halt}) — so binding to all interfaces would let any network
-     * peer that can reach the port hard-kill the process. Use {@link #tcp(LspServer, int, InetAddress)}
-     * to bind elsewhere only if the server is genuinely meant to be reachable remotely.
+     * <p>LSP has no authentication of its own — the {@code exit} notification would otherwise let
+     * any peer that can reach the port hard-kill the process. Binding loopback-only means only
+     * same-host peers can reach it at all, so the {@code exit} notification is allowed to halt the
+     * JVM here. Use {@link #tcp(LspServer, int, InetAddress)} to bind elsewhere only if the server
+     * is genuinely meant to be reachable remotely — that overload does not grant remote peers the
+     * same hard-kill.
      *
      * @param server the LSP server
      * @param port   the port to listen on
@@ -105,12 +107,18 @@ public final class LspTransport {
      * handling each connection in a virtual thread. Blocks the calling thread until the server
      * socket is closed or an error occurs.
      *
+     * <p>The {@code exit} notification is only allowed to halt the JVM ({@link Runtime#halt}) when
+     * {@code bindAddress} is a loopback address — LSP has no authentication of its own, so an
+     * unauthenticated remote peer must not be able to kill the process for every other connection.
+     * When bound elsewhere, a connection's {@code exit} notification simply closes that connection.
+     *
      * @param server      the LSP server
      * @param port        the port to listen on
      * @param bindAddress the address to bind to
      * @throws IOException if an error occurs opening or accepting on the server socket
      */
     public static void tcp(final LspServer server, final int port, final InetAddress bindAddress) throws IOException {
+        final var haltOnExit = bindAddress.isLoopbackAddress();
         try (var serverSocket = new java.net.ServerSocket()) {
             serverSocket.bind(new InetSocketAddress(bindAddress, port));
             while (true) {
@@ -118,7 +126,7 @@ public final class LspTransport {
                     final var socket = serverSocket.accept();
                     Thread.ofVirtual().start(() -> {
                         try {
-                            run(server, socket.getInputStream(), socket.getOutputStream());
+                            run(server, socket.getInputStream(), socket.getOutputStream(), haltOnExit);
                         } catch (final Exception ignored) {
                         } finally {
                             try {
@@ -135,7 +143,8 @@ public final class LspTransport {
     }
 
     /**
-     * Creates a transport from custom streams (useful for testing).
+     * Creates a transport from custom streams (useful for testing). The {@code exit} notification
+     * halts the JVM, as for {@link #stdio(LspServer)}.
      *
      * @param server the LSP server
      * @param in     the input stream
@@ -143,6 +152,11 @@ public final class LspTransport {
      * @throws Exception if an error occurs
      */
     public static void run(final LspServer server, final InputStream in, final OutputStream out) throws Exception {
+        run(server, in, out, true);
+    }
+
+    private static void run(final LspServer server, final InputStream in, final OutputStream out,
+                            final boolean haltOnExit) throws Exception {
         final var shutdownRequested = new AtomicBoolean(false);
         final var outboundId = new AtomicInteger(0);
         final Map<Integer, CompletableFuture<JsonValue>> pendingRequests = new ConcurrentHashMap<>();
@@ -260,7 +274,7 @@ public final class LspTransport {
         };
 
         try {
-            runLoop(server, in, ctx, shutdownRequested, writer, pendingRequests, activeRequests);
+            runLoop(server, in, ctx, shutdownRequested, writer, pendingRequests, activeRequests, haltOnExit);
         } finally {
             failPendingRequests(pendingRequests);
             writer.shutdown();
@@ -278,7 +292,8 @@ public final class LspTransport {
                                 final AtomicBoolean shutdownRequested,
                                 final LspWriter writer,
                                 final Map<Integer, CompletableFuture<JsonValue>> pendingRequests,
-                                final Map<Object, Thread> activeRequests) throws IOException {
+                                final Map<Object, Thread> activeRequests,
+                                final boolean haltOnExit) throws IOException {
         while (true) {
             final var contentLength = readContentLength(in);
             if (contentLength < 0 || contentLength > MAX_CONTENT_LENGTH) {
@@ -297,7 +312,9 @@ public final class LspTransport {
 
             // Transport lifecycle — handled before typed dispatch
             if ("exit".equals(methodStr)) {
-                Runtime.getRuntime().halt(shutdownRequested.get() ? 0 : 1);
+                if (haltOnExit) {
+                    Runtime.getRuntime().halt(shutdownRequested.get() ? 0 : 1);
+                }
                 return;
             }
             if ("shutdown".equals(methodStr)) {
