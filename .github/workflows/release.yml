@@ -3,12 +3,15 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      release-version:
-        description: 'Release version (e.g. 1.0.0) — leave blank to use current POM version without -SNAPSHOT'
-        required: false
-      next-version:
-        description: 'Next development version (e.g. 1.0.1-SNAPSHOT) — leave blank to use incremented patch version with -SNAPSHOT'
-        required: false
+      bump:
+        description: 'Which part of the version to bump'
+        required: true
+        type: choice
+        default: patch
+        options:
+          - major
+          - minor
+          - patch
 
 permissions:
   contents: write
@@ -38,18 +41,26 @@ jobs:
         id: versions
         run: |
           CURRENT_VERSION=$(grep -m1 '<revision>' pom.xml | sed 's/.*<revision>\(.*\)<\/revision>.*/\1/' | tr -d '[:space:]')
+          CURRENT_VERSION="${CURRENT_VERSION/-SNAPSHOT/}"
 
-          RELEASE_VERSION="${{ inputs.release-version }}"
-          if [ -z "$RELEASE_VERSION" ]; then
-            RELEASE_VERSION="${CURRENT_VERSION/-SNAPSHOT/}"
-          fi
+          MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
+          MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
+          PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3)
 
-          NEXT_VERSION="${{ inputs.next-version }}"
-          if [ -z "$NEXT_VERSION" ]; then
-            PATCH=$(echo "$RELEASE_VERSION" | cut -d. -f3)
-            NEXT_PATCH=$((PATCH + 1))
-            NEXT_VERSION=$(echo "$RELEASE_VERSION" | sed "s/\.[0-9]*$/.${NEXT_PATCH}-SNAPSHOT/")
-          fi
+          case "${{ inputs.bump }}" in
+            major)
+              RELEASE_MAJOR=$((MAJOR + 1)); RELEASE_MINOR=0; RELEASE_PATCH=0
+              ;;
+            minor)
+              RELEASE_MAJOR=$MAJOR; RELEASE_MINOR=$((MINOR + 1)); RELEASE_PATCH=0
+              ;;
+            patch|*)
+              RELEASE_MAJOR=$MAJOR; RELEASE_MINOR=$MINOR; RELEASE_PATCH=$PATCH
+              ;;
+          esac
+
+          RELEASE_VERSION="${RELEASE_MAJOR}.${RELEASE_MINOR}.${RELEASE_PATCH}"
+          NEXT_VERSION="${RELEASE_MAJOR}.${RELEASE_MINOR}.$((RELEASE_PATCH + 1))-SNAPSHOT"
 
           echo "release-version=$RELEASE_VERSION" >> $GITHUB_OUTPUT
           echo "next-version=$NEXT_VERSION" >> $GITHUB_OUTPUT
